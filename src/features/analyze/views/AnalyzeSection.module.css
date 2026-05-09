@@ -1,0 +1,323 @@
+.root {
+  width: 100%;
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 1.4rem;
+  padding: 0.35rem 0 0.2rem;
+}
+
+.heroTitle {
+  margin: 0;
+  font-size: clamp(2.2rem, 4vw, 3.4rem);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+}
+
+.primaryCard {
+  margin-bottom: var(--gap-base);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-md);
+}
+
+.homeSectionHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.homeSectionHead h3 {
+  margin: 0;
+}
+
+.homeSectionHead p {
+  margin: 0.5rem 0 0;
+  color: var(--text-dim);
+  line-height: 1.6;
+  max-width: 720px;
+}
+
+.dbActionRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* ─── ストレージカード ────────────────────────────────── */
+
+.dbStorageCard {
+  margin-top: 1.25rem;
+  padding: 1.1rem 1.25rem;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--bg-card-soft);
+  box-shadow: var(--shadow-sm);
+}
+
+.storageHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.storageTitle {
+  font-size: 1.05rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.storageStats {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
+.storageTrack {
+  height: 10px;
+  background: var(--storage-track-bg);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.storageFill {
+  height: 100%;
+  background: var(--accent-gradient);
+  border-radius: 5px;
+  transition: width 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.storageWarning {
+  background: var(--warning-gradient);
+}
+
+.btnRefreshStorage {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  color: var(--text-dim);
+  border-radius: 8px;
+  transition:
+    color 0.2s,
+    background 0.2s;
+}
+
+.btnRefreshStorage:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.btnRefreshStorage :global(.icon-svg) {
+  width: 18px;
+  height: 18px;
+  fill: currentcolor;
+}
+
+.inlineSettingRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: default;
+}
+
+.inlineSettingLabel {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.inlineNumberInput {
+  width: 72px;
+  padding: 0.4rem 0.6rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+.inlineNumberInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.inlineUnit {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  font-weight: 700;
+}
+
+.inlineToggleRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: default;
+}
+
+.autoStartBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 34px;
+  padding: 0 0.85rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-card-soft);
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+  white-space: nowrap;
+}
+
+.autoStartBtn svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.autoStartBtn:hover {
+  border-color: var(--border-strong);
+}
+
+.autoStartBtnOn {
+  background: var(--accent-gradient);
+  border-color: transparent;
+  color: #fff;
+}
+
+/* ─── 解析ブロック ───────────────────────────────── */
+
+.analyzeBlockHeader {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.analyzeBlockHeadCopy {
+  flex: 1;
+}
+
+.sectionMiniTitle {
+  margin: 0;
+}
+
+.sectionMiniCopy {
+  margin: 4px 0 0;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+/* ─── 同期グリッド ───────────────────────────────────── */
+
+.syncGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.25rem;
+}
+
+.syncCard {
+  padding: 1.25rem;
+  background: var(--bg-card-soft);
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.syncCard h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.syncCard p {
+  margin: 0 0 1rem;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  flex: 1;
+}
+
+/* ─── プログレスバー ────────────────────────────────── */
+
+.progressContainer {
+  margin-top: 2rem;
+}
+
+.progressInfo {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  margin-bottom: 0.5rem;
+}
+
+.progressTrack {
+  height: 8px;
+  background: var(--storage-track-bg);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--accent-gradient);
+  transition: width 0.3s;
+}
+
+.progressStatusRow {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 1rem;
+}
+
+.progressCancel {
+  color: var(--danger);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+
+@media (width <= 1024px) {
+  .hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .homeSectionHead {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dbActionRow {
+    width: 100%;
+  }
+
+  .dbActionRow > * {
+    flex: 1;
+  }
+}

@@ -1,0 +1,229 @@
+.trigger {
+  position: fixed;
+  left: 1.5rem;
+  bottom: 1.5rem;
+  z-index: 900;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-faint);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+
+.trigger:hover {
+  opacity: 1;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-dim);
+}
+
+.trigger:active {
+  transform: translateY(0);
+}
+
+/* ── モーダル本体 ─────────────────────────── */
+
+.modal {
+  max-width: 380px;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* ── バナー ───────────────────────────────── */
+
+.banner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 2rem 1.5rem 1.5rem;
+  background: var(--accent-gradient);
+  overflow: hidden;
+}
+
+.bannerGlow {
+  position: absolute;
+  top: -40%;
+  left: -20%;
+  width: 140%;
+  height: 140%;
+  background: radial-gradient(ellipse at 30% 20%, rgba(255 255 255 / 15%) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.bannerLogo {
+  position: relative;
+  height: 32px;
+  width: auto;
+  filter: brightness(0) invert(1);
+}
+
+.bannerVersion {
+  position: relative;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgba(255 255 255 / 60%);
+  letter-spacing: 0.08em;
+}
+
+/* ── コンテンツ ──────────────────────────── */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  padding: 1.25rem 1.5rem 1.5rem;
+  gap: 1rem;
+}
+
+/* ── プロフィール ─────────────────────────── */
+
+.profile {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  flex-shrink: 0;
+}
+
+.profileText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.brandName {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: 0.03em;
+  margin: 0;
+}
+
+.creatorName {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+/* ── 区切り線 ─────────────────────────────── */
+
+.divider {
+  height: 1px;
+  background: var(--border);
+  margin: 0;
+}
+
+/* ── リンク ───────────────────────────────── */
+
+.links {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.linkItem {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-main);
+  font-size: 0.84rem;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.linkItem:hover {
+  background: var(--accent-soft);
+}
+
+.linkItem:active {
+  background: var(--accent-soft);
+  opacity: 0.8;
+}
+
+.linkIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.linkLabel {
+  flex: 1;
+  text-align: left;
+}
+
+.linkArrow {
+  color: var(--text-faint);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+/* ── 使用素材 ─────────────────────────────── */
+
+.attribution {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.attributionTitle {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0;
+}
+
+.attributionItem {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.attributionLink {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color 0.15s;
+}
+
+.attributionLink:hover {
+  text-decoration-color: var(--accent);
+}

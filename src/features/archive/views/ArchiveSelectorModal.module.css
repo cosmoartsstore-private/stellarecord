@@ -1,0 +1,203 @@
+.root {
+  width: 100%;
+}
+
+.content {
+  display: flex;
+  width: min(1040px, 100%);
+  max-width: 1040px;
+  max-height: min(84vh, 920px);
+  flex-direction: column;
+  gap: 0;
+  padding: 1.5rem 1.75rem;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--modal-bg);
+  padding-bottom: 0.75rem;
+}
+
+.header h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.header p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.count {
+  padding: 4px 12px;
+  border-radius: 99px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.list {
+  display: flex;
+  max-height: min(58vh, 640px);
+  flex: 1;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--file-list-bg);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.viewerList {
+  gap: 0.75rem;
+}
+
+.item {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--file-item-border);
+  border-radius: 16px;
+  background: var(--archive-file-bg);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  text-align: left;
+  user-select: none;
+}
+
+.item:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.item:active {
+  transform: translateY(0);
+}
+
+.itemSelected {
+  border: 1px solid var(--border-strong);
+  background: var(--archive-file-selected-bg);
+  transform: translateY(-1px);
+}
+
+.checkbox {
+  display: flex;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--file-checkbox-border);
+  border-radius: 7px;
+  background: transparent;
+  transition: background 0.2s, border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+
+.checkbox:hover {
+  border-color: var(--accent);
+}
+
+.checkboxChecked {
+  border-color: transparent;
+  background: var(--accent-gradient);
+  box-shadow: none;
+  transform: scale(1.05);
+}
+
+.checkIcon {
+  width: 12px;
+  height: 10px;
+  fill: none;
+  stroke: white;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 16;
+  stroke-dashoffset: 16;
+  transition: stroke-dashoffset 0.25s ease;
+}
+
+.checkboxChecked .checkIcon {
+  stroke-dashoffset: 0;
+}
+
+.viewerList .checkbox {
+  display: none;
+}
+
+.icon {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.icon :global(.icon-svg) {
+  width: 18px;
+  height: 18px;
+  fill: var(--text-dim);
+  transition: fill 0.15s;
+}
+
+.itemSelected .icon :global(.icon-svg) {
+  fill: var(--accent);
+}
+
+.metaBlock {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.22rem;
+}
+
+.name {
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 600;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.itemSelected .name {
+  color: var(--accent);
+}
+
+.size {
+  color: var(--text-faint);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.emptyState {
+  padding: 4rem;
+  color: var(--text-dim);
+  text-align: center;
+}

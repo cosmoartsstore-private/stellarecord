@@ -1,0 +1,129 @@
+.stella-record-root.light-theme {
+  color-scheme: light;
+
+  /* ── ベース背景 ──────────────────────────── */
+  --bg-gradient: linear-gradient(180deg, #fbfcfe 0%, #f3f6fb 100%);
+  --bg-card: #ffffff;
+  --bg-card-strong: #ffffff;
+  --bg-card-soft: #f7f9fd;
+
+  /* ── アクセント (base: 79 110 245) ─────────── */
+  --accent: #4f6ef5;
+  --accent-light: #7b93f8;
+  --accent-gradient: linear-gradient(135deg, #4f6ef5 0%, #6d88ff 100%);
+  --accent-soft: rgb(79 110 245 / 8%);
+
+  /* ── テキスト ───────────────────────────────────── */
+  --text-main: #1f2937;
+  --text-dim: #6b7280;
+  --text-faint: #94a3b8;
+
+  /* ── セマンティック ───────────────────────────────── */
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+
+  /* ── ボーダー ────────────────────────────────── */
+  --border: #e5e7eb;
+  --border-strong: rgb(79 110 245 / 28%);
+
+  /* ── シャドウ ────────────────────────────────── */
+  --shadow-sm: 0 1px 3px rgb(15 23 42 / 7%);
+  --shadow-md: 0 10px 30px rgb(15 23 42 / 8%);
+  --shadow-lg: 0 18px 45px rgb(15 23 42 / 12%);
+
+  /* ── ストレージ ────────────────────────────────── */
+  --storage-track-bg: #e2e8f0;
+  --warning-gradient: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);
+
+  /* ── 機能カード ───────────────────────────── */
+  --feature-icon-border: rgb(79 110 245 / 12%);
+
+  /* ── ボタン ────────────────────────────────── */
+  --btn-primary-shadow: none;
+  --btn-primary-hover-shadow: none;
+  --btn-danger-bg: #fef2f2;
+  --btn-danger-border: #fca5a5;
+  --btn-danger-hover-bg: #fee2e2;
+  --btn-danger-wipe-hover-shadow: 0 8px 20px rgb(239 68 68 / 35%);
+
+  /* ── 警告エリア ───────────────────────────── */
+  --warning-zone-bg: linear-gradient(135deg, #fef2f2, #fff7ed);
+  --warning-zone-border: #fca5a5;
+  --warning-zone-stripe: #fef2f2;
+  --danger-pulse-shadow: rgb(239 68 68 / 50%);
+  --danger-pulse-shadow-fade: rgb(239 68 68 / 0%);
+
+  /* ── 削除モーダル ───────────────────────────── */
+  --danger-modal-border: #fca5a5;
+  --danger-modal-bg: #fffafa;
+  --danger-modal-title: #b91c1c;
+  --danger-modal-body-bg: #fef2f2;
+  --danger-modal-body-border: #fecaca;
+  --danger-modal-body-text: #5c2626;
+
+  /* ── ランチャー / DB ──────────────────────────── */
+  --launcher-card-bg: #ffffff;
+  --db-sidebar-bg: #ffffff;
+  --db-content-bg: #ffffff;
+  --db-content-header-bg: var(--bg-card-soft);
+  --db-table-head-bg: #ffffff;
+  --db-table-head-border: #eef2f7;
+  --db-table-cell-border: #f3f4f6;
+  --db-table-row-border: #eef2f7;
+  --db-table-row-hover-bg: #f8faff;
+
+  /* ── トースト ──────────────────────────────────── */
+  --toast-bg: #ffffff;
+  --toast-shadow: 0 8px 28px rgb(0 0 0 / 12%);
+
+  /* ── モーダル ──────────────────────────────────── */
+  --modal-overlay-bg: rgb(15 23 42 / 38%);
+  --modal-bg: #ffffff;
+  --modal-shadow: 0 24px 60px rgb(15 23 42 / 16%);
+  --modal-border: #e5e7eb;
+
+  /* ── アーカイブ ────────────────────────────────── */
+  --archive-file-bg: #ffffff;
+  --archive-file-hover-bg: #f8fafc;
+  --archive-file-selected-bg: rgb(79 110 245 / 6%);
+  --file-checkbox-border: rgb(79 110 245 / 30%);
+  --file-list-bg: #f7f9fd;
+  --file-scrollbar-thumb: rgb(79 110 245 / 30%);
+  --file-item-border: #e5e7eb;
+  --file-item-selected-bg: rgb(79 110 245 / 8%);
+
+  /* ── ターミナル ───────────────────────────────── */
+  --terminal-bg: #0f172a;
+  --terminal-border: rgb(148 163 184 / 18%);
+  --terminal-time-default: #64748b;
+  --terminal-body: #f8fafc;
+  --terminal-world: #60a5fa;
+  --terminal-travel: #38bdf8;
+  --terminal-notification: #facc15;
+  --terminal-player-join: #4ade80;
+  --terminal-player-left: #f87171;
+  --terminal-video: #c084fc;
+  --terminal-warning: #fb923c;
+  --terminal-error: #ef4444;
+  --terminal-debug: #94a3b8;
+  --terminal-debug-system: #7b93f8;
+  --terminal-debug-avatar: #e879f9;
+  --terminal-debug-network: #2dd4bf;
+  --terminal-debug-interact: #fbbf24;
+  --terminal-highlight-bg: rgb(79 110 245 / 20%);
+  --terminal-highlight-text: #ffffff;
+  --terminal-highlight-border: rgb(123 147 248 / 20%);
+  --terminal-scrollbar-thumb: rgb(148 163 184 / 35%);
+
+  /* ── 共有 ─────────────────────────────────── */
+  --sr-shared-body-background: var(--bg-gradient);
+  --sr-shared-body-color: var(--text-main);
+  --sr-shared-warning-zone-before-background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 18px,
+    var(--warning-zone-stripe) 18px,
+    var(--warning-zone-stripe) 36px
+  );
+}

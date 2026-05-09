@@ -1,0 +1,196 @@
+.content {
+  max-width: 580px;
+  width: 100%;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.warningIcon {
+  flex-shrink: 0;
+  width: 2.4rem;
+  height: 2.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: var(--danger);
+  border: 1px solid var(--danger);
+  color: #fff;
+  font-size: 1.1rem;
+}
+
+.title {
+  margin: 0 0 0.2rem;
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-main);
+}
+
+.subtitle {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.dangerText {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.notice {
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  line-height: 1.55;
+  margin-bottom: 1.1rem;
+}
+
+.listHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.toggleAllBtn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
+
+.toggleAllBtn:hover {
+  text-decoration: underline;
+}
+
+.listMeta {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+/* ── ファイルリスト（ArchiveSelectorModalと共通） ── */
+
+.fileList {
+  max-height: 280px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  margin-bottom: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--file-list-bg);
+}
+
+.fileRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--file-item-border);
+  border-radius: 16px;
+  background: var(--archive-file-bg);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.fileRow:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.fileRow:active {
+  transform: translateY(0);
+}
+
+.fileRowSelected {
+  border-color: var(--border-strong);
+  background: var(--archive-file-selected-bg);
+  transform: translateY(-1px);
+}
+
+/* ── カスタムチェックボックス ── */
+
+.checkbox {
+  display: flex;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--file-checkbox-border);
+  border-radius: 7px;
+  background: transparent;
+  transition: background 0.2s, border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+
+.checkbox:hover {
+  border-color: var(--accent);
+}
+
+.checkboxChecked {
+  border-color: transparent;
+  background: var(--accent-gradient);
+  box-shadow: none;
+  transform: scale(1.05);
+}
+
+.checkIcon {
+  width: 12px;
+  height: 10px;
+  fill: none;
+  stroke: white;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 16;
+  stroke-dashoffset: 16;
+  transition: stroke-dashoffset 0.25s ease;
+}
+
+.checkboxChecked .checkIcon {
+  stroke-dashoffset: 0;
+}
+
+/* ── ファイル情報 ── */
+
+.fileName {
+  flex: 1;
+  font-size: 0.82rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileRowSelected .fileName {
+  color: var(--accent);
+}
+
+.fileSize {
+  flex-shrink: 0;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+}

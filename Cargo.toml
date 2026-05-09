@@ -1,0 +1,37 @@
+[workspace]
+resolver = "2"
+members = [
+    "src-tauri",
+]
+
+[workspace.dependencies]
+serde         = { version = "1.0", features = ["derive"] }
+winreg        = "0.52"
+chrono        = { version = "0.4", features = ["serde"] }
+rusqlite      = { version = "0.38", features = ["bundled"] }
+regex         = "1"
+tauri         = { version = "2.2.4", features = [] }
+tauri-build   = { version = "2.0.5", features = [] }
+tauri-plugin-fs     = "2.2.0"
+tauri-plugin-shell  = "2.3.5"
+windows       = { version = "0.58", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Threading"] }
+sysinfo       = "0.33.0"
+opener        = "0.8"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "warn"
+dbg_macro = "warn"
+print_stdout = "warn"
+too_many_lines = "warn"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

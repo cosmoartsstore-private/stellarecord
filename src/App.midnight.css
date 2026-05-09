@@ -1,0 +1,129 @@
+.stella-record-root.midnight-theme {
+  color-scheme: dark;
+
+  /* ── ベース背景 ──────────────────────────── */
+  --bg-gradient: linear-gradient(180deg, #09090b 0%, #0a0a0c 100%);
+  --bg-card: rgb(18 18 20 / 85%);
+  --bg-card-strong: rgb(24 24 27 / 95%);
+  --bg-card-soft: rgb(12 12 14 / 70%);
+
+  /* ── アクセント (base: 123 147 248) ─────────── */
+  --accent: #7b93f8;
+  --accent-light: #a0b4fc;
+  --accent-gradient: linear-gradient(135deg, #4f6ef5 0%, #8098ff 100%);
+  --accent-soft: rgb(123 147 248 / 14%);
+
+  /* ── テキスト ───────────────────────────────────── */
+  --text-main: #e4e4e7;
+  --text-dim: #71717a;
+  --text-faint: #3f3f46;
+
+  /* ── セマンティック ───────────────────────────────── */
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #ef4444;
+
+  /* ── ボーダー ────────────────────────────────── */
+  --border: #27272a;
+  --border-strong: rgb(123 147 248 / 35%);
+
+  /* ── シャドウ ────────────────────────────────── */
+  --shadow-sm: 0 1px 3px rgb(0 0 0 / 50%);
+  --shadow-md: 0 10px 30px rgb(0 0 0 / 60%);
+  --shadow-lg: 0 18px 45px rgb(0 0 0 / 70%);
+
+  /* ── ストレージ ────────────────────────────────── */
+  --storage-track-bg: #27272a;
+  --warning-gradient: linear-gradient(135deg, #f59e0b 0%, #fb7185 100%);
+
+  /* ── 機能カード ───────────────────────────── */
+  --feature-icon-border: rgb(123 147 248 / 16%);
+
+  /* ── ボタン ────────────────────────────────── */
+  --btn-primary-shadow: none;
+  --btn-primary-hover-shadow: none;
+  --btn-danger-bg: #fef2f2;
+  --btn-danger-border: #fca5a5;
+  --btn-danger-hover-bg: #fee2e2;
+  --btn-danger-wipe-hover-shadow: 0 8px 20px rgb(239 68 68 / 35%);
+
+  /* ── 警告エリア ───────────────────────────── */
+  --warning-zone-bg: linear-gradient(135deg, #fef2f2, #fff7ed);
+  --warning-zone-border: #fca5a5;
+  --warning-zone-stripe: #fef2f2;
+  --danger-pulse-shadow: rgb(239 68 68 / 50%);
+  --danger-pulse-shadow-fade: rgb(239 68 68 / 0%);
+
+  /* ── 削除モーダル ───────────────────────────── */
+  --danger-modal-border: #fca5a5;
+  --danger-modal-bg: #fffafa;
+  --danger-modal-title: #b91c1c;
+  --danger-modal-body-bg: #fef2f2;
+  --danger-modal-body-border: #fecaca;
+  --danger-modal-body-text: #5c2626;
+
+  /* ── ランチャー / DB ──────────────────────────── */
+  --launcher-card-bg: rgb(18 18 20 / 85%);
+  --db-sidebar-bg: rgb(18 18 20 / 85%);
+  --db-content-bg: rgb(18 18 20 / 85%);
+  --db-content-header-bg: rgb(12 12 14 / 60%);
+  --db-table-head-bg: rgb(18 18 20 / 95%);
+  --db-table-head-border: #27272a;
+  --db-table-cell-border: #1c1c1e;
+  --db-table-row-border: #1c1c1e;
+  --db-table-row-hover-bg: rgb(123 147 248 / 8%);
+
+  /* ── トースト ──────────────────────────────────── */
+  --toast-bg: rgb(18 18 20 / 95%);
+  --toast-shadow: 0 8px 28px rgb(0 0 0 / 60%);
+
+  /* ── モーダル ──────────────────────────────────── */
+  --modal-overlay-bg: rgb(0 0 0 / 65%);
+  --modal-bg: #121214;
+  --modal-shadow: 0 24px 60px rgb(0 0 0 / 65%);
+  --modal-border: #27272a;
+
+  /* ── アーカイブ ────────────────────────────────── */
+  --archive-file-bg: rgb(18 18 20 / 80%);
+  --archive-file-hover-bg: rgb(24 24 27 / 90%);
+  --archive-file-selected-bg: rgb(123 147 248 / 12%);
+  --file-checkbox-border: rgb(123 147 248 / 40%);
+  --file-list-bg: rgb(12 12 14 / 60%);
+  --file-scrollbar-thumb: rgb(123 147 248 / 22%);
+  --file-item-border: #27272a;
+  --file-item-selected-bg: rgb(123 147 248 / 12%);
+
+  /* ── ターミナル ───────────────────────────────── */
+  --terminal-bg: #050505;
+  --terminal-border: #27272a;
+  --terminal-time-default: #3f3f46;
+  --terminal-body: #d4d4d8;
+  --terminal-world: #60a5fa;
+  --terminal-travel: #38bdf8;
+  --terminal-notification: #facc15;
+  --terminal-player-join: #4ade80;
+  --terminal-player-left: #f87171;
+  --terminal-video: #c084fc;
+  --terminal-warning: #fb923c;
+  --terminal-error: #ef4444;
+  --terminal-debug: #3f3f46;
+  --terminal-debug-system: #a0b4fc;
+  --terminal-debug-avatar: #e879f9;
+  --terminal-debug-network: #2dd4bf;
+  --terminal-debug-interact: #fbbf24;
+  --terminal-highlight-bg: rgb(123 147 248 / 20%);
+  --terminal-highlight-text: #ffffff;
+  --terminal-highlight-border: rgb(160 180 252 / 18%);
+  --terminal-scrollbar-thumb: rgb(123 147 248 / 20%);
+
+  /* ── 共有 ─────────────────────────────────── */
+  --sr-shared-body-background: var(--bg-gradient);
+  --sr-shared-body-color: var(--text-main);
+  --sr-shared-warning-zone-before-background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 18px,
+    var(--warning-zone-stripe) 18px,
+    var(--warning-zone-stripe) 36px
+  );
+}

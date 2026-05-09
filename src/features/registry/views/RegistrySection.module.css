@@ -1,0 +1,280 @@
+.root {
+  width: 100%;
+}
+
+.sectionHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.reloadButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  box-shadow: none;
+}
+
+.reloadButton:disabled {
+  opacity: 0.6;
+}
+
+.reloadIcon {
+  display: inline-flex;
+  transition: transform 0.2s;
+}
+
+.reloadIconSpin {
+  animation: reload-spin 0.6s ease-in-out;
+}
+
+@keyframes reload-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.launcherViewSwitch {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.launcherViewButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 28px;
+  border: none;
+  background: var(--bg-card);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  padding: 0;
+}
+
+.launcherViewButton:hover {
+  background: var(--accent-soft);
+  color: var(--text-main);
+}
+
+.launcherViewButton.active {
+  background: var(--accent);
+  color: white;
+}
+
+.launcherViewButton :global(.icon-svg) {
+  width: 14px;
+  height: 14px;
+  fill: currentcolor;
+}
+
+.launcherEmptyState {
+  padding: 1.25rem 1.4rem;
+  border: 1px dashed var(--border);
+  border-radius: 18px;
+  color: var(--text-dim);
+  background: var(--bg-card-soft);
+}
+
+.launcherList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.launcherListItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: 1.1rem 1.2rem;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--launcher-card-bg);
+  box-shadow: var(--shadow-sm);
+}
+
+.launcherListMain {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.launcherListIcon,
+.launcherCardLargeIcon {
+  background: var(--accent-soft);
+  border: 1px solid var(--feature-icon-border);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.launcherListIcon {
+  width: 62px;
+  height: 62px;
+  border-radius: 18px;
+}
+
+.launcherListIcon img,
+.launcherCardLargeIcon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.launcherListCopy {
+  min-width: 0;
+}
+
+.launcherListCopy h4,
+.launcherCardLargeCopy h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.launcherListCopy p,
+.launcherCardLargeCopy p {
+  margin: 0.35rem 0 0;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+
+.launcherListActions,
+.launcherCardLargeActions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.launcherCardGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+
+.launcherCardLarge {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.35rem;
+  border-radius: 24px;
+  background: var(--launcher-card-bg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.launcherCardLargeIcon {
+  width: 88px;
+  height: 88px;
+  border-radius: 24px;
+}
+
+.launcherLaunchButton {
+  min-width: 132px;
+}
+
+.registerForm {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.formField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.formInput {
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-main);
+  font-size: 0.88rem;
+  font-family: var(--font-sans);
+}
+
+.formInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.filePickerRow {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.filePickerRow .formInput {
+  flex: 1;
+  min-width: 0;
+}
+
+.deleteButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.deleteButton:hover {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+
+.deleteButton :global(.icon-svg) {
+  width: 16px;
+  height: 16px;
+  fill: currentcolor;
+}
+
+@media (width <= 1024px) {
+  .launcherListItem {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .launcherListActions,
+  .launcherViewSwitch {
+    width: 100%;
+  }
+
+  .launcherListActions > *,
+  .launcherViewSwitch > * {
+    flex: 1;
+  }
+}

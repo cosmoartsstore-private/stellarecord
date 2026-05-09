@@ -1,0 +1,102 @@
+:root {
+  --font-sans: 'M PLUS 1 Variable', 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+  --font-log: 'Cascadia Mono', 'Consolas', 'SF Mono', monospace;
+
+  /* FHDスケーリング変数 */
+  --nav-height: 64px;
+  --content-max: 1280px;
+  --content-pad: 2.5rem;
+  --card-pad: 2rem;
+  --card-radius: 28px;
+  --gap-base: 1.25rem;
+  --gap-lg: 2rem;
+}
+
+/* ─── リセット ─────────────────────────────────────── */
+
+* {
+  box-sizing: border-box;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  background: var(--sr-shared-body-background);
+  color: var(--sr-shared-body-color);
+  height: 100vh;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+#root {
+  height: 100%;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+}
+
+.disable-transitions,
+.disable-transitions *,
+.disable-transitions *::before,
+.disable-transitions *::after {
+  transition: none !important;
+}
+
+button {
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease, opacity 0.2s;
+}
+
+/* ─── アイコンSVG（グローバル、StellaIcon用） ─── */
+
+.icon-svg {
+  width: 28px;
+  height: 28px;
+  fill: currentcolor;
+  transition: transform 0.3s;
+}
+
+/* ─── FHD+レスポンシブ調整 ─────────────────────── */
+
+@media (width >= 1600px) {
+  :root {
+    --content-max: 1440px;
+    --content-pad: 3rem;
+    --card-pad: 2.25rem;
+    --gap-lg: 2.25rem;
+  }
+}
+
+@media (width >= 1920px) {
+  :root {
+    --content-max: 1600px;
+    --content-pad: 3.5rem;
+  }
+}
+
+@media (width <= 1024px) {
+  :root {
+    --content-pad: 1.25rem;
+  }
+}
+
+/* ─── 削除パルスアニメーション（DangerModalから参照） ─── */
+
+@keyframes danger-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 var(--danger-pulse-shadow);
+  }
+
+  50% {
+    opacity: 0.85;
+    box-shadow: 0 0 0 6px var(--danger-pulse-shadow-fade);
+  }
+}

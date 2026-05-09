@@ -1,0 +1,398 @@
+.root {
+  width: 100%;
+}
+
+/* サイドバーレイアウト用にshared.modalContentのサイズを上書き */
+.content {
+  display: flex;
+  flex-direction: row;
+  width: min(1600px, 98vw);
+  max-width: 1600px;
+  height: min(92vh, 1080px);
+  max-height: min(92vh, 1080px);
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+/* ── サイドバー ──────────────────────────────────── */
+
+.sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+  background: var(--bg-card-soft);
+  border-radius: 28px 0 0 28px;
+}
+
+.sidebarHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.sidebarTitle {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.sidebarCount {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-faint);
+}
+
+.sidebarList {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem;
+  margin: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--file-list-bg);
+}
+
+.sidebarList::-webkit-scrollbar {
+  width: 5px;
+}
+
+.sidebarList::-webkit-scrollbar-thumb {
+  background: var(--file-scrollbar-thumb);
+  border-radius: 999px;
+}
+
+.sidebarList::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebarItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  flex-shrink: 0;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+  color: var(--text-main);
+}
+
+.sidebarItem:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.sidebarItemActive {
+  background: var(--accent-gradient);
+  color: white;
+}
+
+.sidebarItemActive:hover {
+  background: var(--accent-gradient);
+}
+
+.sidebarItem:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sidebarItemDate {
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: 'Segoe UI Variable', var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: inherit;
+}
+
+.sidebarItemSize {
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+.sidebarItemActive .sidebarItemSize {
+  color: rgb(255 255 255 / 60%);
+}
+
+/* ── メインコンテンツ ─────────────────────────────── */
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 1.25rem 1.5rem 1.25rem;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.mainHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-shrink: 0;
+}
+
+.mainHeaderCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.mainTitle {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: -0.02em;
+}
+
+.mainSub {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mainHeaderMeta {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.lineCount {
+  padding: 4px 12px;
+  border-radius: 99px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: opacity 0.3s;
+}
+
+.lineCountLoading {
+  animation: lineCountPulse 1.2s ease-in-out infinite;
+}
+
+.zoomBadge {
+  padding: 4px 10px;
+  border-radius: 99px;
+  background: var(--bg-card-soft);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  margin-left: 0.4rem;
+}
+
+@keyframes lineCountPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ── 凡例 ───────────────────────────────────── */
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.legendItem {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--terminal-border);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  background: transparent;
+  cursor: pointer;
+  transition: opacity 0.15s, box-shadow 0.15s, border-color 0.15s;
+}
+
+.legendItem:hover {
+  opacity: 0.75;
+}
+
+.legendItemActive {
+  border-color: currentColor;
+  box-shadow: 0 0 0 1px currentColor;
+  opacity: 1;
+}
+
+/* ── ログリスト ─────────────────────────────────── */
+
+.logList {
+  position: relative;
+  flex: 1;
+  overflow: auto;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--terminal-border);
+  border-radius: 16px;
+  background: var(--terminal-bg);
+  min-height: 0;
+}
+
+.logList::-webkit-scrollbar {
+  width: 8px;
+}
+
+.logList::-webkit-scrollbar-thumb {
+  background: var(--terminal-scrollbar-thumb);
+  border-radius: 999px;
+}
+
+.logList::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ── ローディングオーバーレイ ──────────────────────────── */
+
+.loadingOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.9rem;
+  background: rgb(0 0 0 / 55%);
+  border-radius: 16px;
+  z-index: 10;
+}
+
+.loadingSpinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgb(255 255 255 / 15%);
+  border-top-color: var(--accent-light);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loadingText {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: rgb(255 255 255 / 70%);
+}
+
+/* ── ログ行 ────────────────────────────────── */
+
+.line {
+  padding: 0.1rem 0;
+  font-family: var(--font-log);
+  font-size: 0.78rem;
+  line-height: 1.6;
+  white-space: pre;
+  color: var(--terminal-body);
+  font-feature-settings: 'zero' 1, 'ss01' 1;
+}
+
+.highlight {
+  display: inline;
+  padding: 0.08rem 0.28rem;
+  border-radius: 0.35rem;
+  background: var(--terminal-highlight-bg);
+  color: var(--terminal-highlight-text);
+  box-shadow: inset 0 0 0 1px var(--terminal-highlight-border);
+}
+
+/* ── カテゴリ色 ──────────────────────────── */
+
+.line.categoryWorld,    .legendWorld        { color: var(--terminal-world); }
+.line.categoryTravel                        { color: var(--terminal-travel); }
+.line.categoryNotification, .legendNotification { color: var(--terminal-notification); }
+.line.categoryPlayerJoin,
+.line.categoryPlayerReady,  .legendPlayerJoin   { color: var(--terminal-player-join); }
+.line.categoryPlayerLeft                    { color: var(--terminal-player-left); }
+.line.categoryVideo,    .legendVideo        { color: var(--terminal-video); }
+.legendWarning                              { color: var(--terminal-warning); }
+.legendError                                { color: var(--terminal-error); }
+.legendDebug                                { color: var(--terminal-debug); }
+.line.categoryDebugSystem                   { color: var(--terminal-debug-system); }
+.line.categoryDebugAvatar                   { color: var(--terminal-debug-avatar); }
+.line.categoryDebugNetwork                  { color: var(--terminal-debug-network); }
+.line.categoryDebugInteract                 { color: var(--terminal-debug-interact); }
+
+/* ── レベル色 ─────────────────────────────── */
+
+.levelError   { color: var(--terminal-error); }
+.levelWarning { color: var(--terminal-warning); }
+.levelDebug   { color: var(--terminal-debug); }
+.levelPlain,
+.levelInfo    { color: var(--terminal-body); }
+
+/* ── レスポンシブ ───────────────────────────────── */
+
+@media (width <= 900px) {
+  .sidebar {
+    width: 200px;
+  }
+
+  .line {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+
+  .time {
+    font-size: 0.72rem;
+  }
+}
+
+@media (width <= 640px) {
+  .content {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    height: 140px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    border-radius: 28px 28px 0 0;
+  }
+
+  .sidebarList {
+    display: flex;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.4rem;
+  }
+
+  .sidebarItem {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+}
