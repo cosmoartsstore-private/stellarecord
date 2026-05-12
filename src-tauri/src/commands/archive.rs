@@ -402,75 +402,19 @@ fn encode_log_level_u8(level: &str) -> u8 {
 /// ビューアのカテゴリタグをチャンク転送用のコンパクトな `u8` にエンコードする。
 ///
 /// カテゴリはログビューア UI のフィルタサイドバーと対応する。
+/// DB に登録される情報を中心に番号を振り、`debug-system` のみ複数行
+/// デバッグブロックの範囲タグとして残している。
 fn encode_log_category_u8(category: &str) -> u8 {
     match category {
         "world" => 1,
-        "travel" => 2,
-        "notification" => 3,
-        "player_join" => 4,
-        "player_ready" => 5,
-        "player_left" => 6,
-        "video" => 7,
-        "debug-system" => 8,
-        "debug-avatar" => 9,
-        "debug-network" => 10,
-        "debug-interact" => 11,
+        "notification" => 2,
+        "player_join" => 3,
+        "player_ready" => 4,
+        "player_left" => 5,
+        "video" => 6,
+        "debug-system" => 7,
         _ => 0,
     }
-}
-
-/// キーワードヒューリスティクスに基づきログ行にデバッグサブカテゴリを割り当てる。
-///
-/// どのサブカテゴリにもマッチしないデバッグ行は `None` を返し、
-/// 呼び出し元の汎用 "plain" バケットにフォールスルーする。
-fn classify_debug_subcategory(line: &str, in_system_block: bool) -> Option<&'static str> {
-    if in_system_block
-        || line.contains("[UserInfoLogger] Environment Info:")
-        || line.contains("[UserInfoLogger] User Settings Info:")
-        || line.contains("Microphones installed (")
-        || analyze::RE_DEVICE_LINE.is_match(line)
-        || analyze::RE_CURRENT_UTC.is_match(line)
-        || analyze::RE_SUBSCRIPTION_STATUS.is_match(line)
-    {
-        return Some("debug-system");
-    }
-
-    if analyze::RE_AVATAR_SWITCH.is_match(line)
-        || analyze::RE_AVATAR_SAVE.is_match(line)
-        || line.contains("[AvatarManager]")
-        || (line.contains("[Pipeline]") && line.contains("avtr_"))
-        || line.contains("Downloading avatar")
-    {
-        return Some("debug-avatar");
-    }
-
-    if analyze::RE_BEST_REGION.is_match(line)
-        || analyze::RE_OSC_ADVERTISE.is_match(line)
-        || analyze::RE_OSC_FOUND.is_match(line)
-        || analyze::RE_GROUP_API.is_match(line)
-        || line.contains("[Photon]")
-        || line.contains("[NetworkManager]")
-        || line.contains("API Error")
-        || line.contains("Fetched local user")
-    {
-        return Some("debug-network");
-    }
-
-    if line.contains("[PortalInternal]")
-        || line.contains("[VRC_PortalMarker]")
-        || line.contains("OnStationEntered")
-        || line.contains("OnStationExited")
-        || line.contains("OnPickup")
-        || line.contains("OnDrop")
-        || line.contains("OnInteract")
-        || line.contains("RequestOwnership")
-        || line.contains("TransferOwnership")
-        || line.contains("OnOwnershipTransferred")
-    {
-        return Some("debug-interact");
-    }
-
-    None
 }
 
 /// `.tar.zst` アーカイブの最初の tar エントリのソースファイル名だけを取得する。
@@ -534,76 +478,18 @@ fn classify_log_level(line: &str) -> String {
     "plain".to_string()
 }
 
-/// カテゴリに対してログビューアがハイライトすべきテキスト断片を抽出する。
-fn extract_highlight_text(line: &str, category: &str) -> Option<String> {
-    match category {
-        "world" => {
-            if let Some(caps) = analyze::RE_ENTERING.captures(line) {
-                return caps.get(1).map(|m| m.as_str().to_string());
-            }
-            if line.contains("[Behaviour] OnLeftRoom") {
-                return Some("[Behaviour] OnLeftRoom".to_string());
-            }
-            None
-        }
-        "travel" => analyze::RE_DESTINATION_EVENT
-            .captures(line)
-            .and_then(|caps| caps.get(0))
-            .map(|m| m.as_str().to_string())
-            .or_else(|| {
-                analyze::RE_GOING_HOME
-                    .captures(line)
-                    .and_then(|caps| caps.get(0))
-                    .map(|m| m.as_str().to_string())
-            }),
-        "player_join" => analyze::RE_PLAYER_JOIN
-            .captures(line)
-            .and_then(|caps| caps.get(1))
-            .map(|m| m.as_str().to_string()),
-        "player_ready" => analyze::RE_PLAYER_JOIN_COMPLETE
-            .captures(line)
-            .and_then(|caps| caps.get(1))
-            .map(|m| m.as_str().to_string()),
-        "player_left" => analyze::RE_PLAYER_LEFT
-            .captures(line)
-            .and_then(|caps| caps.get(1))
-            .map(|m| m.as_str().to_string()),
-        "notification" => analyze::RE_NOTIFICATION
-            .captures(line)
-            .and_then(|caps| caps.get(6))
-            .map(|m| m.as_str().to_string())
-            .filter(|value| !value.trim().is_empty())
-            .or_else(|| {
-                analyze::RE_NOTIFICATION
-                    .captures(line)
-                    .and_then(|caps| caps.get(1))
-                    .map(|m| m.as_str().to_string())
-            }),
-        "video" => analyze::RE_VIDEO
-            .captures(line)
-            .and_then(|caps| caps.get(1))
-            .map(|m| m.as_str().to_string())
-            .or_else(|| {
-                analyze::RE_VIDEO_ALT
-                    .captures(line)
-                    .and_then(|caps| caps.get(1))
-                    .map(|m| m.as_str().to_string())
-            }),
-        _ => None,
-    }
-}
-
 /// 正規化されたデータベース行からタイムスタンプ→カテゴリのマッピングを収集する。
 ///
 /// ビューアカテゴリごとに1つの SQL ブロックを意図的に維持し、
 /// 格納データとハイライト対象ログ行の関係を監査しやすくする。
-#[allow(clippy::too_many_lines)]
 fn collect_db_log_categories(
     conn: &rusqlite::Connection,
     source_name: &str,
 ) -> Result<HashMap<String, Vec<String>>, String> {
     let mut categories: HashMap<String, Vec<String>> = HashMap::new();
 
+    // DB に格納済みのカテゴリだけを収集する。動画 URL は現在 DB に持たないため
+    // `video` カテゴリは emit 側で正規表現マーカーから合成する。
     let sql = "
         SELECT join_time, 'world'
           FROM visits
@@ -625,13 +511,6 @@ fn collect_db_log_categories(
           JOIN visits v ON v.id = wu.visit_id
           JOIN sessions s ON s.id = v.session_id
          WHERE s.log_name = ?1 AND wu.is_self = 0 AND wu.leave_time IS NOT NULL
-        UNION ALL
-        SELECT timestamp, 'video'
-          FROM videos
-         WHERE visit_id IN (
-           SELECT id FROM visits
-            WHERE session_id IN (SELECT id FROM sessions WHERE log_name = ?1)
-         )
         UNION ALL
         SELECT received_at, 'notification'
           FROM notifications
@@ -704,14 +583,6 @@ fn collect_db_keyword_markers(
           FROM notifications
          WHERE session_id IN (SELECT id FROM sessions WHERE log_name = ?1)
            AND sender_name IS NOT NULL AND trim(sender_name) <> ''
-        UNION ALL
-        SELECT url, 'video'
-          FROM videos
-         WHERE visit_id IN (
-           SELECT id FROM visits
-            WHERE session_id IN (SELECT id FROM sessions WHERE log_name = ?1)
-         )
-           AND url IS NOT NULL AND trim(url) <> ''
     ";
 
     let mut stmt = conn
@@ -747,10 +618,11 @@ fn collect_db_keyword_markers(
     Ok(markers)
 }
 
-/// 生行とタイムスタンプから最も可能性の高いビューアカテゴリを解決する。
+/// 生行とタイムスタンプから DB 登録済みカテゴリを解決する。
 ///
-/// データベースのタイムスタンプが権威的だが、同一秒に複数カテゴリが
-/// 存在する場合は行内容でタイブレークする。
+/// DB タイムスタンプが権威で、同一秒に複数カテゴリがある場合は行内容で
+/// タイブレークする。`player_ready` は DB に直接列を持たないが、訪問への
+/// 参加完了として `player_join` の派生扱いにする。
 fn resolve_db_category(
     line: &str,
     timestamp: &str,
@@ -758,19 +630,19 @@ fn resolve_db_category(
 ) -> Option<String> {
     let matched = db_categories.get(timestamp)?;
 
-    let preferred = if analyze::RE_PLAYER_JOIN.is_match(line) {
+    let preferred = if analyze::RE_PLAYER_JOIN_COMPLETE.is_match(line) {
+        // OnPlayerJoinComplete は join_time と同一秒に出力されることが多いので
+        // player_join のヒットに便乗して player_ready を別カテゴリとして付与する。
+        if matched.iter().any(|category| category == "player_join") {
+            return Some("player_ready".to_string());
+        }
+        None
+    } else if analyze::RE_PLAYER_JOIN.is_match(line) {
         Some("player_join")
-    } else if analyze::RE_PLAYER_JOIN_COMPLETE.is_match(line) {
-        Some("player_ready")
     } else if analyze::RE_PLAYER_LEFT.is_match(line) {
         Some("player_left")
     } else if analyze::RE_NOTIFICATION.is_match(line) {
         Some("notification")
-    } else if analyze::RE_VIDEO.is_match(line) || analyze::RE_VIDEO_ALT.is_match(line) {
-        Some("video")
-    } else if analyze::RE_DESTINATION_EVENT.is_match(line) || analyze::RE_GOING_HOME.is_match(line)
-    {
-        Some("travel")
     } else if line.contains("[Behaviour] Entering Room:") || line.contains("[Behaviour] OnLeftRoom")
     {
         Some("world")
@@ -797,10 +669,55 @@ fn resolve_db_keyword_marker<'a>(
         .find(|marker| line.contains(marker.text.as_str()))
 }
 
+/// 複数行にまたがる DB 関連ブロックを継続中であることを表す。
+///
+/// VRChat ログでは大半の行が独立したタイムスタンプを持つが、一部のレコードは
+/// 複数行に渡る (UserInfo デバッグブロックや、稀に改行を含む通知ペイロード)。
+/// 範囲全体に同じカテゴリを付与してフィルタチップで一括選択できるようにする。
+#[derive(Clone, Copy)]
+enum RangeBlockKind {
+    /// `[UserInfoLogger]` 系の 4 スペースインデント継続ブロック。
+    DebugSystem,
+    /// `Received Notification: <Notification ...>` が改行を含むケース。
+    /// 行内に閉じ `>` が出現するまで継続する。
+    Notification,
+}
+
+/// 進行中の範囲ブロックの状態。
+struct RangeBlock {
+    kind: RangeBlockKind,
+    category: &'static str,
+}
+
+/// 行が新しい範囲ブロックを開始するなら、その種類とカテゴリを返す。
+fn detect_range_block_start(line: &str) -> Option<RangeBlock> {
+    if line.contains("[UserInfoLogger] Environment Info:")
+        || line.contains("[UserInfoLogger] User Settings Info:")
+        || line.contains("Microphones installed (")
+    {
+        return Some(RangeBlock {
+            kind: RangeBlockKind::DebugSystem,
+            category: "debug-system",
+        });
+    }
+    if line.contains("Received Notification: <Notification") && !line.contains('>') {
+        return Some(RangeBlock {
+            kind: RangeBlockKind::Notification,
+            category: "notification",
+        });
+    }
+    None
+}
+
 /// アーカイブログテキストと DB ヒントからカテゴリ付きログビューア行を構築する。
 ///
 /// 生ログ内容と正規化 DB データをマージし、TypeScript でログ全体を
 /// 再パースせずに UI が重要な行をハイライトできるようにする。
+///
+/// ハイライトは DB に登録されたキーワードにマッチした場合のみ付与し、
+/// 正規表現のみで検出される断片はハイライトしない。複数行にわたる DB
+/// レコード（UserInfo ブロック、複数行通知、動画ロードシーケンス）は
+/// 範囲全体に同一カテゴリを付与し、フィルタチップで一括選択できるようにする。
 fn emit_log_viewer_chunks(
     reader: impl BufRead,
     session_id: String,
@@ -838,12 +755,25 @@ fn emit_log_viewer_chunks(
         .is_ok()
     };
 
-    let mut in_debug_block = false;
+    let mut active_range: Option<RangeBlock> = None;
     for line in reader.lines().map_while(Result::ok) {
-        // VRChat デバッグブロックは継続行を4スペースでインデントする。
-        // インデントがなくなればブロック終了。
-        if in_debug_block && !line.starts_with("    ") {
-            in_debug_block = false;
+        // 既存の範囲ブロックの終了判定。終了行は範囲外扱いで、終了が成立した時点で
+        // 範囲を解除してから当該行を分類する（インデント解除した行は範囲に含めない）。
+        if let Some(block) = active_range.as_ref() {
+            let should_end = match block.kind {
+                RangeBlockKind::DebugSystem => !line.starts_with("    "),
+                // Notification は閉じ `>` を含む行を範囲の最終行として含めるため
+                // ここでは終了しない（後段で `>` 検出後に解除する）。
+                RangeBlockKind::Notification => false,
+            };
+            if should_end {
+                active_range = None;
+            }
+        }
+
+        // 範囲未開始のときのみ新規範囲ブロックの開始を検出する。
+        if active_range.is_none() {
+            active_range = detect_range_block_start(&line);
         }
 
         let timestamp = analyze::RE_TIME
@@ -855,20 +785,19 @@ fn emit_log_viewer_chunks(
                     .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
             })
             .unwrap_or_default();
-        let level = if in_debug_block {
+
+        // 範囲ブロック内では debug-system 由来なら debug 固定。
+        // Notification 範囲はタイムスタンプ付き行の本来のレベルを尊重する。
+        let level = if matches!(
+            active_range.as_ref().map(|b| b.kind),
+            Some(RangeBlockKind::DebugSystem)
+        ) {
             "debug".to_string()
         } else {
             classify_log_level(&line)
         };
 
-        // ヘッダー行は複数行デバッグブロックの開始を示す。
-        if level == "debug"
-            && (line.contains("[UserInfoLogger] Environment Info:")
-                || line.contains("[UserInfoLogger] User Settings Info:")
-                || line.contains("Microphones installed ("))
-        {
-            in_debug_block = true;
-        }
+        // DB キーワードマーカーを引いてハイライトとカテゴリを決定する。
         let keyword_marker = if timestamp.is_empty() {
             None
         } else {
@@ -876,31 +805,35 @@ fn emit_log_viewer_chunks(
                 .as_deref()
                 .and_then(|markers| resolve_db_keyword_marker(&line, markers))
         };
-        let category = keyword_marker
-            .map(|marker| marker.category.clone())
+
+        // カテゴリ優先順位:
+        //   1. 範囲ブロックが進行中ならその範囲カテゴリ（複数行を同じカテゴリに統一）
+        //   2. DB キーワードマーカーのカテゴリ
+        //   3. DB タイムスタンプヒントのカテゴリ
+        //   4. 上記いずれも該当しなければ "plain"
+        let category = active_range
+            .as_ref()
+            .map(|block| block.category.to_string())
+            .or_else(|| keyword_marker.map(|marker| marker.category.clone()))
             .or_else(|| {
                 db_categories
                     .as_ref()
                     .and_then(|cat_map| resolve_db_category(&line, &timestamp, cat_map))
             })
-            .unwrap_or_else(|| {
-                if level == "debug" {
-                    classify_debug_subcategory(&line, in_debug_block)
-                        .map(str::to_string)
-                        .unwrap_or_else(|| "plain".to_string())
-                } else {
-                    "plain".to_string()
-                }
-            });
-        let highlight_text = keyword_marker
-            .map(|marker| marker.text.clone())
-            .or_else(|| {
-                if category == "plain" {
-                    None
-                } else {
-                    extract_highlight_text(&line, &category)
-                }
-            });
+            .unwrap_or_else(|| "plain".to_string());
+
+        // ハイライトは DB マーカーがマッチした場合のみ。正規表現フォールバックは持たない。
+        let highlight_text = keyword_marker.map(|marker| marker.text.clone());
+
+        // Notification 範囲は閉じ `>` を含む行を最終行として範囲を解除する。
+        if matches!(
+            active_range.as_ref().map(|b| b.kind),
+            Some(RangeBlockKind::Notification)
+        ) && line.contains('>')
+        {
+            active_range = None;
+        }
+
         timestamps.push(timestamp);
         levels.push(encode_log_level_u8(&level));
         categories.push(encode_log_category_u8(&category));
