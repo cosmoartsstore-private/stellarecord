@@ -22,16 +22,12 @@ const CHIPS: { key: string; label: string; colorClass: string; matchKeys?: strin
 
 const CATEGORY_CLASS_MAP: Record<string, string> = {
   world: styles.categoryWorld,
-  travel: styles.categoryTravel,
   notification: styles.categoryNotification,
   'player-join': styles.categoryPlayerJoin,
   'player-ready': styles.categoryPlayerReady,
   'player-left': styles.categoryPlayerLeft,
   video: styles.categoryVideo,
   'debug-system': styles.categoryDebugSystem,
-  'debug-avatar': styles.categoryDebugAvatar,
-  'debug-network': styles.categoryDebugNetwork,
-  'debug-interact': styles.categoryDebugInteract,
 };
 
 const LEVEL_CLASS_MAP: Record<string, string> = {
@@ -46,11 +42,16 @@ const BASE_LINE_HEIGHT = 22;
 
 /** バックエンドの数値レベルをCSSクラスキー文字列にマッピング */
 const LEVEL_KEYS = ['plain', 'info', 'warning', 'error', 'debug'] as const;
-/** バックエンドの数値カテゴリをCSSクラスキー文字列にマッピング */
+/**
+ * バックエンドの数値カテゴリを CSS クラスキー文字列にマッピング。
+ * Rust 側 `encode_log_category_u8` の番号と必ず一致させること。
+ * DB 由来カテゴリ（world / notification / player_* / video）と、複数行範囲を
+ * 表すレベル由来カテゴリ debug-system のみを持つ。
+ */
 const CATEGORY_KEYS = [
-  'plain', 'world', 'travel', 'notification',
+  'plain', 'world', 'notification',
   'player-join', 'player-ready', 'player-left', 'video',
-  'debug-system', 'debug-avatar', 'debug-network', 'debug-interact',
+  'debug-system',
 ] as const;
 
 interface LogViewerModalProps {
