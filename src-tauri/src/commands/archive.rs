@@ -687,7 +687,18 @@ enum RangeBlockKind {
 struct RangeBlock {
     kind: RangeBlockKind,
     category: &'static str,
+    /// ブロック開始からこれまでに範囲内として扱った行数。
+    /// 破損ログ等で終端条件が満たされない場合の暴走を防ぐ。
+    span_lines: usize,
 }
+
+/// Notification 範囲ブロックを継続できる最大行数。
+/// 通常の VRChat 通知は数行〜十数行に収まるため、これを超えるケースは
+/// 終端 `>` が失われた破損ログとみなして範囲を強制終了する。
+const NOTIFICATION_BLOCK_MAX_LINES: usize = 200;
+/// `[UserInfoLogger]` 系デバッグブロックを継続できる最大行数。
+/// インデント解除されない異常ケースに対する保険。
+const DEBUG_SYSTEM_BLOCK_MAX_LINES: usize = 2000;
 
 /// 行が新しい範囲ブロックを開始するなら、その種類とカテゴリを返す。
 fn detect_range_block_start(line: &str) -> Option<RangeBlock> {
@@ -698,12 +709,14 @@ fn detect_range_block_start(line: &str) -> Option<RangeBlock> {
         return Some(RangeBlock {
             kind: RangeBlockKind::DebugSystem,
             category: "debug-system",
+            span_lines: 0,
         });
     }
     if line.contains("Received Notification: <Notification") && !line.contains('>') {
         return Some(RangeBlock {
             kind: RangeBlockKind::Notification,
             category: "notification",
+            span_lines: 0,
         });
     }
     None
@@ -774,6 +787,19 @@ fn emit_log_viewer_chunks(
         // 範囲未開始のときのみ新規範囲ブロックの開始を検出する。
         if active_range.is_none() {
             active_range = detect_range_block_start(&line);
+        }
+
+        // 進行中の範囲ブロックの累積行数を更新し、上限を超えたら強制終了する。
+        // 破損ログで終端条件（インデント解除 / 閉じ `>`）が満たされない暴走への保険。
+        if let Some(block) = active_range.as_mut() {
+            block.span_lines += 1;
+            let max = match block.kind {
+                RangeBlockKind::DebugSystem => DEBUG_SYSTEM_BLOCK_MAX_LINES,
+                RangeBlockKind::Notification => NOTIFICATION_BLOCK_MAX_LINES,
+            };
+            if block.span_lines > max {
+                active_range = None;
+            }
         }
 
         let timestamp = analyze::RE_TIME
