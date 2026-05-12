@@ -69,12 +69,16 @@ export function useArchiveState() {
 
   /**
    * ストリーム呼び出し中に最新の閲覧ソースを参照するための ref。
-   * 状態だけだと、フォルダ切替直後の openStreamForFile が直前のソースで起動してしまう。
+   * 状態の反映は次のレンダリングまで遅延するため、選択直後に同期実行される
+   * openStreamForFile が直前のソースで起動してしまう。setState と同時に
+   * ref も更新する必要があるので、`setExternalSource` のラッパーを介して
+   * 両者を必ずペアで更新する。
    */
   const externalSourceRef = useRef<ExternalLogSource | null>(null);
-  useEffect(() => {
-    externalSourceRef.current = externalSource;
-  }, [externalSource]);
+  const updateExternalSource = useCallback((value: ExternalLogSource | null) => {
+    externalSourceRef.current = value;
+    setExternalSource(value);
+  }, []);
 
   /** イベントリスナーを解除してチャンク受信を停止する */
   const stopStream = useCallback(() => {
@@ -157,10 +161,10 @@ export function useArchiveState() {
 
   /** 閲覧モードでアーカイブ選択画面を開く（既定アーカイブストア） */
   const openLogViewerSelection = useCallback(async () => {
-    setExternalSource(null);
+    updateExternalSource(null);
     setExternalFiles([]);
     return loadArchiveSelection();
-  }, [loadArchiveSelection]);
+  }, [loadArchiveSelection, updateExternalSource]);
 
   /**
    * ネイティブダイアログで外部フォルダを選択し、合致するログ一覧に切り替える。
@@ -170,17 +174,17 @@ export function useArchiveState() {
     const folderPath = await pickLogFolder();
     if (!folderPath) return null;
     const files = await loadExternalLogFiles(folderPath);
-    setExternalSource({ folderPath });
+    updateExternalSource({ folderPath });
     setExternalFiles(files);
     return files;
-  }, []);
+  }, [updateExternalSource]);
 
   /** 外部フォルダ選択を解除して既定アーカイブストアに戻す */
   const clearExternalLogFolder = useCallback(async () => {
-    setExternalSource(null);
+    updateExternalSource(null);
     setExternalFiles([]);
     return loadArchiveSelection();
-  }, [loadArchiveSelection]);
+  }, [loadArchiveSelection, updateExternalSource]);
 
   /** 選択されたアーカイブファイルのバッチインポートを実行する */
   const executeEnhancedSync = useCallback(async (selectedFiles: string[]) => {
@@ -198,9 +202,9 @@ export function useArchiveState() {
     stopStream();
     setLogViewerData(null);
     setIsLogViewerLoaded(false);
-    setExternalSource(null);
+    updateExternalSource(null);
     setExternalFiles([]);
-  }, [stopStream]);
+  }, [stopStream, updateExternalSource]);
 
   /** アプリ起動時の一回限りの自動取り込みを実行する */
   const runStartupImport = useCallback(async () => {
