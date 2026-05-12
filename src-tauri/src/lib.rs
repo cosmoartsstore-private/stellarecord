@@ -55,6 +55,7 @@ pub fn run() {
             commands::polaris::start_polaris,
             commands::polaris::get_polaris_status,
             commands::registry::pick_exe_file,
+            commands::registry::extract_exe_display_name,
             commands::registry::register_app,
             commands::registry::unregister_app,
             commands::settings::get_management_settings,
@@ -72,6 +73,12 @@ pub fn run() {
             }
 
             builder.build()?;
+
+            // 自アプリのランチャー登録は失敗してもアプリ起動を妨げない。
+            if let Err(err) = commands::registry::ensure_self_app_registered() {
+                utils::log_warn(&format!("自アプリのランチャー登録に失敗しました: {err}"));
+            }
+
             Ok(())
         })
         .run(tauri::generate_context!());

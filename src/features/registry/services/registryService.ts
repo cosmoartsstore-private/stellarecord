@@ -13,6 +13,10 @@ export const loadRegistryCatalog = () => invoke<RegistryCatalog>('read_registry_
 /** ネイティブファイルダイアログで exe ファイルを選択する */
 export const pickExeFile = () => invoke<string | null>('pick_exe_file');
 
+/** exe の VersionInfo から表示名（FileDescription / ProductName / ファイル名）を取得する */
+export const extractExeDisplayName = (path: string) =>
+  invoke<string>('extract_exe_display_name', { path });
+
 /** サードパーティアプリをランチャーに登録する */
 export const registerApp = (path: string, name: string, description: string) =>
   invoke('register_app', { path, name, description });
