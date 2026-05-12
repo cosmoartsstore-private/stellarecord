@@ -411,8 +411,7 @@ fn encode_log_category_u8(category: &str) -> u8 {
         "player_join" => 3,
         "player_ready" => 4,
         "player_left" => 5,
-        "video" => 6,
-        "debug-system" => 7,
+        "debug-system" => 6,
         _ => 0,
     }
 }
@@ -488,8 +487,7 @@ fn collect_db_log_categories(
 ) -> Result<HashMap<String, Vec<String>>, String> {
     let mut categories: HashMap<String, Vec<String>> = HashMap::new();
 
-    // DB に格納済みのカテゴリだけを収集する。動画 URL は現在 DB に持たないため
-    // `video` カテゴリは emit 側で正規表現マーカーから合成する。
+    // DB に格納済みのカテゴリだけを収集する。
     let sql = "
         SELECT join_time, 'world'
           FROM visits

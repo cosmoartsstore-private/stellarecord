@@ -386,7 +386,6 @@
 .line.categoryPlayerJoin,
 .line.categoryPlayerReady,  .legendPlayerJoin   { color: var(--terminal-player-join); }
 .line.categoryPlayerLeft                    { color: var(--terminal-player-left); }
-.line.categoryVideo,    .legendVideo        { color: var(--terminal-video); }
 .legendWarning                              { color: var(--terminal-warning); }
 .legendError                                { color: var(--terminal-error); }
 .legendDebug                                { color: var(--terminal-debug); }
