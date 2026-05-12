@@ -16,9 +16,8 @@ export interface LogViewerMeta {
  * ストリーミング中にTauriイベントとして送信される1バッチ分のログ行
  *
  * Level:    0=plain  1=info  2=warning  3=error  4=debug
- * Category: 0=plain  1=world  2=travel  3=notification
- *           4=player-join  5=player-ready  6=player-left  7=video
- *           8=debug-system  9=debug-avatar  10=debug-network  11=debug-interact
+ * Category: 0=plain  1=world  2=notification
+ *           3=player-join  4=player-ready  5=player-left  6=debug-system
  */
 export interface LogViewerChunk {
   /** ファイル切替時に前回ストリームのイベントを破棄するためのセッション識別子 */

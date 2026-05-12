@@ -14,7 +14,6 @@ const CHIPS: { key: string; label: string; colorClass: string; matchKeys?: strin
   { key: 'world',        label: 'ワールド', colorClass: styles.legendWorld },
   { key: 'notification', label: '通知',     colorClass: styles.legendNotification },
   { key: 'player',       label: '入退室',   colorClass: styles.legendPlayerJoin, matchKeys: ['player-join', 'player-ready', 'player-left'] },
-  { key: 'video',        label: '動画',     colorClass: styles.legendVideo },
   { key: 'warning',      label: '警告',     colorClass: styles.legendWarning },
   { key: 'error',        label: 'エラー',   colorClass: styles.legendError },
   { key: 'debug',        label: 'デバッグ', colorClass: styles.legendDebug },
@@ -26,7 +25,6 @@ const CATEGORY_CLASS_MAP: Record<string, string> = {
   'player-join': styles.categoryPlayerJoin,
   'player-ready': styles.categoryPlayerReady,
   'player-left': styles.categoryPlayerLeft,
-  video: styles.categoryVideo,
   'debug-system': styles.categoryDebugSystem,
 };
 
@@ -45,12 +43,12 @@ const LEVEL_KEYS = ['plain', 'info', 'warning', 'error', 'debug'] as const;
 /**
  * バックエンドの数値カテゴリを CSS クラスキー文字列にマッピング。
  * Rust 側 `encode_log_category_u8` の番号と必ず一致させること。
- * DB 由来カテゴリ（world / notification / player_* / video）と、複数行範囲を
+ * DB 由来カテゴリ（world / notification / player_*）と、複数行範囲を
  * 表すレベル由来カテゴリ debug-system のみを持つ。
  */
 const CATEGORY_KEYS = [
   'plain', 'world', 'notification',
-  'player-join', 'player-ready', 'player-left', 'video',
+  'player-join', 'player-ready', 'player-left',
   'debug-system',
 ] as const;
 
