@@ -15,6 +15,8 @@ interface UseAppModalsOptions {
   setAnalyzeRunning: (v: boolean) => void;
   batchSelectedFiles: Set<string>;
   clearBatchSelection: () => void;
+  selectExternalLogFolder: () => Promise<ArchiveFileItem[] | null>;
+  clearExternalLogFolder: () => Promise<ArchiveFileItem[]>;
 }
 
 /**
@@ -34,6 +36,8 @@ export function useAppModals(options: UseAppModalsOptions) {
     setAnalyzeRunning,
     batchSelectedFiles,
     clearBatchSelection,
+    selectExternalLogFolder,
+    clearExternalLogFolder,
   } = options;
 
   const [isArchiveSelectorVisible, setIsArchiveSelectorVisible] = useState(false);
@@ -91,6 +95,40 @@ export function useAppModals(options: UseAppModalsOptions) {
     void openSelectedLogViewer(fileName);
   };
 
+  /** 外部フォルダを選び、合致するログがあれば最新のものを自動でビューアに開く */
+  const handleSelectExternalFolder = async () => {
+    try {
+      const files = await selectExternalLogFolder();
+      // null はユーザーがダイアログをキャンセルした場合
+      if (files === null) return;
+      if (files.length === 0) {
+        addToast('指定フォルダに output_log_*.txt / .tar.zst が見つかりませんでした');
+        return;
+      }
+      openSelectedLogViewer(files[0].name).catch((error: unknown) => {
+        addToast('ログストリーム開始エラー: ' + String(error));
+      });
+    } catch (error) {
+      addToast('外部フォルダの読み込みに失敗しました: ' + String(error));
+    }
+  };
+
+  /** 外部フォルダ選択を解除し、既定アーカイブストアの最新を自動で開く */
+  const handleClearExternalFolder = async () => {
+    try {
+      const files = await clearExternalLogFolder();
+      if (files.length === 0) {
+        addToast('アーカイブファイルが見つかりませんでした');
+        return;
+      }
+      openSelectedLogViewer(files[0].name).catch((error: unknown) => {
+        addToast('ログストリーム開始エラー: ' + String(error));
+      });
+    } catch (error) {
+      addToast('既定フォルダへの切替に失敗しました: ' + String(error));
+    }
+  };
+
   /** 削除対象のソースログを取得してクリーンアップ確認モーダルを開く */
   const handleOpenCleanup = async () => {
     try {
@@ -144,6 +182,8 @@ export function useAppModals(options: UseAppModalsOptions) {
     handleConfirmImport,
     handleOpenLogViewer,
     handleViewerNavigateToFile,
+    handleSelectExternalFolder,
+    handleClearExternalFolder,
     handleOpenCleanup,
     handleConfirmCleanup,
     closeArchiveSelector,

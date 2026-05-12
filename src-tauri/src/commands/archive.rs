@@ -17,9 +17,13 @@ use tauri::Emitter;
 use crate::analyze;
 use crate::config;
 use crate::models::{ArchiveFileItem, DeletableLogInfo, LogViewerChunk, LogViewerMeta};
+use crate::platform;
 use crate::utils;
 
 use super::{get_archive_store_dir, get_db_path, get_source_log_dir};
+
+/// 外部フォルダ閲覧で受け入れるログ拡張子。
+const EXTERNAL_LOG_EXTENSIONS: &[&str] = &[".txt", ".tar.zst"];
 
 /// ライブ `VRChat` ファイルに必要な共有フラグでソースログを1件開く。
 ///
@@ -997,30 +1001,22 @@ pub fn compress_logs() -> Result<String, String> {
     ))
 }
 
-/// アーカイブファイル1件のストリーミングログビューアセッションを開く。
+/// ソース名で DB の正規化済みヒント（カテゴリ・キーワード）を取得する。
 ///
-/// メタデータを即座に返し、バックグラウンドスレッドから `log_viewer_chunk` /
-/// `log_viewer_done` イベントを送出して UI が行を漸進的に描画できるようにする。
-///
-/// # エラー
-/// アーカイブファイルが見つからない、またはデコードできない場合にエラーを返す。
-#[tauri::command]
-pub fn read_archive_log_viewer(
-    file_name: String,
-    session_id: String,
-    app: AppHandle,
-) -> Result<LogViewerMeta, String> {
-    let archive_path = get_archive_store_dir()?.join(&file_name);
-    if !archive_path.exists() {
-        return Err(format!("ファイルが見つかりません: {file_name}"));
-    }
-
-    let source_name = read_archive_source_name(&archive_path)?;
-
-    let (db_categories, db_keyword_markers) = match get_db_path() {
+/// DB が存在しない・該当セッションが未取り込みなど、ヒントが得られないケースは
+/// 警告ログを出して `(None, None)` を返し、ビューアは正規表現ベースの分類に
+/// フォールバックする。
+#[allow(clippy::type_complexity)]
+fn build_db_hints(
+    source_name: &str,
+) -> (
+    Option<HashMap<String, Vec<String>>>,
+    Option<Vec<DbKeywordMarker>>,
+) {
+    match get_db_path() {
         Ok(db_path) if db_path.exists() => match rusqlite::Connection::open(&db_path) {
             Ok(conn) => {
-                let categories = match collect_db_log_categories(&conn, &source_name) {
+                let categories = match collect_db_log_categories(&conn, source_name) {
                     Ok(c) => Some(c),
                     Err(err) => {
                         utils::log_warn(&format!(
@@ -1029,7 +1025,7 @@ pub fn read_archive_log_viewer(
                         None
                     }
                 };
-                let keyword_markers = match collect_db_keyword_markers(&conn, &source_name) {
+                let keyword_markers = match collect_db_keyword_markers(&conn, source_name) {
                     Ok(m) => Some(m),
                     Err(err) => {
                         utils::log_warn(&format!(
@@ -1056,27 +1052,29 @@ pub fn read_archive_log_viewer(
             ));
             (None, None)
         }
-    };
+    }
+}
 
-    // セッション ID により、前回のストリームがまだ飛行中にユーザーが別ファイルに
-    // 切り替えた場合、フロントエンドが古いチャンクイベントを破棄できる。
-    let sid = session_id.clone();
+/// 圧縮済み `.tar.zst` ログを別スレッドでストリーミングしてビューアイベントを送出する。
+fn spawn_compressed_log_stream(
+    archive_path: PathBuf,
+    session_id: String,
+    db_categories: Option<HashMap<String, Vec<String>>>,
+    db_keyword_markers: Option<Vec<DbKeywordMarker>>,
+    app: AppHandle,
+) {
     std::thread::spawn(move || {
         let app_fallback = app.clone();
-        let sid_fallback = sid.clone();
+        let sid_fallback = session_id.clone();
         let result: Result<(), String> = (|| {
             let file = fs::File::open(&archive_path)
                 .map_err(|err| utils::command_open_err(&archive_path, err))?;
             let decoder = zstd::stream::Decoder::new(file)
-                .map_err(|err| {
-                    utils::command_err("zstd デコーダーを初期化できませんでした", err)
-                })?;
+                .map_err(|err| utils::command_err("zstd デコーダーを初期化できませんでした", err))?;
             let mut archive = tar::Archive::new(decoder);
             let mut entries = archive
                 .entries()
-                .map_err(|err| {
-                    utils::command_err("zst エントリ一覧を取得できませんでした", err)
-                })?;
+                .map_err(|err| utils::command_err("zst エントリ一覧を取得できませんでした", err))?;
             let Some(entry_result) = entries.next() else {
                 return Err(format!(
                     "アーカイブ内にログファイルがありません: {}",
@@ -1084,12 +1082,10 @@ pub fn read_archive_log_viewer(
                 ));
             };
             let mut entry = entry_result
-                .map_err(|err| {
-                    utils::command_err("zst エントリを読み取れませんでした", err)
-                })?;
+                .map_err(|err| utils::command_err("zst エントリを読み取れませんでした", err))?;
             emit_log_viewer_chunks(
                 BufReader::new(&mut entry),
-                sid,
+                session_id,
                 db_categories,
                 db_keyword_markers,
                 app,
@@ -1101,6 +1097,67 @@ pub fn read_archive_log_viewer(
             app_fallback.emit("log_viewer_done", &sid_fallback).ok();
         }
     });
+}
+
+/// プレーンテキスト `.txt` ログを別スレッドでストリーミングしてビューアイベントを送出する。
+fn spawn_plain_log_stream(
+    log_path: PathBuf,
+    session_id: String,
+    db_categories: Option<HashMap<String, Vec<String>>>,
+    db_keyword_markers: Option<Vec<DbKeywordMarker>>,
+    app: AppHandle,
+) {
+    std::thread::spawn(move || {
+        let app_fallback = app.clone();
+        let sid_fallback = session_id.clone();
+        let result: Result<(), String> = (|| {
+            let file = open_source_log_for_read(&log_path)?;
+            emit_log_viewer_chunks(
+                BufReader::new(file),
+                session_id,
+                db_categories,
+                db_keyword_markers,
+                app,
+            );
+            Ok(())
+        })();
+        if let Err(err) = result {
+            utils::log_warn(&format!("ログビューアストリーム失敗: {err}"));
+            app_fallback.emit("log_viewer_done", &sid_fallback).ok();
+        }
+    });
+}
+
+/// アーカイブファイル1件のストリーミングログビューアセッションを開く。
+///
+/// メタデータを即座に返し、バックグラウンドスレッドから `log_viewer_chunk` /
+/// `log_viewer_done` イベントを送出して UI が行を漸進的に描画できるようにする。
+///
+/// # エラー
+/// アーカイブファイルが見つからない、またはデコードできない場合にエラーを返す。
+#[tauri::command]
+pub fn read_archive_log_viewer(
+    file_name: String,
+    session_id: String,
+    app: AppHandle,
+) -> Result<LogViewerMeta, String> {
+    let archive_path = get_archive_store_dir()?.join(&file_name);
+    if !archive_path.exists() {
+        return Err(format!("ファイルが見つかりません: {file_name}"));
+    }
+
+    let source_name = read_archive_source_name(&archive_path)?;
+    let (db_categories, db_keyword_markers) = build_db_hints(&source_name);
+
+    // セッション ID により、前回のストリームがまだ飛行中にユーザーが別ファイルに
+    // 切り替えた場合、フロントエンドが古いチャンクイベントを破棄できる。
+    spawn_compressed_log_stream(
+        archive_path,
+        session_id.clone(),
+        db_categories,
+        db_keyword_markers,
+        app,
+    );
 
     Ok(LogViewerMeta {
         session_id,
@@ -1180,6 +1237,155 @@ pub fn get_deletable_source_logs() -> Result<Vec<DeletableLogInfo>, String> {
 
     results.sort_by(|a, b| a.file_name.cmp(&b.file_name));
     Ok(results)
+}
+
+/// 外部フォルダのファイル名がログビューア対応フォーマットに合致するか判定する。
+///
+/// VRChat の `output_log_*` 命名を満たし、生ログ `.txt` または `StellaRecord` の
+/// `.tar.zst` アーカイブ拡張子を持つ場合のみ受け入れる。
+fn matches_external_log_format(name: &str) -> bool {
+    if !name.starts_with("output_log_") {
+        return false;
+    }
+    EXTERNAL_LOG_EXTENSIONS
+        .iter()
+        .any(|ext| name.ends_with(*ext))
+}
+
+/// ネイティブダイアログでユーザーにフォルダを選択させる。
+///
+/// # 戻り値
+/// 選択されたフォルダの絶対パス、またはキャンセル時は `None`。
+///
+/// # エラー
+/// ダイアログの初期化または表示に失敗した場合にエラーを返す。
+#[tauri::command]
+pub fn pick_log_folder() -> Result<Option<String>, String> {
+    platform::pick_folder_dialog()
+}
+
+/// 指定フォルダ内のログビューア対応ファイル（`output_log_*.txt` / `*.tar.zst`）を一覧表示する。
+///
+/// # エラー
+/// フォルダが存在しない、または読み取れない場合にエラーを返す。
+#[tauri::command]
+pub fn list_external_log_files(folder_path: String) -> Result<Vec<ArchiveFileItem>, String> {
+    let dir = PathBuf::from(&folder_path);
+    if !dir.is_dir() {
+        return Err(format!("フォルダが見つかりません: {folder_path}"));
+    }
+
+    let entries = fs::read_dir(&dir).map_err(|err| utils::command_read_err(&dir, err))?;
+    let mut files = Vec::new();
+
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(err) => {
+                utils::log_warn(&format!("外部フォルダ項目を読み取れませんでした: {err}"));
+                continue;
+            }
+        };
+
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if !matches_external_log_format(name) {
+            continue;
+        }
+
+        let size_bytes = match entry.metadata() {
+            Ok(metadata) => metadata.len(),
+            Err(err) => {
+                utils::log_warn(&format!(
+                    "外部ログのメタデータを読み取れませんでした [{}]: {}",
+                    path.display(),
+                    err
+                ));
+                0
+            }
+        };
+
+        files.push(ArchiveFileItem {
+            name: name.to_string(),
+            size_bytes,
+        });
+    }
+
+    files.sort_by(|a, b| b.name.cmp(&a.name));
+    Ok(files)
+}
+
+/// 外部フォルダのログファイル1件のストリーミングログビューアセッションを開く。
+///
+/// 既定アーカイブストアではなく任意のフォルダから `output_log_*.txt` または
+/// `*.tar.zst` を直接読み込む。`.txt` はそのまま、`.tar.zst` は zstd を解凍して
+/// 内部の最初のエントリを使用する。
+///
+/// # エラー
+/// フォルダ・ファイル名が不正、ファイルが見つからない、または開けない場合にエラーを返す。
+#[tauri::command]
+pub fn read_external_log_viewer(
+    folder_path: String,
+    file_name: String,
+    session_id: String,
+    app: AppHandle,
+) -> Result<LogViewerMeta, String> {
+    if !matches_external_log_format(&file_name) {
+        return Err(format!("対応していないログ形式です: {file_name}"));
+    }
+
+    let dir = PathBuf::from(&folder_path);
+    if !dir.is_dir() {
+        return Err(format!("フォルダが見つかりません: {folder_path}"));
+    }
+
+    // `file_name` がディレクトリ区切りを含む場合、ユーザー選択フォルダ外を指し得るので拒否する。
+    if file_name.contains('/') || file_name.contains('\\') {
+        return Err("ファイル名に区切り文字を含めることはできません。".to_string());
+    }
+
+    let log_path = dir.join(&file_name);
+    if !log_path.is_file() {
+        return Err(format!("ファイルが見つかりません: {file_name}"));
+    }
+
+    let is_compressed = file_name.ends_with(".tar.zst");
+    let source_name = if is_compressed {
+        read_archive_source_name(&log_path)?
+    } else {
+        file_name.clone()
+    };
+
+    let (db_categories, db_keyword_markers) = build_db_hints(&source_name);
+
+    if is_compressed {
+        spawn_compressed_log_stream(
+            log_path,
+            session_id.clone(),
+            db_categories,
+            db_keyword_markers,
+            app,
+        );
+    } else {
+        spawn_plain_log_stream(
+            log_path,
+            session_id.clone(),
+            db_categories,
+            db_keyword_markers,
+            app,
+        );
+    }
+
+    Ok(LogViewerMeta {
+        session_id,
+        archive_name: file_name,
+        source_name,
+    })
 }
 
 /// 各ファイルの `.tar.zst` アーカイブ存在を確認した上で指定ソースログを削除する。

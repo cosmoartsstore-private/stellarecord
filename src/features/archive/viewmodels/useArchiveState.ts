@@ -10,8 +10,16 @@ import {
   launchEnhancedImport,
   launchStartupArchiveImport,
   loadArchiveFiles,
+  loadExternalLogFiles,
+  pickLogFolder,
+  startExternalLogViewerStream,
   startLogViewerStream,
 } from '../services/archiveService';
+
+/** 外部フォルダの一覧を表示する閲覧ソース。null は既定アーカイブストア。 */
+export interface ExternalLogSource {
+  folderPath: string;
+}
 
 /** 受信チャンクを蓄積データにマージする（純粋関数） */
 function appendChunk(data: LogViewerData, chunk: LogViewerChunk): LogViewerData {
@@ -53,9 +61,20 @@ export function useArchiveState() {
   const [archiveFiles, setArchiveFiles] = useState<ArchiveFileItem[]>([]);
   const [logViewerData, setLogViewerData] = useState<LogViewerData | null>(null);
   const [isLogViewerLoaded, setIsLogViewerLoaded] = useState(false);
+  const [externalSource, setExternalSource] = useState<ExternalLogSource | null>(null);
+  const [externalFiles, setExternalFiles] = useState<ArchiveFileItem[]>([]);
 
   /** 現在のTauriイベントリスナーの解除コールバック */
   const unlistenRef = useRef<(() => void) | null>(null);
+
+  /**
+   * ストリーム呼び出し中に最新の閲覧ソースを参照するための ref。
+   * 状態だけだと、フォルダ切替直後の openStreamForFile が直前のソースで起動してしまう。
+   */
+  const externalSourceRef = useRef<ExternalLogSource | null>(null);
+  useEffect(() => {
+    externalSourceRef.current = externalSource;
+  }, [externalSource]);
 
   /** イベントリスナーを解除してチャンク受信を停止する */
   const stopStream = useCallback(() => {
@@ -118,7 +137,10 @@ export function useArchiveState() {
       unlistenDone();
     };
 
-    const meta = await startLogViewerStream(fileName, sessionId);
+    const source = externalSourceRef.current;
+    const meta = source
+      ? await startExternalLogViewerStream(source.folderPath, fileName, sessionId)
+      : await startLogViewerStream(fileName, sessionId);
     setLogViewerData((prev) => (prev ? { ...prev, source_name: meta.source_name } : prev));
     return meta.archive_name;
   }, [stopStream, flushChunks]);
@@ -133,8 +155,32 @@ export function useArchiveState() {
   /** インポートモードでアーカイブ選択画面を開く */
   const openEnhancedSync = useCallback(() => loadArchiveSelection(), [loadArchiveSelection]);
 
-  /** 閲覧モードでアーカイブ選択画面を開く */
-  const openLogViewerSelection = useCallback(() => loadArchiveSelection(), [loadArchiveSelection]);
+  /** 閲覧モードでアーカイブ選択画面を開く（既定アーカイブストア） */
+  const openLogViewerSelection = useCallback(async () => {
+    setExternalSource(null);
+    setExternalFiles([]);
+    return loadArchiveSelection();
+  }, [loadArchiveSelection]);
+
+  /**
+   * ネイティブダイアログで外部フォルダを選択し、合致するログ一覧に切り替える。
+   * キャンセル時は null を返し、状態は変更しない。
+   */
+  const selectExternalLogFolder = useCallback(async (): Promise<ArchiveFileItem[] | null> => {
+    const folderPath = await pickLogFolder();
+    if (!folderPath) return null;
+    const files = await loadExternalLogFiles(folderPath);
+    setExternalSource({ folderPath });
+    setExternalFiles(files);
+    return files;
+  }, []);
+
+  /** 外部フォルダ選択を解除して既定アーカイブストアに戻す */
+  const clearExternalLogFolder = useCallback(async () => {
+    setExternalSource(null);
+    setExternalFiles([]);
+    return loadArchiveSelection();
+  }, [loadArchiveSelection]);
 
   /** 選択されたアーカイブファイルのバッチインポートを実行する */
   const executeEnhancedSync = useCallback(async (selectedFiles: string[]) => {
@@ -152,6 +198,8 @@ export function useArchiveState() {
     stopStream();
     setLogViewerData(null);
     setIsLogViewerLoaded(false);
+    setExternalSource(null);
+    setExternalFiles([]);
   }, [stopStream]);
 
   /** アプリ起動時の一回限りの自動取り込みを実行する */
@@ -173,11 +221,15 @@ export function useArchiveState() {
     logViewerData,
     isLogViewerLoading,
     isLogViewerLoaded,
+    externalSource,
+    externalFiles,
     openEnhancedSync,
     openLogViewerSelection,
     executeEnhancedSync,
     openSelectedLogViewer,
     closeLogViewer,
     runStartupImport,
+    selectExternalLogFolder,
+    clearExternalLogFolder,
   };
 }
