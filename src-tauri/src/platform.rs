@@ -243,6 +243,125 @@ pub fn extract_exe_icon_png(exe_path: &Path) -> Option<Vec<u8>> {
     result
 }
 
+/// exe の Windows VersionInfo から表示名を抽出する。
+///
+/// `FileDescription` を優先し、空または取得できない場合は `ProductName` にフォールバックし、
+/// それも取得できない場合は拡張子を除いたファイル名を返す。完全に解決できない場合は `None`。
+#[cfg(windows)]
+pub fn read_exe_display_name(exe_path: &Path) -> Option<String> {
+    use std::os::windows::ffi::OsStrExt;
+
+    use windows::core::PCWSTR;
+    use windows::Win32::Storage::FileSystem::{
+        GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW,
+    };
+
+    let wide_path: Vec<u16> = exe_path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+
+    let file_stem_fallback = exe_path
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned());
+
+    let size = unsafe { GetFileVersionInfoSizeW(PCWSTR(wide_path.as_ptr()), None) };
+    if size == 0 {
+        return file_stem_fallback;
+    }
+
+    let mut buffer = vec![0u8; size as usize];
+    if unsafe {
+        GetFileVersionInfoW(
+            PCWSTR(wide_path.as_ptr()),
+            0,
+            size,
+            buffer.as_mut_ptr().cast(),
+        )
+    }
+    .is_err()
+    {
+        return file_stem_fallback;
+    }
+
+    // 利用可能な翻訳一覧を取得し、最初の言語/コードページ組を採用する。
+    let mut translations_ptr: *mut core::ffi::c_void = std::ptr::null_mut();
+    let mut translations_len: u32 = 0;
+    let translation_subblock: Vec<u16> = "\\VarFileInfo\\Translation\0".encode_utf16().collect();
+    let translations_ok = unsafe {
+        VerQueryValueW(
+            buffer.as_ptr().cast(),
+            PCWSTR(translation_subblock.as_ptr()),
+            &raw mut translations_ptr,
+            &raw mut translations_len,
+        )
+    };
+
+    let mut candidate_paths: Vec<(u16, u16)> = Vec::new();
+    if translations_ok.as_bool() && !translations_ptr.is_null() && translations_len >= 4 {
+        let count = (translations_len as usize) / 4;
+        let pairs =
+            unsafe { std::slice::from_raw_parts(translations_ptr.cast::<u16>(), count * 2) };
+        for chunk in pairs.chunks_exact(2) {
+            candidate_paths.push((chunk[0], chunk[1]));
+        }
+    }
+    // 英語 (US) / Unicode のフォールバックも試す。
+    candidate_paths.push((0x0409, 0x04B0));
+    candidate_paths.push((0x0000, 0x04B0));
+
+    let lookup_string = |lang: u16, codepage: u16, field: &str| -> Option<String> {
+        let subblock = format!("\\StringFileInfo\\{lang:04x}{codepage:04x}\\{field}\0");
+        let wide: Vec<u16> = subblock.encode_utf16().collect();
+        let mut value_ptr: *mut core::ffi::c_void = std::ptr::null_mut();
+        let mut value_len: u32 = 0;
+        let result = unsafe {
+            VerQueryValueW(
+                buffer.as_ptr().cast(),
+                PCWSTR(wide.as_ptr()),
+                &raw mut value_ptr,
+                &raw mut value_len,
+            )
+        };
+        if !result.as_bool() || value_ptr.is_null() || value_len == 0 {
+            return None;
+        }
+        let slice = unsafe {
+            std::slice::from_raw_parts(value_ptr.cast::<u16>(), value_len as usize)
+        };
+        // 末尾の NUL を除去
+        let trimmed = match slice.iter().position(|c| *c == 0) {
+            Some(pos) => &slice[..pos],
+            None => slice,
+        };
+        let text = String::from_utf16_lossy(trimmed);
+        let trimmed_text = text.trim();
+        if trimmed_text.is_empty() {
+            None
+        } else {
+            Some(trimmed_text.to_string())
+        }
+    };
+
+    for field in ["FileDescription", "ProductName"] {
+        for (lang, codepage) in &candidate_paths {
+            if let Some(value) = lookup_string(*lang, *codepage, field) {
+                return Some(value);
+            }
+        }
+    }
+
+    file_stem_fallback
+}
+
+#[cfg(not(windows))]
+pub fn read_exe_display_name(exe_path: &Path) -> Option<String> {
+    exe_path
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+}
+
 /// ネイティブファイルダイアログで exe ファイルを選択する。
 pub fn pick_exe_file_dialog() -> Result<Option<String>, String> {
     use std::os::windows::ffi::OsStringExt;

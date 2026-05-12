@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import shared from '../../../shared/styles/shared.module.css';
 import styles from './RegistrySection.module.css';
-import { pickExeFile } from '../services/registryService';
+import { extractExeDisplayName, pickExeFile } from '../services/registryService';
 
 interface RegisterAppModalProps {
   onClose: () => void;
@@ -13,18 +13,31 @@ export function RegisterAppModal({ onClose, onConfirm }: RegisterAppModalProps) 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
 
+  // 直前に自動補完で入れた名前。ユーザーが手動編集した場合は ref と現値が乖離するため、
+  // 次の exe 選択時に上書きしてよいかどうかを判定できる。
+  const lastSuggestedNameRef = useRef('');
+
   const handlePickFile = async () => {
     try {
       const selected = await pickExeFile();
-      if (selected) {
-        setPath(selected);
-        if (!name) {
-          const fileName = selected.split('\\').pop() ?? '';
-          setName(fileName.replace(/\.exe$/i, ''));
-        }
+      if (!selected) return;
+      setPath(selected);
+
+      // 既存の値が空、または前回の補完値そのままの場合のみ自動補完で上書きする。
+      const userEdited = name.length > 0 && name !== lastSuggestedNameRef.current;
+      if (userEdited) return;
+
+      let suggested = '';
+      try {
+        suggested = await extractExeDisplayName(selected);
+      } catch {
+        const fileName = selected.split(/[\\/]/).pop() ?? '';
+        suggested = fileName.replace(/\.exe$/i, '');
       }
+      setName(suggested);
+      lastSuggestedNameRef.current = suggested;
     } catch {
-      // ダイアログのキャンセルやエラーは無視
+      // ファイル選択ダイアログのキャンセルやエラーは無視
     }
   };
 
