@@ -51,6 +51,56 @@
   color: var(--text-faint);
 }
 
+.sidebarFolderSwitcher {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.6rem 0.9rem 0.4rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.sidebarFolderPath {
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+
+.sidebarFolderButton {
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 0.4rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.sidebarFolderButton:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.sidebarFolderButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sidebarEmpty {
+  padding: 1rem 0.8rem;
+  font-size: 0.74rem;
+  color: var(--text-faint);
+  text-align: center;
+  line-height: 1.5;
+}
+
 .sidebarList {
   flex: 1;
   overflow-y: auto;

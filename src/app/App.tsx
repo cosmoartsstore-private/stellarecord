@@ -78,12 +78,16 @@ function App() {
     logViewerData,
     isLogViewerLoading,
     isLogViewerLoaded,
+    externalSource,
+    externalFiles,
     openEnhancedSync,
     openLogViewerSelection,
     executeEnhancedSync,
     openSelectedLogViewer,
     closeLogViewer,
     runStartupImport,
+    selectExternalLogFolder,
+    clearExternalLogFolder,
   } = useArchiveState();
 
   const {
@@ -104,6 +108,8 @@ function App() {
     setAnalyzeRunning,
     batchSelectedFiles,
     clearBatchSelection,
+    selectExternalLogFolder,
+    clearExternalLogFolder,
   });
 
   /** タブ選択時にセクションを切り替える（DB選択時はカタログを自動取得） */
@@ -338,10 +344,13 @@ function App() {
       {modals.isLogViewerModalVisible && logViewerData && (
         <LogViewerModal
           logViewerData={logViewerData}
-          archiveFiles={archiveFiles}
+          archiveFiles={externalSource ? externalFiles : archiveFiles}
+          externalFolderPath={externalSource?.folderPath ?? null}
           isLoading={isLogViewerLoading}
           isLoaded={isLogViewerLoaded}
           onNavigateToFile={modals.handleViewerNavigateToFile}
+          onPickExternalFolder={() => { void modals.handleSelectExternalFolder(); }}
+          onClearExternalFolder={() => { void modals.handleClearExternalFolder(); }}
           onClose={modals.closeLogViewerModal}
         />
       )}

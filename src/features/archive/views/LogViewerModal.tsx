@@ -56,9 +56,13 @@ const CATEGORY_KEYS = [
 interface LogViewerModalProps {
   logViewerData: LogViewerData;
   archiveFiles: ArchiveFileItem[];
+  /** 外部フォルダ閲覧中はその絶対パス、既定アーカイブストア閲覧中は null */
+  externalFolderPath: string | null;
   isLoading: boolean;
   isLoaded: boolean;
   onNavigateToFile: (fileName: string) => void;
+  onPickExternalFolder: () => void;
+  onClearExternalFolder: () => void;
   onClose: () => void;
 }
 
@@ -69,9 +73,12 @@ interface LogViewerModalProps {
 export function LogViewerModal({
   logViewerData,
   archiveFiles,
+  externalFolderPath,
   isLoading,
   isLoaded,
   onNavigateToFile,
+  onPickExternalFolder,
+  onClearExternalFolder,
   onClose,
 }: LogViewerModalProps) {
   const listRef = useRef<HTMLDivElement>(null);
@@ -170,28 +177,67 @@ export function LogViewerModal({
         {/* ── サイドバー ── */}
         <aside className={styles.sidebar}>
           <div className={styles.sidebarHeader}>
-            <span className={styles.sidebarTitle}>ログファイル</span>
+            <span className={styles.sidebarTitle}>
+              {externalFolderPath ? '外部フォルダ' : 'ログファイル'}
+            </span>
             <span className={styles.sidebarCount}>{archiveFiles.length} 件</span>
           </div>
-          <div className={styles.sidebarList}>
-            {archiveFiles.map((file) => {
-              const isActive = file.name === logViewerData.archive_name;
-              const date = parseArchiveDate(file.name);
-              return (
-                <button
-                  key={file.name}
-                  type="button"
-                  className={`${styles.sidebarItem} ${isActive ? styles.sidebarItemActive : ''}`}
-                  onClick={() => {
-                    if (!isActive && !isLoading) onNavigateToFile(file.name);
-                  }}
-                  disabled={isLoading && !isActive}
+          <div className={styles.sidebarFolderSwitcher}>
+            {externalFolderPath ? (
+              <>
+                <span
+                  className={styles.sidebarFolderPath}
+                  title={externalFolderPath}
                 >
-                  <span className={styles.sidebarItemDate}>{date ?? file.name}</span>
-                  <span className={styles.sidebarItemSize}>{formatArchiveSize(file.size_bytes)}</span>
+                  {externalFolderPath}
+                </span>
+                <button
+                  type="button"
+                  className={styles.sidebarFolderButton}
+                  onClick={onClearExternalFolder}
+                  disabled={isLoading}
+                >
+                  既定フォルダに戻す
                 </button>
-              );
-            })}
+              </>
+            ) : (
+              <button
+                type="button"
+                className={styles.sidebarFolderButton}
+                onClick={onPickExternalFolder}
+                disabled={isLoading}
+              >
+                別のフォルダから開く
+              </button>
+            )}
+          </div>
+          <div className={styles.sidebarList}>
+            {archiveFiles.length === 0 ? (
+              <div className={styles.sidebarEmpty}>
+                {externalFolderPath
+                  ? 'output_log_*.txt / .tar.zst が見つかりません'
+                  : 'アーカイブがありません'}
+              </div>
+            ) : (
+              archiveFiles.map((file) => {
+                const isActive = file.name === logViewerData.archive_name;
+                const date = parseArchiveDate(file.name);
+                return (
+                  <button
+                    key={file.name}
+                    type="button"
+                    className={`${styles.sidebarItem} ${isActive ? styles.sidebarItemActive : ''}`}
+                    onClick={() => {
+                      if (!isActive && !isLoading) onNavigateToFile(file.name);
+                    }}
+                    disabled={isLoading && !isActive}
+                  >
+                    <span className={styles.sidebarItemDate}>{date ?? file.name}</span>
+                    <span className={styles.sidebarItemSize}>{formatArchiveSize(file.size_bytes)}</span>
+                  </button>
+                );
+              })
+            )}
           </div>
         </aside>
 
