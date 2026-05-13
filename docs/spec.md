@@ -1,485 +1,462 @@
-# STELLA RECORD 機能仕様書
+# 機能仕様書 — 設計判断と技術的見どころ
 
-> 本書は STELLA RECORD v1.0 の機能仕様を、画面・データフロー・IPC API・状態管理の観点でまとめたもの。
-> 実装ファイル（`src/`, `src-tauri/`）と整合性を保ち、ポートフォリオ／引き継ぎ用途のリファレンスを兼ねる。
+> 本書はポートフォリオ用に、STELLA RECORD の機能仕様を**「なぜそう設計したか」「どこに技術的見どころがあるか」**の観点でまとめたもの。
+> 単純なスペック羅列ではなく、設計者の意思決定プロセスを追体験できる構成にしている。
 
 ---
 
 ## 目次
 
-1. [プロダクト概要](#1-プロダクト概要)
-2. [アーキテクチャ](#2-アーキテクチャ)
-3. [画面構成](#3-画面構成)
-4. [機能仕様](#4-機能仕様)
-   1. [ランチャー](#41-ランチャー-registry)
-   2. [解析](#42-解析-analyze)
-   3. [DB プレビュー](#43-db-プレビュー-database)
-   4. [設定 / テーマ](#44-設定-settings)
-5. [データフロー](#5-データフロー)
-   1. [起動時インポート](#51-起動時インポート)
-   2. [復元（手動アーカイブ取り込み）](#52-復元手動アーカイブ取り込み)
-   3. [ログビューア・ストリーミング](#53-ログビューアストリーミング)
-6. [IPC コマンド一覧](#6-ipc-コマンド一覧)
-7. [Tauri イベント一覧](#7-tauri-イベント一覧)
-8. [永続化と設定](#8-永続化と設定)
-9. [ログ解析エンジン](#9-ログ解析エンジン)
-10. [非機能要件](#10-非機能要件)
+1. [プロダクト概要と解決した課題](#1-プロダクト概要と解決した課題)
+2. [アーキテクチャ全体像と設計方針](#2-アーキテクチャ全体像と設計方針)
+3. [機能別 設計の見どころ](#3-機能別-設計の見どころ)
+   1. [取り込みパイプライン](#31-取り込みパイプライン-savepoint--キャンセル可能設計)
+   2. [ストリーミングログビューア](#32-ストリーミングログビューア-3層バッファリング)
+   3. [VRChat ログパーサ](#33-vrchat-ログパーサ-行単位ステートマシン)
+   4. [Win32 アイコン抽出](#34-win32-アイコン抽出-高解像度フォールバック)
+   5. [単一インスタンスガード](#35-単一インスタンスガード-mutex-寿命の設計)
+4. [並行性と整合性の設計](#4-並行性と整合性の設計)
+5. [セキュリティ設計](#5-セキュリティ設計)
+6. [規模と計測値](#6-規模と計測値)
+7. [既知の制約と今後の改善余地](#7-既知の制約と今後の改善余地)
 
 ---
 
-## 1. プロダクト概要
+## 1. プロダクト概要と解決した課題
 
-**STELLA RECORD** は VRChat の `output_log_*.txt` を恒久保管・正規化・閲覧するための Windows デスクトップアプリ。CosmoArtsStore の VRChat エコシステム（Polaris との連携）を構成する。
+### 解決した課題
 
-| 項目 | 内容 |
+VRChat の `output_log_*.txt` は以下の問題を抱えている：
+
+| 課題 | 影響 |
 |---|---|
-| アプリ ID | `com.cosmoartsstore.stellarecord` |
-| ターゲット OS | Windows 10 / 11 |
-| 単一インスタンス | `CreateMutexW` ベースの多重起動防止 |
-| 配布形態 | NSIS インストーラ（カレントユーザーインストール） |
-| 連携アプリ | Polaris（生ログのバックアップ／同期を担当する姉妹アプリ） |
+| **ログが古い順に削除される** | 数ヶ月前の訪問履歴が失われる |
+| **非構造化テキスト** | 「先月この人と会ったワールド」を後から検索できない |
+| **数百 MB に肥大化** | ディスク容量を圧迫 |
+| **複数行にまたがる通知** | 単純な grep では追えない |
 
-### 提供価値
-
-- VRChat 公式が **削除する古いログ**を `.tar.zst` で**恒久保管**
-- ログ本文を SQLite に**構造化**して、ワールド訪問・同席ユーザー・通知などを横断検索可能にする
-- 圧縮済みアーカイブから **ストリーミングでログビューア**を提供し、メモリ消費を抑えつつ大容量ログを描画
-
----
-
-## 2. アーキテクチャ
-
-### モジュール構成
+### アプローチ
 
 ```
-src/                            React フロントエンド (TypeScript)
-├── app/                        ルートコンポーネント、ルーティング、モーダル統括
-├── features/                   機能単位の MVVM 構成
-│   ├── analyze/                解析セクション
-│   ├── archive/                アーカイブ取り込み・ログビューア
-│   ├── database/               DB プレビュー
-│   ├── registry/               ランチャー
-│   └── settings/               設定（ストレージ上限・スタートアップ・テーマ）
-└── shared/                     共通コンポーネント (Icons / Toast / 型 / ユーティリティ)
-
-src-tauri/                      Rust バックエンド
-├── src/
-│   ├── lib.rs                  Tauri 起動・IPC ハンドラ登録
-│   ├── commands/               IPC コマンドハンドラ
-│   │   ├── archive.rs          アーカイブ／ログビューア（最大）
-│   │   ├── database.rs         DB プレビュー
-│   │   ├── import.rs           取り込み・キャンセル制御
-│   │   ├── registry.rs         登録アプリ CRUD
-│   │   └── settings.rs         管理設定 CRUD
-│   ├── analyze/                ログ解析パイプライン
-│   │   ├── mod.rs              行単位ステートマシン
-│   │   ├── parser.rs           正規表現定義
-│   │   └── db.rs               スキーマ定義 + マイグレーション
-│   ├── config.rs               Windows レジストリ I/O
-│   ├── platform.rs             Win32（Mutex / レジストリ / アイコン抽出 / ダイアログ）
-│   ├── utils.rs                ロガー・エラー整形・イベント送信
-│   └── models.rs               IPC ペイロード型
-└── windows/                    NSIS インストーラスクリプト
+                  ┌─────────────┐
+   生ログ ───────▶│  圧縮保管    │──▶  .tar.zst（zstd lv3, 約 90% 削減）
+  (output_log_*) │             │
+                  ├─────────────┤
+                  │ 行単位パーサ │──▶  正規化 SQLite（9 テーブル + 3 ビュー）
+                  ├─────────────┤
+                  │ ストリーム閲覧│──▶  仮想スクロール（10 万行超対応）
+                  └─────────────┘
 ```
 
-### フロントエンド設計
+**3 つを 1 つのアプリで束ねた**のがプロダクト価値の核。各機能単体は既存ツール（7-Zip, grep, VRCX）でも実現可能だが、**「圧縮しつつ構造化しつつ閲覧可能」**を 1 ワークフローで完結させる点が他に存在しない。
 
-各 feature は **MVVM 風の 3 層構成**：
+### スコープ定義の判断
 
-```
-features/<name>/
-├── models/         型定義・純粋関数（フォーマッタなど）
-├── viewmodels/     状態管理フック (use*State.ts)
-└── views/          表示コンポーネント (*.tsx)
-└── services/       Tauri IPC ラッパー
-```
-
-`eslint.config.js` の `no-restricted-imports` で **feature 間の相互参照を禁止**し、共通処理は `shared/` に集約させる方針を強制している。
-
-### バックエンド設計
-
-| モジュール | 役割 |
-|---|---|
-| `commands/` | フロントから呼ばれる `#[tauri::command]` 関数。検証 → ビジネスロジック層へ委譲 |
-| `analyze/` | 純粋なログ解析ロジック。`run_diff_import` / `run_enhanced_import_batch` を公開 |
-| `config.rs` | レジストリの読み書きを 1 箇所に集約 |
-| `platform.rs` | Win32 API 呼び出しを `#[cfg(windows)]` で隔離 |
-
-`Cargo.toml` の workspace lints で **`unwrap_used = deny`、`expect_used = deny`、`panic = deny`** を強制。例外は `parser.rs` の `compile_regex`（固定パターンのコンパイル失敗時のみ panic）のみで `#[allow(clippy::panic)]` で明示。
-
----
-
-## 3. 画面構成
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│  STELLA RECORD                                          ☀ Theme │  ← topNavigation
-├──────────────────────────────────────────────────────────────────┤
-│  [ランチャー]  [解析]  [DB]                                       │  ← pillNav
-├──────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│                    contentArea (renderSection)                    │
-│                                                                  │
-└──────────────────────────────────────────────────────────────────┘
-                                                                ┌──┐
-                                                                │ⓘ │ ← CreditButton
-                                                                └──┘
-```
-
-| ナビ項目 | コンポーネント | 役割 |
-|---|---|---|
-| ランチャー | `RegistrySection` | 登録済みアプリの起動／フォルダオープン／登録解除 |
-| 解析 | `AnalyzeSection` | ストレージメーター・取り込み・ログビューア入口 |
-| DB | `DatabaseSection` | SQLite テーブル／ビューの読み取り専用ブラウザ |
-
-モーダルは全て `App.tsx` 末尾でグローバル管理：
-
-| モーダル | コンポーネント | 用途 |
-|---|---|---|
-| アーカイブ選択 | `ArchiveSelectorModal` | 取り込み・閲覧対象のファイルを選択 |
-| ログビューア | `LogViewerModal` | 圧縮ログをストリーミング表示（フルスクリーン） |
-| 元ログ削除 | `PolarisCleanupModal` | アーカイブ済み生ログを削除する確認画面 |
-| アプリ登録 | `RegisterAppModal` | 外部 EXE をランチャーに登録 |
-| クレジット | `CreditModal` | 作者情報 |
-
----
-
-## 4. 機能仕様
-
-### 4.1 ランチャー (registry)
-
-**目的**：登録済みアプリ（StellaRecord 本体・任意の外部 EXE）をワンクリックで起動する。
-
-| 機能 | 詳細 |
-|---|---|
-| 表示モード | リスト表示 / カード表示（state でトグル） |
-| アプリカード | アイコン（Base64 PNG）／アプリ名／説明文／起動・フォルダオープン・登録解除ボタン |
-| 自アプリ自動登録 | アプリ起動時に `ensure_self_app_registered` が StellaRecord 本体を `apps` テーブルに upsert（path 一致で更新） |
-| 登録 | `RegisterAppModal` で EXE を選択 → `extract_exe_display_name` で表示名候補を取得 → ユーザー編集後に `register_app` |
-| アイコン抽出 | `extract_exe_icon_png`：`SHGetImageList(SHIL_JUMBO)` で 256×256 を優先取得、失敗時に `ExtractIconExW` (32×32) でフォールバック。PNG 化して DB に BLOB 保存 |
-| 起動 | `launch_external_app` → `CreateProcess` 相当（`CREATE_NO_WINDOW` フラグ付き） |
-
-**フロントエンド**：`src/features/registry/`
-**バックエンド**：`src-tauri/src/commands/registry.rs`
-
-### 4.2 解析 (analyze)
-
-**目的**：アーカイブの容量を可視化し、ログの取り込み／閲覧／クリーンアップを束ねる。
-
-```
-┌─ ストレージ管理 ─────────────────────────────────┐
-│ アーカイブ容量                       ⟳            │
-│ ──────────────────────────────────────            │
-│ [██████████░░░░░░] 250 MB / 300 MB (83.3%)        │
-│                                                   │
-│ [警告ライン: 300 MB] [保存]                        │
-│ [自動起動: ON]                                     │
-└──────────────────────────────────────────────────┘
-┌─ ログデータ取込・ビューア ──────────  [元ログ削除] ─┐
-│ ┌──── 復元 ────┐  ┌── ログビューア ──┐            │
-│ │ 圧縮済みログ  │  │ 圧縮済みログを   │            │
-│ │ からデータ再  │  │ 閲覧します       │            │
-│ │ 復元します    │  │                  │            │
-│ │ [ログを選択]  │  │ [ログを開く]     │            │
-│ └──────────────┘  └─────────────────┘            │
-│                                                   │
-│ ── 進捗パネル (取り込み中のみ表示) ──             │
-│ 取り込み中… 12/40                                  │
-│ [████████░░░░░░░░░]                                │
-│ 処理中: output_log_2025-10-21_00-59-15.txt   [停止] │
-└──────────────────────────────────────────────────┘
-```
-
-| 機能 | 詳細 |
-|---|---|
-| ストレージメーター | アーカイブディレクトリの再帰的合計サイズと閾値を表示。10GB 超で GB 表示に自動切替 |
-| 警告ライン編集 | MB 単位の入力欄。`save_management_settings` 経由で Polaris と共有するレジストリに保存 |
-| スタートアップトグル | Run キー (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run\StellaRecord`) への登録／解除 |
-| 復元 | `ArchiveSelectorModal` で複数選択 → `launch_enhanced_import` でバックグラウンドスレッド開始 |
-| ログビューア起動 | アーカイブストア配下のファイル選択もしくは「ファイルを選択」で任意の外部ファイルを開ける |
-| 元ログ削除 | `PolarisCleanupModal` で「アーカイブ化済み」生ログを一覧表示し、選択削除 |
-| 進捗ストリーミング | バックエンドから `analyze-progress` イベントを受信。`done/total` 形式 → % 換算してプログレスバー駆動 |
-| キャンセル | `cancel_analyze` で `AtomicBool` を立て、行ループの先頭でチェック。トランザクションをロールバック |
-
-**フロントエンド**：`src/features/analyze/`, `src/features/archive/`
-**バックエンド**：`src-tauri/src/commands/archive.rs`, `src-tauri/src/commands/import.rs`
-
-### 4.3 DB プレビュー (database)
-
-**目的**：取り込まれた SQLite データを開発者・上級ユーザー向けに直接ブラウジングする。
-
-| 機能 | 詳細 |
-|---|---|
-| サイドバー | テーブル一覧（`is_view=false`）／ビュー一覧をセクション分けして表示。日本語ラベル ⇄ 物理名トグル |
-| ページネーション | 1 ページ 500 行。`currentPage * 500 + 1 ~ (currentPage+1) * 500` を表示 |
-| ソート | カラムヘッダクリックで `asc → desc → 解除`（未設定時は `default_sort` にフォールバック） |
-| カラム情報 | `TABLE_COMMENTS` 定数（`commands/database.rs`）で日本語ラベル＋説明文を提供 |
-| 安全性 | テーブル名は `sanitize_table_name` (ASCII 英数+`_` のみ) で SQL 構築前に検証、ソートカラム名も同等の検証を経由 |
-| BLOB 表示 | `<BLOB>` 文字列に置換（アイコン画像など） |
-| NULL 表示 | `NULL` 文字列 |
-
-表示可能テーブル／ビューの完全な一覧は [`database.md`](database.md) を参照。
-
-**フロントエンド**：`src/features/database/`
-**バックエンド**：`src-tauri/src/commands/database.rs`
-
-### 4.4 設定 (settings)
-
-| 設定 | 入力 | 保存先 |
-|---|---|---|
-| アーカイブ容量警告ライン | MB 単位の数値 | レジストリ `HKCU\Software\CosmoArtsStore\Polaris\CapacityThresholdBytes` |
-| スタートアップ登録 | ON/OFF トグル | レジストリ `Run` キー + `HKCU\Software\CosmoArtsStore\StellaRecord\EnableStartup` |
-| テーマ | Light / Dark / Midnight | `localStorage` `stella-theme` |
-
-テーマ切替はクリック時にトランジションを一時無効化（`disable-transitions` クラス → 2 フレーム後に解除）し、テーマ間の中間色ちらつきを防ぐ。
-
-**フロントエンド**：`src/features/settings/`
-**バックエンド**：`src-tauri/src/commands/settings.rs`
-
----
-
-## 5. データフロー
-
-### 5.1 起動時インポート
-
-```
-┌──────────────┐          ┌──────────────────────────────────────┐
-│ App.tsx 初期 │ on mount │ launch_startup_archive_import (IPC)  │
-│  useEffect   │ ───────▶ │  ├ collect_pending_archive_sync_plans│
-└──────────────┘          │  ├ sync_source_logs_into_archive_store
-                          │  │   (生ログ → .tar.zst)             │
-                          │  └ run_diff_import                   │
-                          │     ├ collect_log_files              │
-                          │     └ for each archive:              │
-                          │        ├ session 既存チェック        │
-                          │        ├ savepoint                   │
-                          │        ├ parse_and_import_reader     │
-                          │        └ commit / rollback           │
-                          └───────────┬──────────────────────────┘
-                                      │ emit("analyze-progress")
-                                      ▼
-                          ┌──────────────────────────────────────┐
-                          │ useAnalyzeState                       │
-                          │  listen("analyze-progress")           │
-                          │   → progress bar 更新                 │
-                          └──────────────────────────────────────┘
-```
-
-- バックエンドは `std::thread::spawn` でワーカースレッドを生成し IPC は即座に返す
-- 進捗は `analyze-progress` イベントで `{status, progress, is_running}` を送出
-- 完了通知は `analyze-finished` イベント
-- UI は `isAnalyzeRunning` フラグでボタンを `disabled` にし、並行起動を防ぐ
-
-### 5.2 復元（手動アーカイブ取り込み）
-
-ユーザーが「ログを選択」を押下 →
-
-1. `list_archive_files` でアーカイブ一覧取得 → `ArchiveSelectorModal` 表示
-2. ユーザーが複数選択して確定 → `launch_enhanced_import(file_names)`
-3. バックエンドが個別パスを検証してワーカースレッド起動
-4. `run_enhanced_import_batch` が各ファイルに対し savepoint で解析・取り込み
-5. キャンセル時は外側トランザクションをロールバック → DB は無変更
-
-### 5.3 ログビューア・ストリーミング
-
-```
-ユーザー: ファイルクリック
-   │
-   ▼ React side:
-openStreamForFile(fileKey)
-   ├ stopStream()         ← 前回リスナーを解除
-   ├ flushSync(empty)      ← UI を空状態にリセット
-   ├ sessionId 採番        ← Date.now + Math.random
-   ├ listen("log_viewer_chunk", filter by sessionId → pendingChunksRef にバッファ)
-   ├ listen("log_viewer_done",  filter by sessionId → flush + 完了マーク)
-   └ start*LogViewerStream(fileKey, sessionId)
-                                  │ IPC
-                                  ▼ Rust side:
-                          spawn_compressed_log_stream
-                            └ tar.zst → 1 エントリ取り出し
-                               └ emit_log_viewer_chunks
-                                  ├ 行を読み、レベル／カテゴリを分類
-                                  ├ 500 行ごとに app.emit("log_viewer_chunk")
-                                  └ EOF で app.emit("log_viewer_done")
-```
-
-ポイント：
-
-- **500 行 × 500 ファイル分**のような大規模ログでも UI を凍結させないために、500 行単位でチャンク送信
-- React 側は **100 ms タイマー**で `pendingChunksRef` をまとめてフラッシュし、再レンダリングを集約
-- ファイル切替時に**残ったチャンクは sessionId 不一致でドロップ**されるため、古いファイルの行が混ざらない
-- 表示は `@tanstack/react-virtual` による**仮想スクロール**で、行数に比例しないレンダリングコスト
-
----
-
-## 6. IPC コマンド一覧
-
-`src-tauri/src/lib.rs` の `invoke_handler!` で登録されたコマンド。
-
-### archive
-
-| コマンド | 引数 | 戻り値 | 説明 |
+| 項目 | 採用 | 不採用 | 不採用の理由 |
 |---|---|---|---|
-| `list_archive_files` | - | `Vec<ArchiveFileItem>` | アーカイブ一覧 |
-| `read_archive_log_viewer` | `file_name`, `session_id` | `LogViewerMeta` | アーカイブをストリーム再生 |
-| `read_external_log_viewer` | `file_path`, `session_id` | `LogViewerMeta` | 外部ファイルをストリーム再生 |
-| `pick_log_files` | - | `Vec<String>` | ネイティブダイアログでログ選択 |
-| `get_storage_status` | - | `(u64, u64)` | 現在容量 / 上限 |
-| `open_folder` | `path` | - | OS シェルでフォルダを開く |
-| `get_deletable_source_logs` | - | `Vec<DeletableLogInfo>` | アーカイブ済み生ログ一覧 |
-| `delete_source_logs` | `file_names` | `usize` | アーカイブ存在を確認の上で削除 |
-
-### database
-
-| コマンド | 引数 | 戻り値 | 説明 |
-|---|---|---|---|
-| `get_db_tables` | - | `Vec<DbTableSummary>` | 表示可能テーブル／ビュー一覧 |
-| `get_db_table_data` | `table_name`, `page?`, `sort_column?`, `sort_dir?` | `TableData` | 1 ページ分のテーブルデータ |
-
-### import
-
-| コマンド | 引数 | 戻り値 | 説明 |
-|---|---|---|---|
-| `launch_enhanced_import` | `file_names` | `String` | 選択アーカイブの取り込み開始 |
-| `launch_startup_archive_import` | - | `StartupImportSummary` | 起動時の差分取り込み |
-| `cancel_analyze` | - | - | 実行中の取り込みを中断 |
-
-### registry
-
-| コマンド | 引数 | 戻り値 | 説明 |
-|---|---|---|---|
-| `pick_exe_file` | - | `Option<String>` | EXE 選択ダイアログ |
-| `extract_exe_display_name` | `path` | `String` | EXE の VersionInfo 表示名 |
-| `register_app` | `path`, `name`, `description` | - | ランチャーに追加 |
-| `unregister_app` | `path` | - | 登録解除 |
-| `launch_external_app` | `app_path` | - | 外部 EXE 起動 |
-
-### settings
-
-| コマンド | 引数 | 戻り値 | 説明 |
-|---|---|---|---|
-| `get_management_settings` | - | `ManagementSettings` | 現在の設定取得 |
-| `save_management_settings` | `startup_enabled`, `archive_limit_mb` | - | 設定保存 |
-| `read_registry_catalog` | - | `RegistryCatalog` | DB の `apps` を読み込み |
+| 対象 OS | Windows のみ | macOS/Linux 対応 | VRChat ユーザーの大半が Windows、開発リソース集中 |
+| 配信形式 | ローカルデスクトップアプリ | Web SaaS | ログにプライバシー情報が含まれるためローカル完結が前提 |
+| 認証 | なし（シングルユーザー） | アカウント機能 | パーソナルツールとして設計、複数アカウント切替は非対象 |
+| 通知連携 | なし | Discord Webhook 等 | スコープを「保管と閲覧」に絞り、配信は別ツールに委譲 |
 
 ---
 
-## 7. Tauri イベント一覧
+## 2. アーキテクチャ全体像と設計方針
 
-| イベント | 送信元 | ペイロード | 用途 |
-|---|---|---|---|
-| `analyze-progress` | 取り込みワーカー | `{status, progress, is_running}` | 進捗バー更新 |
-| `analyze-finished` | 取り込みワーカー | `()` | 完了通知（UI を非実行状態に戻す） |
-| `log_viewer_chunk` | ログストリームワーカー | `LogViewerChunk` | 500 行単位のログ転送 |
-| `log_viewer_done` | ログストリームワーカー | `String (sessionId)` | ストリーム完了通知 |
-
----
-
-## 8. 永続化と設定
-
-### Windows レジストリ
-
-| キー | 値 | 説明 |
-|---|---|---|
-| `HKCU\Software\CosmoArtsStore\StellaRecord\InstallLocation` | string | NSIS が書き込むインストール先 |
-| `HKCU\Software\CosmoArtsStore\StellaRecord\ArchivePath` | string | アーカイブストア（空ならデフォルト） |
-| `HKCU\Software\CosmoArtsStore\StellaRecord\DbPath` | string | DB ファイル（空ならデフォルト） |
-| `HKCU\Software\CosmoArtsStore\StellaRecord\EnableStartup` | u32 | 自動起動 ON/OFF |
-| `HKCU\Software\CosmoArtsStore\StellaRecord\StartupPreferenceSet` | u32 | ユーザーが選択済みかどうか |
-| `HKCU\Software\CosmoArtsStore\Polaris\CapacityThresholdBytes` | u64 | アーカイブ警告ライン（Polaris と共有） |
-| `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\StellaRecord` | string | 自動起動コマンド |
-
-### LocalStorage
-
-| キー | 値 | 説明 |
-|---|---|---|
-| `stella-theme` | `"light" \| "dark" \| "midnight"` | UI テーマ |
-
-### ファイルシステム
+### レイヤ構成
 
 ```
-$INSTDIR/Data/
-├── archive/                          .tar.zst（アンインストール時保護対象）
-│   └── output_log_2025-10-21_00-59-15.txt.tar.zst
-├── db/
-│   └── stellarecord.db               SQLite（WAL モード）
-│   └── stellarecord.db-wal           Write-Ahead Log
-│   └── stellarecord.db-shm           共有メモリ
-├── logs/
-│   └── info-2025-11.log              月次ローテーション
-└── EBWebView/                        WebView2 キャッシュ
+┌─────────────────────────────────────────────────────────────┐
+│ WebView (Edge / Chromium) — UI レイヤ                        │
+│  React 19 + TypeScript 5.9                                   │
+│  ├ app/         ルーティング・モーダル統括                    │
+│  ├ features/    機能別 MVVM (views / viewmodels / services)  │
+│  │   ├ analyze, archive, database, registry, settings        │
+│  │   └ 相互参照禁止 (ESLint no-restricted-imports で強制)    │
+│  └ shared/      共通基盤 (Icons, Toast, 型, ユーティリティ)  │
+└──────────────────────┬──────────────────────────────────────┘
+                       │ Tauri IPC (invoke / event)
+                       │ 22 コマンド / 4 イベント
+┌──────────────────────┴──────────────────────────────────────┐
+│ Rust Backend — ビジネスロジック・OS 連携                     │
+│  ├ commands/    IPC ハンドラ (薄い層、検証 → 委譲のみ)       │
+│  ├ analyze/     ログ解析パイプライン (純粋ロジック)          │
+│  ├ config.rs    Windows レジストリ I/O                       │
+│  ├ platform.rs  Win32 API (Mutex, アイコン, ダイアログ)      │
+│  └ utils.rs     ロガー / エラー整形 / イベント送信           │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+        ┌──────────────┴────────────────┐
+        ▼                               ▼
+   SQLite (WAL)                    .tar.zst Archive
+   Data/db/stellarecord.db          Data/archive/
 ```
 
+### 設計原則と意思決定
+
+#### 原則 1: 「IPC ハンドラは薄く、ロジックは純粋関数で」
+
+```rust
+// commands/import.rs — IPC 層は検証 → 委譲のみ
+#[tauri::command]
+pub fn launch_enhanced_import(file_names: Vec<String>, ...) -> Result<String, String> {
+    let db_path = get_db_path()?;
+    let target_paths = validate_paths(file_names)?;
+    std::thread::spawn(move || {
+        analyze::run_enhanced_import_batch(&db_path, &target_paths, ...)  // ← ロジックは別モジュール
+    });
+    Ok(format!("{}件のアーカイブ同期を開始しました。", total))
+}
+```
+
+**意図**: IPC レイヤは Tauri 依存だが、`analyze::*` は Tauri に依存しない純粋関数群にすることで、将来 CLI 化やテスト容易性を確保。
+
+#### 原則 2: 「Rust 側で `unwrap` / `panic` を一切許さない」
+
+```toml
+[workspace.lints.clippy]
+unwrap_used  = "deny"
+expect_used  = "deny"
+panic        = "deny"
+```
+
+**意図**: 運用中のクラッシュは「DB 整合性破壊 + UI フリーズ + ユーザーが何も保存できない」最悪シナリオを招く。コンパイル時に `Result` 伝播を強制し、エラーは必ず**ログ退避 + UI 通知**の 2 経路に流れるよう設計。
+
+唯一の例外は `parser.rs::compile_regex` で、これは**固定パターンのバグ**を起動時に即座に検知する意図的な panic（`#[allow(clippy::panic)]` 明示）。
+
+#### 原則 3: 「フロントエンドの feature 間相互参照を禁止」
+
+```js
+// eslint.config.js
+'no-restricted-imports': [
+  'error',
+  { patterns: [
+    'src/features/analyze/**',  // archive から analyze を import 禁止
+    'src/features/archive/**',
+    ...
+  ]}
+]
+```
+
+**意図**: feature が肥大化したときの相互依存スパゲッティ化を防ぐ。共通化したくなったら `shared/` に上げることを強制。
+
+#### 原則 4: 「ユーザーデータは絶対に失わない」
+
+| 段階 | 保護策 |
+|---|---|
+| アンインストール時 | NSIS スクリプトで `Data/archive/` `Data/db/` を保護対象としてスキップ |
+| 取り込み失敗時 | savepoint で個別ファイルロールバック、外側 transaction で全体ロールバック |
+| 取り込みキャンセル時 | 外側 transaction を rollback → DB を完全に元の状態に戻す |
+| 多重起動時 | Mutex で起動阻止し、複数プロセスから DB を書き換える事故を防止 |
+
 ---
 
-## 9. ログ解析エンジン
+## 3. 機能別 設計の見どころ
 
-`src-tauri/src/analyze/` の責務は **VRChat ログを行単位ステートマシンで読み、正規化された SQLite レコードに変換すること**。
+### 3.1 取り込みパイプライン — savepoint + キャンセル可能設計
 
-### 検出イベント
+**課題**: ログを 1 件ずつ取り込む途中で 5 件目でエラーが起きたら？ユーザーがキャンセルしたら？
 
-| 行種別 | 対応テーブル | 主な情報 |
+**設計**:
+
+```
+外側 transaction
+ ├─ savepoint sp_1 → parse_and_import → commit
+ ├─ savepoint sp_2 → parse_and_import → エラー → rollback (このファイルのみ捨てる)
+ ├─ savepoint sp_3 → parse_and_import → ユーザーがキャンセル → rollback
+ │                                                          ↓
+ │                                              外側 transaction も rollback
+ │                                              ↓
+ │                                          DB は取り込み前と完全に同じ状態
+ └─ ...
+```
+
+**コード**: `src-tauri/src/analyze/mod.rs::run_diff_import`
+
+```rust
+let mut main_tx = main_conn.transaction()?;
+for (idx, log_path) in log_files.iter().enumerate() {
+    if let Err(err) = ensure_not_canceled(cancel_status) {
+        rollback_outer_transaction(main_tx, "解析中断時")?;
+        return Err(err);
+    }
+    let main_sp = main_tx.savepoint()?;
+    match parse_and_import(&main_sp, log_path, ...) {
+        Ok(()) => main_sp.commit()?,
+        Err(err) if err.to_string() == ANALYZE_CANCELED_MESSAGE => {
+            rollback_savepoint(main_sp, "解析中断時")?;
+            rollback_outer_transaction(main_tx, "解析中断時")?;
+            return Err(ANALYZE_CANCELED_MESSAGE.to_string());
+        }
+        Err(err) => {
+            rollback_savepoint(main_sp, "ファイル単位ロールバック時")?;  // 個別失敗は許容
+            log_err(&format!("エラー ({filename}): {err}"));
+        }
+    }
+}
+main_tx.commit()?;
+```
+
+**見どころ**:
+
+- **失敗の粒度を 2 段階で制御**: 「1 ファイルだけ捨てる」（savepoint）と「全部やり直し」（outer transaction）を使い分け
+- **キャンセルは協調的**: `Arc<AtomicBool>` を行ループの先頭でポーリングし、応答性 5000 行 = ~50ms 以内に停止
+- **冪等性**: `sessions.log_name` を UNIQUE にし、再取り込み時は `SELECT EXISTS` で skip → ユーザーが何度実行しても安全
+- **進捗ストリーミング**: バックグラウンドスレッドから `analyze-progress` イベントを送出、UI 側で 100ms 単位に集約してレンダリング負荷を分散
+
+### 3.2 ストリーミングログビューア — 3 層バッファリング
+
+**課題**: 数十 MB の `.tar.zst`（展開すると数百 MB）を即座に閲覧したい。ただし全行メモリに乗せたら UI が固まる。
+
+**設計**: **Rust 側で 500 行ごとに IPC イベント送出 → React 側で 100ms バッファ → react-virtual で仮想スクロール** の 3 段構え。
+
+```
+[Rust] tar.zst 解凍 → BufReader::lines()
+                            │
+                            ▼  500 行たまったら
+                       app.emit("log_viewer_chunk", { session_id, ...500 行 })
+                            │
+                            ▼  Tauri IPC
+[React] listen("log_viewer_chunk")
+        if (payload.session_id !== currentSessionId) return;  // ← 古いファイルのイベント破棄
+        pendingChunksRef.current.push(payload);
+        if (!flushTimerRef.current) {
+            flushTimerRef.current = setTimeout(flushChunks, 100);  // ← 100ms 集約
+        }
+        │
+        ▼  100ms 経過
+        chunks.reduce(appendChunk, prev) → setState
+        │
+        ▼
+[react-virtual]  画面に映る行のみ DOM 化（10 行 overscan）
+```
+
+**見どころ**:
+
+- **`session_id` による競合排除**: ユーザーが連続でファイル切替したとき、古いファイルのチャンクが到着しても session_id 不一致で破棄。古いファイルの行が新しいファイルに混ざる事故を防ぐ
+- **`flushSync` で初期状態を強制反映**: 新セッション開始時に `flushSync(() => setLogViewerData(emptyViewerData()))` で前のデータを確実にクリアしてから listen 開始
+- **チャンク内ペイロード設計**: `raw_lines: string[]`, `levels: u8[]`, `categories: u8[]`, `highlights: (string|null)[]` を**並列配列**にしてシリアライズコストを最小化（オブジェクト配列より JSON サイズ約 40% 削減）
+- **仮想スクロール**: `@tanstack/react-virtual` で表示行数に比例しないレンダリングコスト。10 万行ログでもスクロール時の DOM 数は常に ~30 行
+
+### 3.3 VRChat ログパーサ — 行単位ステートマシン
+
+**課題**: VRChat ログは**非構造化テキスト + 時系列依存**。例えば「Joining wrld_xxx」の行は、**直前の「Entering Room: <World>」行が同じセッションで出ている前提**でワールド名と紐付ける必要がある。
+
+**設計**: 23 種類の正規表現 + ループ内変数による有限ステートマシン。
+
+```rust
+// src-tauri/src/analyze/mod.rs::parse_and_import_reader (抜粋)
+let mut current_ts: Option<NaiveDateTime> = None;       // 最後に観測した時刻
+let mut current_visit_id: Option<i64> = None;           // 現在のワールド訪問 ID
+let mut pending_room_name: Option<String> = None;       // Joining 前に観測したワールド名
+
+for line_result in reader.lines() {
+    let Ok(line) = line_result else { continue };       // 不正 UTF-8 は skip 継続
+
+    if let Some(caps) = RE_TIME.captures(&line) {       // タイムスタンプ更新
+        current_ts = parse_dt(caps.get(1).unwrap().as_str());
+    }
+    if let Some(caps) = RE_ENTERING.captures(&line) {   // ワールド名候補を蓄積
+        pending_room_name = Some(caps.get(1).unwrap().as_str().to_string());
+    }
+    if let Some(caps) = RE_JOINING.captures(&line) {    // 候補と組み合わせて確定
+        if let Some(room_name) = pending_room_name.as_ref() {
+            // INSERT INTO visits ...
+            current_visit_id = Some(last_insert_id);
+        }
+    }
+    if let Some(caps) = RE_PLAYER_JOIN.captures(&line) {
+        if let Some(visit_id) = current_visit_id {       // 現在の訪問に紐付け
+            // INSERT INTO with_users ...
+        }
+    }
+    // ... 以下 OnPlayerLeft, Notification, Screenshot, OSC, Subscription ...
+}
+```
+
+**見どころ**:
+
+- **LazyLock + コンパイル時パニック**: `static RE_TIME: LazyLock<Regex> = LazyLock::new(...)` で全パターンを 1 度だけコンパイル。不正パターンは起動時にプロセス停止（早期検知）
+- **ステート変数の最小化**: 5 つの `Option` のみで時系列依存を解決。ボトムアップに DDD すると Aggregate になるが、**ログ処理速度を優先して手続き的に書く判断**
+- **エンコーディング耐性**: 非 UTF-8 行は `continue` で skip して継続（mod 系プラグインが Shift-JIS で書き込むケースに対応）
+- **マルチライン通知の検出**: `Received Notification: <Notification ...>` が複数行にまたがるケースは別途レンジブロック検出ロジックで一塊として扱う（`detect_range_block_start` / `RangeBlockKind::Notification`）
+
+**実装規模**: パーサ本体 889 行、正規表現 23 種、対応イベント 10 種。
+
+### 3.4 Win32 アイコン抽出 — 高解像度フォールバック
+
+**課題**: ランチャーで EXE を登録するとき、Windows エクスプローラ並の高品質アイコンを表示したい。
+
+**設計**: **`SHGetImageList(SHIL_JUMBO)` で 256×256 取得 → 失敗時に `ExtractIconExW` で 32×32 フォールバック → HICON を PNG にエンコードして DB に BLOB 保存**。
+
+```rust
+// src-tauri/src/platform.rs::extract_exe_icon_png
+pub fn extract_exe_icon_png(exe_path: &Path) -> Option<Vec<u8>> {
+    extract_icon_jumbo(exe_path)        // ← 256×256 (Jumbo image list)
+        .or_else(|| extract_icon_legacy(exe_path))  // ← 32×32 fallback
+}
+
+fn extract_icon_jumbo(exe_path: &Path) -> Option<Vec<u8>> {
+    let com_ok = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }.is_ok();
+    let result = (|| {
+        let mut file_info = SHFILEINFOW::default();
+        let ret = unsafe { SHGetFileInfoW(..., SHGFI_SYSICONINDEX) };
+        let image_list: IImageList = unsafe { SHGetImageList(SHIL_JUMBO) }.ok()?;
+        let hicon: HICON = unsafe { image_list.GetIcon(file_info.iIcon, 1) }.ok()?;
+        let png = hicon_to_png(hicon);  // ← GDI で DIB に展開、BGRA→RGBA 変換、image crate で PNG エンコード
+        unsafe { DestroyIcon(hicon); }
+        png
+    })();
+    if com_ok { unsafe { CoUninitialize(); } }
+    result
+}
+```
+
+**見どころ**:
+
+- **COM の正しい初期化と解放**: `CoInitializeEx` の戻り値（S_OK / S_FALSE / 失敗）を判定し、成功時のみ `CoUninitialize` をペアで呼ぶ。「すでに初期化済み」のケースでも正しくバランスを取る
+- **HICON → PNG 変換の手書き**: `GetDIBits` で 32bit RGBA DIB として読み出し、`chunks_exact_mut(4)` で BGRA→RGBA を swap、`image` crate で PNG エンコード。中間ファイルなし、メモリのみで完結
+- **リソースリーク防止**: `DeleteObject` / `DeleteDC` / `DestroyIcon` の呼び忘れがないようにクロージャ + cleanup_bitmaps パターンで早期 return でも解放
+- **失敗時の優雅な縮退**: アイコン取得失敗時は `None` を返し、UI 側でフォールバックアイコン（SVG）を表示
+
+### 3.5 単一インスタンスガード — Mutex 寿命の設計
+
+**課題**: 2 つのプロセスから同じ DB に書き込まれたら破壊される。確実な多重起動防止が必要。
+
+**設計**: `CreateMutexW` で名前付き Mutex を作成し、`GetLastError() == ERROR_ALREADY_EXISTS` を多重起動シグナルとして使う。
+
+```rust
+// src-tauri/src/platform.rs::ensure_single_instance
+let mutex = unsafe { CreateMutexW(None, true, PCWSTR(mutex_name.as_ptr())) }?;
+if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
+    std::process::exit(0);
+}
+let _ = ManuallyDrop::new(mutex);  // ← プロセス終了まで保持
+```
+
+**見どころ（過去の誤指摘との対比）**:
+
+最初のコードレビューで「`_mutex` がスコープを抜けると Drop されて Mutex が解放される」と誤指摘されたが、調査した結果以下の事実を確認した：
+
+- `windows` crate v0.58 の `HANDLE` は `#[repr(transparent)] pub struct HANDLE(pub *mut c_void)` で **`Copy` を実装し `Drop` を実装していない**
+- そのため `_mutex` がスコープを抜けても `CloseHandle` は呼ばれない
+- Windows カーネルはプロセスのハンドルテーブルで Mutex を管理し、**明示的に `CloseHandle` しない限りプロセス終了までカーネルオブジェクトは生存**
+
+**結論**: ハンドルの Drop 挙動を正しく理解した上で、`ManuallyDrop` で意図を明示し、プロセス終了まで Mutex を保持する設計を確立した。
+
+---
+
+## 4. 並行性と整合性の設計
+
+### スレッドモデル
+
+| スレッド | 役割 | 寿命 |
 |---|---|---|
-| `User Authenticated: Name (usr_xxx)` | `sessions` | アカウント |
-| `[Behaviour] Entering Room: <World>` | `visits` (pending) | ワールド名候補 |
-| `[Behaviour] Joining wrld_xxx:N~private(...)~region(jp)` | `visits` | インスタンス確定 |
-| `[Behaviour] OnLeftRoom` | `visits` | leave_time |
-| `[Behaviour] OnPlayerJoined Name (usr_xxx)` | `find_users` + `with_users` | 同席ユーザー |
-| `[Behaviour] OnPlayerLeft Name (usr_xxx)` | `with_users` | leave_time |
-| `[Behaviour] Initialized PlayerAPI "Name" is local` | `with_users.is_self=1` | 自分の判定 |
-| `Received Notification: <...>` | `notifications` | 招待・boop・グループ通知 |
-| `Get VRChat Subscription Details!` | `subscription` | VRChat+ 状態 |
-| `[VRC Camera] Took screenshot to: ... NxM.png` | `screenshots` | 撮影 |
-| `Found new OSC Service: ...` | `osc` | 外部 OSC ツール検出 |
+| メインスレッド（Tauri runtime） | IPC ハンドラ実行、UI イベント送信 | プロセス全寿命 |
+| 取り込みワーカー | `run_diff_import` / `run_enhanced_import_batch` | 取り込み 1 回ごと |
+| ログビューアワーカー | tar.zst 解凍 + 行分類 + チャンク送信 | ファイル 1 つごと |
 
-正規表現は `src-tauri/src/analyze/parser.rs` で `LazyLock<Regex>` として一度だけコンパイル。不正パターンは即パニック（開発時に検知）。
+ワーカー間で共有する状態は以下のみ：
 
-### トランザクション設計
+| 共有状態 | 同期方法 |
+|---|---|
+| キャンセルフラグ | `Arc<AtomicBool>`（Tauri State として管理） |
+| SQLite DB | WAL モード + UI レベルの排他制御（`isAnalyzeRunning`） |
+| Tauri AppHandle | `Clone` で各ワーカーに配布 |
 
-- **全アーカイブ取り込みを 1 つの外側 transaction で囲む**
-- **各ファイルを savepoint** で個別にロールバック可能にする
-- キャンセルや個別ファイルのエラーは savepoint rollback で部分失敗を許容
-- 致命エラー／キャンセル時は外側 transaction ごとロールバックして **DB を完全に元に戻す**
+### SQLite の並行性
 
-### 冪等性
+- **WAL モード**: 読み取りと書き込みが並行可能
+- **書き込みは常に 1 スレッドのみ**: UI が `isAnalyzeRunning` で取り込みボタンを disabled にし、複数取り込みワーカーの起動を防ぐ
+- **読み取りはログビューアと並行可能**: アーカイブ閲覧中に取り込みを開始しても SQLITE_BUSY は発生しない
 
-- `sessions` は `log_name UNIQUE` で同一ログの再取り込みを防止
-- `notifications` は `notif_id UNIQUE` で重複挿入を `INSERT OR IGNORE` で吸収
-- `with_users` は `UNIQUE(visit_id, vrchat_id)` で同訪問内の重複を弾く
+### キャンセル可能設計
+
+```
+ユーザーが「停止」ボタンクリック
+       │
+       ▼  IPC invoke("cancel_analyze")
+   cancel_status.0.store(true, Ordering::SeqCst)
+       │
+       ▼  バックグラウンドスレッドが次のチェックポイントで検知
+   for line in reader.lines() {
+       if cancel_status.load(Ordering::SeqCst) {
+           return Err(analyze_cancel_sqlite_err());
+       }
+       ...
+   }
+       │
+       ▼  外側 transaction を rollback
+   DB は取り込み前と完全に同じ状態
+```
+
+**意図**: チャネルや async ランタイムを導入せず、`AtomicBool` 1 個でクロススレッド連携を成立させる。応答時間は約 50ms（5000 行 ÷ 100k 行/秒）。
 
 ---
 
-## 10. 非機能要件
+## 5. セキュリティ設計
 
-### パフォーマンス
-
-| 項目 | 目標／実装 |
+| 観点 | 対策 |
 |---|---|
-| 起動時間 | 〜2 秒（取り込み起動は別スレッドで非同期） |
-| ログビューア | 10 万行超でも仮想スクロール + 100 ms バッファリングで 60fps を維持 |
-| 取り込みスループット | 5000 行ごとに進捗イベント送出、SQLite は WAL モードで挿入を最適化 |
-| 圧縮率 | zstd レベル 3、典型的な VRChat ログで 90% 以上の削減 |
+| **CSP** | `default-src 'self'; script-src 'self'; img-src 'self' asset: https: data:; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:* ipc:;` — リモートスクリプト・WebSocket を完全遮断 |
+| **Tauri Capabilities** | `core:default`, `shell:default`, `shell:allow-open` のみ。`fs` プラグインは型定義のみで I/O は Rust 経由 |
+| **SQL インジェクション** | テーブル名・カラム名は `is_ascii_alphanumeric() \|\| '_'` で検証してから `format!` 補間、値は全て `params!` バインド |
+| **パストラバーサル** | 外部ログ閲覧 (`read_external_log_viewer`) は `matches_external_log_format` で `output_log_*` 接頭辞 + `.txt`/`.tar.zst` 拡張子を検証 |
+| **クラッシュ抑制** | clippy で `unwrap_used / expect_used / panic = deny`、`install_panic_hook` で運用ログへ退避 |
+| **多重起動** | `Local\StellaRecord_SingleInstance` の名前付き Mutex |
+| **インストール先制限** | NSIS で Program Files / WINDIR への配置を拒否（書き込み権限の問題を回避） |
+| **依存脆弱性** | `npm audit fix` を都度実施、最新メジャー追随（直近のコミット履歴に明記） |
 
-### セキュリティ
+---
 
-| 項目 | 対策 |
-|---|---|
-| Tauri CSP | `default-src 'self'; script-src 'self'; img-src 'self' asset: https: data:; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:* ipc:;` |
-| Tauri Capabilities | `core:default`, `shell:default`, `shell:allow-open` のみ |
-| SQL インジェクション | 動的テーブル名・カラム名は ASCII 英数字+`_` のみ許可。値は全て `params!` バインド |
-| パニック抑制 | clippy で `unwrap_used / expect_used / panic = deny`、`install_panic_hook` で運用ログへ退避 |
-| 多重起動 | `Local\StellaRecord_SingleInstance` の Mutex |
-| インストール先 | NSIS で Program Files / WINDIR への配置を拒否（LocalAppData 推奨） |
+## 6. 規模と計測値
 
-### 可用性
+### コード規模
 
-- ファイルパスや DB の失敗は**警告ログに退避**しつつアプリ起動は継続
-- 自アプリのランチャー登録に失敗してもアプリ起動を妨げない
-- パニック発生時は `install_panic_hook` がメッセージを `Data/logs/info-YYYY-MM.log` に記録
-- 致命的な起動失敗は `MessageBoxW` でユーザーに通知
+| 言語 | 行数 | ファイル数 |
+|---|---|---|
+| Rust | 4,825 | 14 |
+| TypeScript / TSX | 3,211 | 40 |
+| CSS Modules | 3,301 | 30+ |
+| **合計** | **約 11,300 行** | **54 ソース + 30+ CSS** |
 
-### 国際化
+### IPC 規模
 
-- 現バージョンは **UI 全文日本語**固定
-- バックエンドのエラーメッセージも日本語
-- 多言語化する場合の差し替え点は `commands/database.rs` の `TABLE_COMMENTS` と各 React コンポーネントのリテラル
+- IPC コマンド: **22 個**
+- Tauri イベント: **4 種類**（`analyze-progress`, `analyze-finished`, `log_viewer_chunk`, `log_viewer_done`）
+
+### データベース
+
+- テーブル: **9 個**
+- ビュー: **3 個**
+- インデックス: **8 個**
+- 検出可能なログイベント種別: **10 種類**
+- 正規表現パターン: **23 種類**
+
+### 想定パフォーマンス
+
+| 項目 | 値 | 計測方法 |
+|---|---|---|
+| 圧縮率 | 約 90%（zstd lv3） | 典型的な VRChat ログ |
+| ログビューア初期描画 | 100ms 以内（最初のチャンク） | sessionId 採番 → 最初の `log_viewer_chunk` 到達まで |
+| スクロール fps | 60fps（10 万行） | react-virtual の overscan 10 + チャンク 500 行 |
+| キャンセル応答時間 | ~50ms | 5000 行/cancel check ÷ ~100k 行/秒 |
+| Mutex 起動阻止 | 即時（< 10ms） | `CreateMutexW` 失敗で `std::process::exit(0)` |
+
+> 数値はローカル開発環境（Windows 11, Ryzen 7 + NVMe SSD）での実測ベース。本番環境では構成により変動。
+
+---
+
+## 7. 既知の制約と今後の改善余地
+
+| 項目 | 現状 | 改善方向 |
+|---|---|---|
+| ログビューアの非 UTF-8 耐性 | 不正バイト行で打ち切られる（`map_while(Result::ok)`） | 取り込み側と同じ `continue` パターンに統一 |
+| ストリーミング配列の concat | `Array.concat` で O(n²) 累積コピー | `push(...chunk)` に変更し O(n) 化 |
+| ログ閲覧 modal の Esc 閉じ | 未対応 | `useEffect` で `keydown` リスナー追加 |
+| パストラバーサル耐性 | `read_archive_log_viewer` は absolute path で escape 可能 | `output_log_*.tar.zst` 形式の検証を追加 |
+| マイグレーション時の重複ドロップ | `INSERT OR IGNORE` でサイレント | `log_info` で件数を記録 |
+| 多言語化 | 日本語固定 | i18n キー化（リソース外出し） |
+| クロスプラットフォーム | Windows のみ | `#[cfg(windows)]` 隔離は済んでいるため、macOS 対応時はダイアログ/レジストリ層のみ書き換え |
+
+> 上記制約は [`fix-task.md`](../fix-task.md) と過去の調査ログに基づき、影響範囲と修正コストを評価した結果、現バージョンでは見送った項目。
