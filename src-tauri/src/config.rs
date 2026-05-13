@@ -218,16 +218,6 @@ pub fn load_registry_catalog() -> RegistryCatalog {
     catalog
 }
 
-impl PolarisSetting {
-    /// Polaris が使用するアーカイブディレクトリを解決する。
-    pub fn get_effective_archive_dir(&self) -> Option<PathBuf> {
-        if !self.archive_path.is_empty() {
-            return Some(PathBuf::from(&self.archive_path));
-        }
-        Some(utils::get_polaris_install_dir()?.join("Data").join("archive"))
-    }
-}
-
 impl StellaRecordSetting {
     /// `StellaRecord` が管理する圧縮ログアーカイブのディレクトリを解決する。
     pub fn get_effective_archive_dir(&self) -> Option<PathBuf> {
