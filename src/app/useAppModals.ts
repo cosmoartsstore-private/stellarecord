@@ -10,13 +10,14 @@ interface UseAppModalsOptions {
   openEnhancedSync: () => Promise<ArchiveFileItem[]>;
   executeEnhancedSync: (targets: string[]) => Promise<void>;
   openLogViewerSelection: () => Promise<ArchiveFileItem[]>;
-  openSelectedLogViewer: (fileName: string) => Promise<string>;
+  openSelectedLogViewer: (fileKey: string) => Promise<string>;
   closeLogViewer: () => void;
   setAnalyzeRunning: (v: boolean) => void;
   batchSelectedFiles: Set<string>;
   clearBatchSelection: () => void;
-  selectExternalLogFolder: () => Promise<ArchiveFileItem[] | null>;
-  clearExternalLogFolder: () => Promise<ArchiveFileItem[]>;
+  selectExternalLogFiles: () => Promise<string[] | null>;
+  clearExternalLogFiles: () => Promise<ArchiveFileItem[]>;
+  externalFiles: string[];
 }
 
 /**
@@ -36,8 +37,9 @@ export function useAppModals(options: UseAppModalsOptions) {
     setAnalyzeRunning,
     batchSelectedFiles,
     clearBatchSelection,
-    selectExternalLogFolder,
-    clearExternalLogFolder,
+    selectExternalLogFiles,
+    clearExternalLogFiles,
+    externalFiles,
   } = options;
 
   const [isArchiveSelectorVisible, setIsArchiveSelectorVisible] = useState(false);
@@ -90,33 +92,31 @@ export function useAppModals(options: UseAppModalsOptions) {
     }
   };
 
-  /** モーダルを閉じずに別のアーカイブファイルに切り替える */
-  const handleViewerNavigateToFile = (fileName: string) => {
-    void openSelectedLogViewer(fileName);
+  /** モーダルを閉じずに別のファイルに切り替える */
+  const handleViewerNavigateToFile = (fileKey: string) => {
+    void openSelectedLogViewer(fileKey);
   };
 
-  /** 外部フォルダを選び、合致するログがあれば最新のものを自動でビューアに開く */
-  const handleSelectExternalFolder = async () => {
+  /** 外部ログファイルを選択し、最初に選んだファイルをビューアで開く */
+  const handleSelectExternalFiles = async () => {
     try {
-      const files = await selectExternalLogFolder();
-      // null はユーザーがダイアログをキャンセルした場合
+      const files = await selectExternalLogFiles();
       if (files === null) return;
-      if (files.length === 0) {
-        addToast('指定フォルダに output_log_*.txt / .tar.zst が見つかりませんでした');
-        return;
-      }
-      openSelectedLogViewer(files[0].name).catch((error: unknown) => {
+      // 新しく追加されたファイルのうち最初のものを開く
+      const newFiles = files.filter((f) => !externalFiles.includes(f));
+      const target = newFiles.length > 0 ? newFiles[0] : files[0];
+      openSelectedLogViewer(target).catch((error: unknown) => {
         addToast('ログストリーム開始エラー: ' + String(error));
       });
     } catch (error) {
-      addToast('外部フォルダの読み込みに失敗しました: ' + String(error));
+      addToast('外部ファイルの読み込みに失敗しました: ' + String(error));
     }
   };
 
-  /** 外部フォルダ選択を解除し、既定アーカイブストアの最新を自動で開く */
-  const handleClearExternalFolder = async () => {
+  /** 外部ファイル選択を解除し、既定アーカイブストアの最新を自動で開く */
+  const handleClearExternalFiles = async () => {
     try {
-      const files = await clearExternalLogFolder();
+      const files = await clearExternalLogFiles();
       if (files.length === 0) {
         addToast('アーカイブファイルが見つかりませんでした');
         return;
@@ -182,8 +182,8 @@ export function useAppModals(options: UseAppModalsOptions) {
     handleConfirmImport,
     handleOpenLogViewer,
     handleViewerNavigateToFile,
-    handleSelectExternalFolder,
-    handleClearExternalFolder,
+    handleSelectExternalFiles,
+    handleClearExternalFiles,
     handleOpenCleanup,
     handleConfirmCleanup,
     closeArchiveSelector,

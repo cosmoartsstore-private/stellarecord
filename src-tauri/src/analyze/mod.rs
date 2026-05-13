@@ -191,22 +191,6 @@ fn insert_osc_event(
     Ok(())
 }
 
-/// お気に入り追加/削除イベントをメインデータベースに挿入する。
-fn insert_favorite(
-    tx: &Connection,
-    session_id: i64,
-    target_type: &str,
-    target_id: &str,
-    action: &str,
-    timestamp: &str,
-) -> Result<()> {
-    tx.execute(
-        "INSERT INTO favorites (session_id, target_type, target_id, action, timestamp)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![session_id, target_type, target_id, action, timestamp],
-    )?;
-    Ok(())
-}
 
 /// VRChat+ サブスクリプション状態のスナップショットをメインデータベースに挿入する。
 ///
@@ -669,38 +653,6 @@ where
             continue;
         }
 
-        // --- お気に入り追加/削除イベント ---
-        if let Some(caps) = RE_FAVORITE_FRIEND_WORLD.captures(&line) {
-            let (Some(action_match), Some(type_match), Some(id_match)) =
-                (caps.get(1), caps.get(2), caps.get(3))
-            else {
-                continue;
-            };
-            insert_favorite(
-                main_tx,
-                session_id,
-                type_match.as_str(),
-                id_match.as_str(),
-                &action_match.as_str().to_lowercase(),
-                &ts_str,
-            )?;
-            continue;
-        }
-
-        if let Some(caps) = RE_FAVORITE_AVATAR.captures(&line) {
-            let (Some(action_match), Some(name_match)) = (caps.get(1), caps.get(2)) else {
-                continue;
-            };
-            insert_favorite(
-                main_tx,
-                session_id,
-                "avatar",
-                name_match.as_str().trim(),
-                &action_match.as_str().to_lowercase(),
-                &ts_str,
-            )?;
-            continue;
-        }
 
         // --- 通知（招待、フレンドリクエスト、boop、グループ） ---
         if let Some(caps) = RE_NOTIFICATION.captures(&line) {

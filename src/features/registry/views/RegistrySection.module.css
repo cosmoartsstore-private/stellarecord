@@ -160,11 +160,28 @@
   line-height: 1.55;
 }
 
-.launcherListActions,
-.launcherCardLargeActions {
+.noDescription {
+  font-style: italic;
+  opacity: 0.5;
+}
+
+.launcherListActions {
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+
+.launcherCardLargeActions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: nowrap;
+}
+
+.launcherCardLargeActions > button {
+  padding: 0.55rem 0.7rem;
+  font-size: 0.78rem;
+  border-radius: 10px;
+  white-space: nowrap;
 }
 
 .launcherCardGrid {
@@ -191,7 +208,8 @@
 }
 
 .launcherLaunchButton {
-  min-width: 132px;
+  min-width: 0;
+  flex: 1;
 }
 
 .registerForm {
@@ -262,6 +280,12 @@
   fill: currentcolor;
 }
 
+@media (width <= 1200px) {
+  .launcherCardGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
 @media (width <= 1024px) {
   .launcherListItem {
     flex-direction: column;
@@ -276,5 +300,17 @@
   .launcherListActions > *,
   .launcherViewSwitch > * {
     flex: 1;
+  }
+}
+
+@media (width <= 900px) {
+  .launcherCardGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (width <= 600px) {
+  .launcherCardGrid {
+    grid-template-columns: 1fr;
   }
 }

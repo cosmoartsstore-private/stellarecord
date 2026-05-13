@@ -43,8 +43,6 @@ const LEVEL_KEYS = ['plain', 'info', 'warning', 'error', 'debug'] as const;
 /**
  * バックエンドの数値カテゴリを CSS クラスキー文字列にマッピング。
  * Rust 側 `encode_log_category_u8` の番号と必ず一致させること。
- * DB 由来カテゴリ（world / notification / player_*）と、複数行範囲を
- * 表すレベル由来カテゴリ debug-system のみを持つ。
  */
 const CATEGORY_KEYS = [
   'plain', 'world', 'notification',
@@ -52,16 +50,23 @@ const CATEGORY_KEYS = [
   'debug-system',
 ] as const;
 
+/** フルパスからファイル名だけを取り出す */
+function fileNameFromPath(fullPath: string): string {
+  const sep = fullPath.lastIndexOf('\\');
+  const sep2 = fullPath.lastIndexOf('/');
+  return fullPath.slice(Math.max(sep, sep2) + 1);
+}
+
 interface LogViewerModalProps {
   logViewerData: LogViewerData;
   archiveFiles: ArchiveFileItem[];
-  /** 外部フォルダ閲覧中はその絶対パス、既定アーカイブストア閲覧中は null */
-  externalFolderPath: string | null;
+  /** ユーザーが選択した外部ログファイルの絶対パス一覧 */
+  externalFiles: string[];
   isLoading: boolean;
   isLoaded: boolean;
-  onNavigateToFile: (fileName: string) => void;
-  onPickExternalFolder: () => void;
-  onClearExternalFolder: () => void;
+  onNavigateToFile: (fileKey: string) => void;
+  onPickExternalFiles: () => void;
+  onClearExternalFiles: () => void;
   onClose: () => void;
 }
 
@@ -72,21 +77,22 @@ interface LogViewerModalProps {
 export function LogViewerModal({
   logViewerData,
   archiveFiles,
-  externalFolderPath,
+  externalFiles,
   isLoading,
   isLoaded,
   onNavigateToFile,
-  onPickExternalFolder,
-  onClearExternalFolder,
+  onPickExternalFiles,
+  onClearExternalFiles,
   onClose,
 }: LogViewerModalProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
 
-  // ファイル切替時にフィルタとスクロール位置をリセット
+  const hasExternalFiles = externalFiles.length > 0;
+
+  // ファイル切替時にスクロール位置のみリセット（フィルタは維持）
   useEffect(() => {
-    setActiveFilter(null);
     if (listRef.current) {
       listRef.current.scrollTop = 0;
       listRef.current.scrollLeft = 0;
@@ -119,7 +125,6 @@ export function LogViewerModal({
   }, [activeFilter]);
 
   // フィルタに一致する行インデックスのサブセットを事前計算
-  // フィルタ未適用時はnull（全行表示）
   const filteredIndices = useMemo(() => {
     if (!activeMatchKeys) return null;
     const indices: number[] = [];
@@ -169,6 +174,10 @@ export function LogViewerModal({
     );
   };
 
+  /** サイドバーに表示するファイル一覧（アーカイブ + 外部ファイル統合） */
+  const sidebarFiles = hasExternalFiles ? externalFiles : archiveFiles.map((f) => f.name);
+  const sidebarCount = sidebarFiles.length + (hasExternalFiles ? archiveFiles.length : 0);
+
   return (
     <div className={`${styles.root} ${shared.modalOverlay} ${shared.fullscreen}`}>
       <div className={`${styles.content} ${shared.modalContent}`}>
@@ -176,47 +185,56 @@ export function LogViewerModal({
         {/* ── サイドバー ── */}
         <aside className={styles.sidebar}>
           <div className={styles.sidebarHeader}>
-            <span className={styles.sidebarTitle}>
-              {externalFolderPath ? '外部フォルダ' : 'ログファイル'}
-            </span>
-            <span className={styles.sidebarCount}>{archiveFiles.length} 件</span>
+            <span className={styles.sidebarTitle}>ログファイル</span>
+            <span className={styles.sidebarCount}>{sidebarCount} 件</span>
           </div>
           <div className={styles.sidebarFolderSwitcher}>
-            {externalFolderPath ? (
-              <>
-                <span
-                  className={styles.sidebarFolderPath}
-                  title={externalFolderPath}
-                >
-                  {externalFolderPath}
-                </span>
-                <button
-                  type="button"
-                  className={styles.sidebarFolderButton}
-                  onClick={onClearExternalFolder}
-                  disabled={isLoading}
-                >
-                  既定フォルダに戻す
-                </button>
-              </>
-            ) : (
+            <button
+              type="button"
+              className={styles.sidebarFolderButton}
+              onClick={onPickExternalFiles}
+              disabled={isLoading}
+            >
+              ファイルを選択
+            </button>
+            {hasExternalFiles && (
               <button
                 type="button"
                 className={styles.sidebarFolderButton}
-                onClick={onPickExternalFolder}
+                onClick={onClearExternalFiles}
                 disabled={isLoading}
               >
-                別のフォルダから開く
+                選択を解除
               </button>
             )}
           </div>
           <div className={styles.sidebarList}>
-            {archiveFiles.length === 0 ? (
-              <div className={styles.sidebarEmpty}>
-                {externalFolderPath
-                  ? 'output_log_*.txt / .tar.zst が見つかりません'
-                  : 'アーカイブがありません'}
-              </div>
+            {hasExternalFiles && (
+              <>
+                <div className={styles.sidebarDivider}>選択ファイル</div>
+                {externalFiles.map((filePath) => {
+                  const isActive = filePath === logViewerData.archive_name;
+                  const name = fileNameFromPath(filePath);
+                  const date = parseArchiveDate(name);
+                  return (
+                    <button
+                      key={filePath}
+                      type="button"
+                      className={`${styles.sidebarItem} ${isActive ? styles.sidebarItemActive : ''}`}
+                      onClick={() => {
+                        if (!isActive && !isLoading) onNavigateToFile(filePath);
+                      }}
+                      disabled={isLoading && !isActive}
+                    >
+                      <span className={styles.sidebarItemDate}>{date ?? name}</span>
+                    </button>
+                  );
+                })}
+                <div className={styles.sidebarDivider}>アーカイブ</div>
+              </>
+            )}
+            {archiveFiles.length === 0 && !hasExternalFiles ? (
+              <div className={styles.sidebarEmpty}>アーカイブがありません</div>
             ) : (
               archiveFiles.map((file) => {
                 const isActive = file.name === logViewerData.archive_name;
@@ -284,7 +302,6 @@ export function LogViewerModal({
 
             <div style={{ height: `${String(virtualizer.getTotalSize())}px`, minWidth: '100%', position: 'relative' }}>
               {virtualizer.getVirtualItems().map((virtualItem) => {
-                // フィルタ適用時は仮想リストの連番を実際の行インデックスに変換
                 const actualIndex = filteredIndices
                   ? (filteredIndices[virtualItem.index] ?? virtualItem.index)
                   : virtualItem.index;

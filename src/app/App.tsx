@@ -78,7 +78,6 @@ function App() {
     logViewerData,
     isLogViewerLoading,
     isLogViewerLoaded,
-    externalSource,
     externalFiles,
     openEnhancedSync,
     openLogViewerSelection,
@@ -86,8 +85,8 @@ function App() {
     openSelectedLogViewer,
     closeLogViewer,
     runStartupImport,
-    selectExternalLogFolder,
-    clearExternalLogFolder,
+    selectExternalLogFiles,
+    clearExternalLogFiles,
   } = useArchiveState();
 
   const {
@@ -108,8 +107,9 @@ function App() {
     setAnalyzeRunning,
     batchSelectedFiles,
     clearBatchSelection,
-    selectExternalLogFolder,
-    clearExternalLogFolder,
+    selectExternalLogFiles,
+    clearExternalLogFiles,
+    externalFiles,
   });
 
   /** タブ選択時にセクションを切り替える（DB選択時はカタログを自動取得） */
@@ -155,7 +155,7 @@ function App() {
   /** サードパーティアプリの登録を解除する */
   const handleUnregisterApp = async (app: AppCard) => {
     try {
-      await unregisterApp(app.name);
+      await unregisterApp(app.path);
       addToast(`${app.name} の登録を解除しました`);
       await refreshRegistry();
     } catch (error) {
@@ -342,13 +342,13 @@ function App() {
       {modals.isLogViewerModalVisible && logViewerData && (
         <LogViewerModal
           logViewerData={logViewerData}
-          archiveFiles={externalSource ? externalFiles : archiveFiles}
-          externalFolderPath={externalSource?.folderPath ?? null}
+          archiveFiles={archiveFiles}
+          externalFiles={externalFiles}
           isLoading={isLogViewerLoading}
           isLoaded={isLogViewerLoaded}
           onNavigateToFile={modals.handleViewerNavigateToFile}
-          onPickExternalFolder={() => { void modals.handleSelectExternalFolder(); }}
-          onClearExternalFolder={() => { void modals.handleClearExternalFolder(); }}
+          onPickExternalFiles={() => { void modals.handleSelectExternalFiles(); }}
+          onClearExternalFiles={() => { void modals.handleClearExternalFiles(); }}
           onClose={modals.closeLogViewerModal}
         />
       )}

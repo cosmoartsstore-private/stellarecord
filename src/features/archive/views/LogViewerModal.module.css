@@ -6,10 +6,10 @@
 .content {
   display: flex;
   flex-direction: row;
-  width: min(1600px, 98vw);
+  width: min(1600px, calc(100vw - 4rem));
   max-width: 1600px;
-  height: min(92vh, 1080px);
-  max-height: min(92vh, 1080px);
+  height: min(calc(100vh - 4rem), 1080px);
+  max-height: min(calc(100vh - 4rem), 1080px);
   padding: 0;
   gap: 0;
   overflow: hidden;
@@ -112,10 +112,13 @@
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--file-list-bg);
+  scrollbar-width: thin;
+  scrollbar-color: var(--file-scrollbar-thumb) transparent;
 }
 
 .sidebarList::-webkit-scrollbar {
-  width: 5px;
+  display: block;
+  width: 6px;
 }
 
 .sidebarList::-webkit-scrollbar-thumb {
@@ -179,6 +182,16 @@
 
 .sidebarItemActive .sidebarItemSize {
   color: rgb(255 255 255 / 60%);
+}
+
+.sidebarDivider {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  padding: 0.5rem 0.8rem 0.2rem;
+  flex-shrink: 0;
 }
 
 /* ── メインコンテンツ ─────────────────────────────── */
@@ -308,10 +321,14 @@
   border-radius: 16px;
   background: var(--terminal-bg);
   min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--terminal-scrollbar-thumb) transparent;
 }
 
 .logList::-webkit-scrollbar {
+  display: block;
   width: 8px;
+  height: 8px;
 }
 
 .logList::-webkit-scrollbar-thumb {
@@ -320,6 +337,10 @@
 }
 
 .logList::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.logList::-webkit-scrollbar-corner {
   background: transparent;
 }
 
@@ -413,7 +434,7 @@
 
   .sidebar {
     width: 100%;
-    height: 140px;
+    height: 200px;
     border-right: none;
     border-bottom: 1px solid var(--border);
     border-radius: 28px 28px 0 0;

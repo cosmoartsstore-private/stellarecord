@@ -1183,106 +1183,41 @@ fn matches_external_log_format(name: &str) -> bool {
         .any(|ext| name.ends_with(*ext))
 }
 
-/// ネイティブダイアログでユーザーにフォルダを選択させる。
+/// ネイティブダイアログでユーザーにログファイルを複数選択させる。
 ///
 /// # 戻り値
-/// 選択されたフォルダの絶対パス、またはキャンセル時は `None`。
-///
-/// # エラー
-/// ダイアログの初期化または表示に失敗した場合にエラーを返す。
+/// 選択されたファイルの絶対パス一覧。キャンセル時は空の `Vec`。
 #[tauri::command]
-pub fn pick_log_folder() -> Result<Option<String>, String> {
-    platform::pick_folder_dialog()
+pub fn pick_log_files() -> Result<Vec<String>, String> {
+    platform::pick_log_files_dialog()
 }
 
-/// 指定フォルダ内のログビューア対応ファイル（`output_log_*.txt` / `*.tar.zst`）を一覧表示する。
+/// 外部ログファイル1件のストリーミングログビューアセッションを開く。
 ///
-/// # エラー
-/// フォルダが存在しない、または読み取れない場合にエラーを返す。
-#[tauri::command]
-pub fn list_external_log_files(folder_path: String) -> Result<Vec<ArchiveFileItem>, String> {
-    let dir = PathBuf::from(&folder_path);
-    if !dir.is_dir() {
-        return Err(format!("フォルダが見つかりません: {folder_path}"));
-    }
-
-    let entries = fs::read_dir(&dir).map_err(|err| utils::command_read_err(&dir, err))?;
-    let mut files = Vec::new();
-
-    for entry in entries {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(err) => {
-                utils::log_warn(&format!("外部フォルダ項目を読み取れませんでした: {err}"));
-                continue;
-            }
-        };
-
-        let path = entry.path();
-        if !path.is_file() {
-            continue;
-        }
-        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
-            continue;
-        };
-        if !matches_external_log_format(name) {
-            continue;
-        }
-
-        let size_bytes = match entry.metadata() {
-            Ok(metadata) => metadata.len(),
-            Err(err) => {
-                utils::log_warn(&format!(
-                    "外部ログのメタデータを読み取れませんでした [{}]: {}",
-                    path.display(),
-                    err
-                ));
-                0
-            }
-        };
-
-        files.push(ArchiveFileItem {
-            name: name.to_string(),
-            size_bytes,
-        });
-    }
-
-    files.sort_by(|a, b| b.name.cmp(&a.name));
-    Ok(files)
-}
-
-/// 外部フォルダのログファイル1件のストリーミングログビューアセッションを開く。
-///
-/// 既定アーカイブストアではなく任意のフォルダから `output_log_*.txt` または
+/// ユーザーが選択した任意のファイルパスから `output_log_*.txt` または
 /// `*.tar.zst` を直接読み込む。`.txt` はそのまま、`.tar.zst` は zstd を解凍して
 /// 内部の最初のエントリを使用する。
 ///
 /// # エラー
-/// フォルダ・ファイル名が不正、ファイルが見つからない、または開けない場合にエラーを返す。
+/// ファイルパスが不正、ファイルが見つからない、または開けない場合にエラーを返す。
 #[tauri::command]
 pub fn read_external_log_viewer(
-    folder_path: String,
-    file_name: String,
+    file_path: String,
     session_id: String,
     app: AppHandle,
 ) -> Result<LogViewerMeta, String> {
+    let log_path = PathBuf::from(&file_path);
+    let file_name = log_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| "ファイル名を取得できません。".to_string())?
+        .to_string();
+
     if !matches_external_log_format(&file_name) {
         return Err(format!("対応していないログ形式です: {file_name}"));
     }
-
-    let dir = PathBuf::from(&folder_path);
-    if !dir.is_dir() {
-        return Err(format!("フォルダが見つかりません: {folder_path}"));
-    }
-
-    // `file_name` がディレクトリ区切りを含む場合、ユーザー選択フォルダ外を指し得るので拒否する。
-    if file_name.contains('/') || file_name.contains('\\') {
-        return Err("ファイル名に区切り文字を含めることはできません。".to_string());
-    }
-
-    let log_path = dir.join(&file_name);
     if !log_path.is_file() {
-        return Err(format!("ファイルが見つかりません: {file_name}"));
+        return Err(format!("ファイルが見つかりません: {file_path}"));
     }
 
     let is_compressed = file_name.ends_with(".tar.zst");
@@ -1314,7 +1249,7 @@ pub fn read_external_log_viewer(
 
     Ok(LogViewerMeta {
         session_id,
-        archive_name: file_name,
+        archive_name: file_path,
         source_name,
     })
 }

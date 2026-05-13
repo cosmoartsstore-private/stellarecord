@@ -141,25 +141,6 @@ pub static RE_OSC_FOUND: LazyLock<Regex> = LazyLock::new(|| {
     )
 });
 
-/// フレンド・ワールドのお気に入り追加/削除行にマッチする。
-/// 例: `Added friend to favorites: usr_xxx` / `Removed world from favorites: wrld_xxx`
-/// キャプチャ1は `action`、2は `target_type`、3は `target_id`。
-pub static RE_FAVORITE_FRIEND_WORLD: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"(Added|Removed) (friend|world) (?:to|from) favorites: ((?:usr|wrld)_[a-f0-9\-]+)",
-        "RE_FAVORITE_FRIEND_WORLD",
-    )
-});
-
-/// アバターのお気に入り追加/削除行にマッチする。
-/// 例: `Added avatar to favorites id:Peridot` / `Removed avatar from favorites:Peridot`
-/// キャプチャ1は `action`、2は `avatar_name`。
-pub static RE_FAVORITE_AVATAR: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"(Added|Removed) avatar (?:to|from) favorites[ :](?:id:)?(.+)",
-        "RE_FAVORITE_AVATAR",
-    )
-});
 
 /// 括弧で囲まれた汎用 `usr_...` 識別子にマッチする。
 pub static RE_USR: LazyLock<Regex> = LazyLock::new(|| compile_regex(r"\((usr_[^)]+)\)", "RE_USR"));

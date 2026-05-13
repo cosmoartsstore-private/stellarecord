@@ -6,10 +6,10 @@
  * log_viewer_chunk / log_viewer_done イベントを非同期に発行する
  */
 import { invoke } from '@tauri-apps/api/core';
-import type { ArchiveFileItem, LogViewerMeta, StartupImportSummary } from '../models/types';
+import type { LogViewerMeta, StartupImportSummary } from '../models/types';
 
 /** アーカイブディレクトリ内の .tar.zst ファイル一覧を取得する */
-export const loadArchiveFiles = () => invoke<ArchiveFileItem[]>('list_archive_files');
+export const loadArchiveFiles = () => invoke<{ name: string; size_bytes: number }[]>('list_archive_files');
 
 /** 選択されたアーカイブファイルのバッチインポートを開始する */
 export const launchEnhancedImport = (fileNames: string[]) =>
@@ -19,22 +19,16 @@ export const launchEnhancedImport = (fileNames: string[]) =>
 export const startLogViewerStream = (fileName: string, sessionId: string) =>
   invoke<LogViewerMeta>('read_archive_log_viewer', { fileName, sessionId });
 
-/** ネイティブダイアログでユーザーに外部フォルダを選択させる（キャンセル時はnull） */
-export const pickLogFolder = () => invoke<string | null>('pick_log_folder');
+/** ネイティブダイアログでユーザーにログファイルを複数選択させる（キャンセル時は空配列） */
+export const pickLogFiles = () => invoke<string[]>('pick_log_files');
 
-/** 外部フォルダ内の output_log_*.txt / *.tar.zst を一覧取得する */
-export const loadExternalLogFiles = (folderPath: string) =>
-  invoke<ArchiveFileItem[]>('list_external_log_files', { folderPath });
-
-/** 外部フォルダのログファイルに対するストリーミングログビューアセッションを開始する */
+/** 外部ログファイルに対するストリーミングログビューアセッションを開始する */
 export const startExternalLogViewerStream = (
-  folderPath: string,
-  fileName: string,
+  filePath: string,
   sessionId: string,
 ) =>
   invoke<LogViewerMeta>('read_external_log_viewer', {
-    folderPath,
-    fileName,
+    filePath,
     sessionId,
   });
 

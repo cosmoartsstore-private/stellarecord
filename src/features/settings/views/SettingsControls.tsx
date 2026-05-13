@@ -27,6 +27,7 @@ export function SettingsControls({
           className={styles.inlineNumberInput}
           type="number"
           min={1}
+          max={10485760}
           step={1}
           value={archiveLimitDraft}
           onChange={(e) => {

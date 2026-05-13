@@ -94,16 +94,6 @@ CREATE TABLE IF NOT EXISTS osc (
 CREATE INDEX IF NOT EXISTS idx_osc_session_id ON osc(session_id);
 CREATE INDEX IF NOT EXISTS idx_osc_timestamp  ON osc(timestamp);
 
-CREATE TABLE IF NOT EXISTS favorites (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id  INTEGER NOT NULL REFERENCES sessions(id),
-    target_type TEXT NOT NULL CHECK(target_type IN ('friend','avatar','world')),
-    target_id   TEXT NOT NULL,
-    action      TEXT NOT NULL CHECK(action IN ('added','removed')),
-    timestamp   DATETIME NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_favorites_session_id ON favorites(session_id);
-CREATE INDEX IF NOT EXISTS idx_favorites_timestamp  ON favorites(timestamp);
 
 CREATE TABLE IF NOT EXISTS subscription (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -116,9 +106,9 @@ CREATE TABLE IF NOT EXISTS subscription (
 
 CREATE TABLE IF NOT EXISTS apps (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    name            TEXT NOT NULL UNIQUE,
+    name            TEXT NOT NULL,
     description     TEXT NOT NULL DEFAULT '',
-    path            TEXT NOT NULL,
+    path            TEXT NOT NULL UNIQUE,
     icon            BLOB,
     registered_at   DATETIME DEFAULT (datetime('now', 'localtime'))
 );
@@ -128,7 +118,7 @@ CREATE TABLE IF NOT EXISTS apps (
 ///
 /// `visit_summary` はワールド訪問ごとの滞在時間とプレイヤー数を算出し、
 /// フロントエンドでの再計算を不要にする。
-/// `player_stats` はプレイヤーごとの同室回数と初回/最終会遭時刻を集計する。
+/// `with_users_detail` / `screenshots_detail` は関連テーブルを結合した詳細ビュー。
 pub const MAIN_VIEWS: &str = "
 CREATE VIEW IF NOT EXISTS visit_summary AS
 SELECT
@@ -147,18 +137,6 @@ SELECT
 FROM visits v
 ORDER BY v.join_time DESC;
 
-CREATE VIEW IF NOT EXISTS player_stats AS
-SELECT
-    fu.vrchat_id,
-    fu.account_name,
-    COUNT(DISTINCT wu.visit_id)                          AS co_visit_count,
-    MIN(wu.join_time)                                    AS first_met,
-    MAX(COALESCE(wu.leave_time, wu.join_time))           AS last_met
-FROM find_users fu
-JOIN with_users wu ON wu.vrchat_id = fu.vrchat_id
-WHERE wu.is_self = 0
-GROUP BY fu.vrchat_id
-ORDER BY co_visit_count DESC;
 
 CREATE VIEW IF NOT EXISTS with_users_detail AS
 SELECT
@@ -174,20 +152,6 @@ FROM with_users wu
 JOIN find_users fu ON fu.vrchat_id = wu.vrchat_id
 JOIN visits v ON v.id = wu.visit_id;
 
-CREATE VIEW IF NOT EXISTS favorites_detail AS
-SELECT
-    f.id,
-    f.session_id,
-    f.target_type,
-    f.target_id,
-    CASE
-        WHEN f.target_type = 'friend' THEN COALESCE(fu.account_name, f.target_id)
-        ELSE f.target_id
-    END                AS target_name,
-    f.action,
-    f.timestamp
-FROM favorites f
-LEFT JOIN find_users fu ON f.target_type = 'friend' AND fu.vrchat_id = f.target_id;
 
 CREATE VIEW IF NOT EXISTS screenshots_detail AS
 SELECT
@@ -211,6 +175,7 @@ pub fn init_main_db(conn: &Connection) -> Result<()> {
     conn.execute_batch("PRAGMA foreign_keys = ON;")?;
     conn.execute_batch(MAIN_SCHEMA)?;
     conn.execute_batch(MAIN_VIEWS)?;
+    migrate_apps_unique_to_path(conn)?;
     drop_legacy_apps_category(conn)?;
     Ok(())
 }
@@ -230,5 +195,43 @@ fn drop_legacy_apps_category(conn: &Connection) -> Result<()> {
     if has_column {
         conn.execute("ALTER TABLE apps DROP COLUMN category", [])?;
     }
+    Ok(())
+}
+
+/// UNIQUE 制約を `name` から `path` へ移行する。
+///
+/// 旧スキーマでは `apps.name` が UNIQUE だったが、同パス（同一 exe）の重複登録を
+/// 防ぐほうが実用的なため `path` に変更。既存 DB ではテーブル再作成で移行する。
+fn migrate_apps_unique_to_path(conn: &Connection) -> Result<()> {
+    let name_is_unique: bool = conn
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM pragma_index_list('apps') il
+                JOIN pragma_index_info(il.name) ii ON ii.name = 'name'
+                WHERE il.\"unique\" = 1
+            )",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
+    if !name_is_unique {
+        return Ok(());
+    }
+    conn.execute_batch(
+        "BEGIN;
+        CREATE TABLE apps_new (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            name            TEXT NOT NULL,
+            description     TEXT NOT NULL DEFAULT '',
+            path            TEXT NOT NULL UNIQUE,
+            icon            BLOB,
+            registered_at   DATETIME DEFAULT (datetime('now', 'localtime'))
+        );
+        INSERT OR IGNORE INTO apps_new (id, name, description, path, icon, registered_at)
+            SELECT id, name, description, path, icon, registered_at FROM apps;
+        DROP TABLE apps;
+        ALTER TABLE apps_new RENAME TO apps;
+        COMMIT;",
+    )?;
     Ok(())
 }

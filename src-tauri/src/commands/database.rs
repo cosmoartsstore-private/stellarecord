@@ -76,24 +76,6 @@ const WITH_USERS_DETAIL_COLUMNS: &[ColumnComment] = &[
     ColumnComment { name: "leave_time", label: "Leave時刻", description: "そのプレイヤーを観測しなくなった時刻" },
 ];
 
-const FAVORITES_COLUMNS: &[ColumnComment] = &[
-    ColumnComment { name: "id", label: "ID", description: "お気に入り変更イベントの内部ID" },
-    ColumnComment { name: "session_id", label: "セッション", description: "操作が発生した解析セッション" },
-    ColumnComment { name: "target_type", label: "対象種別", description: "friend / avatar / world" },
-    ColumnComment { name: "target_id", label: "対象ID", description: "対象の識別子 (usr_ / wrld_) またはアバター名" },
-    ColumnComment { name: "action", label: "操作", description: "added (追加) / removed (削除)" },
-    ColumnComment { name: "timestamp", label: "操作時刻", description: "お気に入りを変更した時刻" },
-];
-
-const FAVORITES_DETAIL_COLUMNS: &[ColumnComment] = &[
-    ColumnComment { name: "id", label: "ID", description: "お気に入り変更イベントの内部ID" },
-    ColumnComment { name: "session_id", label: "セッション", description: "操作が発生した解析セッション" },
-    ColumnComment { name: "target_type", label: "対象種別", description: "friend / avatar / world" },
-    ColumnComment { name: "target_id", label: "対象ID", description: "対象の識別子 (usr_ / wrld_) またはアバター名" },
-    ColumnComment { name: "target_name", label: "対象名", description: "フレンドは表示名に解決、それ以外はIDそのまま" },
-    ColumnComment { name: "action", label: "操作", description: "added (追加) / removed (削除)" },
-    ColumnComment { name: "timestamp", label: "操作時刻", description: "お気に入りを変更した時刻" },
-];
 
 const VISIT_SUMMARY_COLUMNS: &[ColumnComment] = &[
     ColumnComment { name: "visit_id", label: "ID", description: "ワールド訪問の内部ID" },
@@ -107,13 +89,6 @@ const VISIT_SUMMARY_COLUMNS: &[ColumnComment] = &[
     ColumnComment { name: "other_player_count", label: "他プレイヤー数", description: "同室していた他プレイヤーの数" },
 ];
 
-const PLAYER_STATS_COLUMNS: &[ColumnComment] = &[
-    ColumnComment { name: "vrchat_id", label: "ユーザーID", description: "VRChat の usr_xxx 識別子" },
-    ColumnComment { name: "account_name", label: "ユーザー名", description: "プレイヤーの表示名" },
-    ColumnComment { name: "co_visit_count", label: "同室回数", description: "一緒にいたワールド訪問の回数" },
-    ColumnComment { name: "first_met", label: "初回", description: "初めて同室した時刻" },
-    ColumnComment { name: "last_met", label: "最終", description: "最後に同室した時刻" },
-];
 
 const NOTIFICATIONS_COLUMNS: &[ColumnComment] = &[
     ColumnComment { name: "id", label: "ID", description: "通知履歴の内部ID" },
@@ -181,22 +156,19 @@ const APPS_COLUMNS: &[ColumnComment] = &[
 
 const TABLE_COMMENTS: &[TableComment] = &[
     // ── テーブル ──
-    TableComment { name: "sessions", label: "セッション", description: "ログ単位の解析セッション", storage: "Main DB", columns: SESSIONS_COLUMNS, default_sort: Some(("start_time", "DESC")), is_view: false },
-    TableComment { name: "visits", label: "Join履歴", description: "ワールド入退室の記録", storage: "Main DB", columns: VISITS_COLUMNS, default_sort: Some(("join_time", "DESC")), is_view: false },
-    TableComment { name: "with_users", label: "同室ユーザー", description: "プレイヤー同席の記録", storage: "Main DB", columns: WITH_USERS_COLUMNS, default_sort: Some(("join_time", "DESC")), is_view: false },
-    TableComment { name: "find_users", label: "ユーザー一覧", description: "観測プレイヤーの基本情報", storage: "Main DB", columns: FIND_USERS_COLUMNS, default_sort: None, is_view: false },
-    TableComment { name: "notifications", label: "通知", description: "招待・フレンド申請など", storage: "Main DB", columns: NOTIFICATIONS_COLUMNS, default_sort: Some(("received_at", "DESC")), is_view: false },
-    TableComment { name: "screenshots", label: "スクリーンショット", description: "VRC Camera の撮影記録", storage: "Main DB", columns: SCREENSHOTS_COLUMNS, default_sort: Some(("timestamp", "DESC")), is_view: false },
-    TableComment { name: "osc", label: "OSC", description: "OSCサービスの検出履歴", storage: "Main DB", columns: OSC_COLUMNS, default_sort: Some(("timestamp", "DESC")), is_view: false },
-    TableComment { name: "favorites", label: "お気に入り", description: "追加/削除イベント", storage: "Main DB", columns: FAVORITES_COLUMNS, default_sort: Some(("timestamp", "DESC")), is_view: false },
-    TableComment { name: "subscription", label: "サブスクリプション", description: "VRChat+ 加入状態", storage: "Main DB", columns: SUBSCRIPTION_COLUMNS, default_sort: Some(("checked_at", "DESC")), is_view: false },
-    TableComment { name: "apps", label: "連携アプリ", description: "ランチャー登録アプリ", storage: "Main DB", columns: APPS_COLUMNS, default_sort: None, is_view: false },
+    TableComment { name: "sessions", label: "セッション", description: "ログファイルに記録されたログイン～ログアウトのセッション情報テーブル", storage: "Main DB", columns: SESSIONS_COLUMNS, default_sort: Some(("start_time", "DESC")), is_view: false },
+    TableComment { name: "visits", label: "Join履歴", description: "Joinしたインスタンスに紐づくデータテーブル", storage: "Main DB", columns: VISITS_COLUMNS, default_sort: Some(("join_time", "DESC")), is_view: false },
+    TableComment { name: "with_users", label: "遭遇ユーザー", description: "インスタンスごとに出会ったユーザー記録テーブル", storage: "Main DB", columns: WITH_USERS_COLUMNS, default_sort: Some(("join_time", "DESC")), is_view: false },
+    TableComment { name: "find_users", label: "ユーザー一覧", description: "ログから検出したユーザーの一覧テーブル", storage: "Main DB", columns: FIND_USERS_COLUMNS, default_sort: None, is_view: false },
+    TableComment { name: "notifications", label: "通知", description: "インバイトやboop、グループ通知などの履歴テーブル", storage: "Main DB", columns: NOTIFICATIONS_COLUMNS, default_sort: Some(("received_at", "DESC")), is_view: false },
+    TableComment { name: "screenshots", label: "写真", description: "撮影した写真に紐づく関連情報テーブル", storage: "Main DB", columns: SCREENSHOTS_COLUMNS, default_sort: Some(("timestamp", "DESC")), is_view: false },
+    TableComment { name: "osc", label: "OSC", description: "OSCアプリケーションの関連情報テーブル", storage: "Main DB", columns: OSC_COLUMNS, default_sort: Some(("timestamp", "DESC")), is_view: false },
+    TableComment { name: "subscription", label: "VRChat+加入状態", description: "セッションごとのVRChat+加入状態の記録テーブル", storage: "Main DB", columns: SUBSCRIPTION_COLUMNS, default_sort: Some(("checked_at", "DESC")), is_view: false },
+    TableComment { name: "apps", label: "連携アプリ", description: "ランチャーに登録されたアプリ情報テーブル", storage: "Main DB", columns: APPS_COLUMNS, default_sort: None, is_view: false },
     // ── ビュー ──
-    TableComment { name: "visit_summary", label: "ワールド訪問", description: "滞在時間・同室人数付き", storage: "Main DB", columns: VISIT_SUMMARY_COLUMNS, default_sort: Some(("join_time", "DESC")), is_view: true },
-    TableComment { name: "player_stats", label: "プレイヤー統計", description: "同室回数・初回/最終", storage: "Main DB", columns: PLAYER_STATS_COLUMNS, default_sort: Some(("co_visit_count", "DESC")), is_view: true },
-    TableComment { name: "with_users_detail", label: "同室詳細", description: "ワールド名・ユーザー名付き", storage: "Main DB", columns: WITH_USERS_DETAIL_COLUMNS, default_sort: Some(("join_time", "DESC")), is_view: true },
-    TableComment { name: "favorites_detail", label: "お気に入り詳細", description: "フレンド名を解決済み", storage: "Main DB", columns: FAVORITES_DETAIL_COLUMNS, default_sort: Some(("timestamp", "DESC")), is_view: true },
-    TableComment { name: "screenshots_detail", label: "スクショ詳細", description: "ワールド名付き", storage: "Main DB", columns: SCREENSHOTS_DETAIL_COLUMNS, default_sort: Some(("timestamp", "DESC")), is_view: true },
+    TableComment { name: "visit_summary", label: "Join履歴詳細", description: "Join履歴テーブル+ワールド名・滞在時間補完ビュー", storage: "Main DB", columns: VISIT_SUMMARY_COLUMNS, default_sort: Some(("join_time", "DESC")), is_view: true },
+    TableComment { name: "with_users_detail", label: "遭遇ユーザー詳細", description: "遭遇ユーザーテーブル+ワールド名・ユーザー名補完ビュー", storage: "Main DB", columns: WITH_USERS_DETAIL_COLUMNS, default_sort: Some(("join_time", "DESC")), is_view: true },
+    TableComment { name: "screenshots_detail", label: "写真詳細", description: "写真テーブル+ワールド名補完ビュー", storage: "Main DB", columns: SCREENSHOTS_DETAIL_COLUMNS, default_sort: Some(("timestamp", "DESC")), is_view: true },
 ];
 
 /// SQL に補間する前にテーブル名を検証する。
