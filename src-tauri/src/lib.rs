@@ -35,9 +35,7 @@ pub fn run() {
         .manage(AnalyzeCancelStatus(Arc::new(AtomicBool::new(false))))
         .invoke_handler(tauri::generate_handler![
             commands::archive::list_archive_files,
-            commands::archive::compress_logs,
             commands::archive::read_archive_log_viewer,
-            commands::archive::get_pending_archive_log_count,
             commands::archive::get_storage_status,
             commands::archive::open_folder,
             commands::archive::get_deletable_source_logs,
@@ -50,10 +48,7 @@ pub fn run() {
             commands::import::launch_enhanced_import,
             commands::import::launch_startup_archive_import,
             commands::import::cancel_analyze,
-            commands::polaris::launch_external_app,
-            commands::polaris::get_polaris_logs,
-            commands::polaris::start_polaris,
-            commands::polaris::get_polaris_status,
+            commands::registry::launch_external_app,
             commands::registry::pick_exe_file,
             commands::registry::extract_exe_display_name,
             commands::registry::register_app,

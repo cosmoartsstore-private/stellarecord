@@ -11,6 +11,15 @@ const SELF_APP_NAME: &str = "StellaRecord";
 /// 自アプリ（StellaRecord 本体）の説明文。
 const SELF_APP_DESCRIPTION: &str = "VRChat ログ管理・閲覧";
 
+/// 登録済み外部アプリを起動する。
+///
+/// # エラー
+/// 対象の実行ファイルを起動できない場合にエラーを返す。
+#[tauri::command]
+pub fn launch_external_app(app_path: &str) -> Result<(), String> {
+    platform::launch_external_process(app_path)
+}
+
 /// ネイティブファイルダイアログで exe ファイルを選択する。
 #[tauri::command]
 pub fn pick_exe_file() -> Result<Option<String>, String> {

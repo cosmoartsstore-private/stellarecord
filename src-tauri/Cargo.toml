@@ -16,7 +16,6 @@ workspace = true
 tauri-build = { workspace = true }
 
 [dependencies]
-sysinfo = { workspace = true }
 tauri = { workspace = true }
 tauri-plugin-fs = { workspace = true }
 tauri-plugin-shell = { workspace = true }

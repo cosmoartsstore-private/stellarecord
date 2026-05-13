@@ -4,7 +4,6 @@ use std::process::Command;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
-use sysinfo::{ProcessesToUpdate, System};
 use winreg::enums::HKEY_CURRENT_USER;
 use winreg::RegKey;
 
@@ -69,14 +68,6 @@ pub fn ensure_single_instance() {
     }
 }
 
-/// インストール済みの `Polaris.exe` パスを解決する。
-///
-/// # 戻り値
-/// Polaris 実行ファイルのパス。インストールディレクトリが見つからない場合は `None`。
-pub fn get_polaris_exe_path() -> Option<std::path::PathBuf> {
-    Some(utils::get_polaris_install_dir()?.join("Polaris.exe"))
-}
-
 /// Windows でコンソールウィンドウを表示せずに外部プロセスを起動する。
 ///
 /// # エラー
@@ -84,23 +75,13 @@ pub fn get_polaris_exe_path() -> Option<std::path::PathBuf> {
 pub fn launch_external_process(path: &str) -> Result<(), String> {
     let mut cmd = Command::new(path);
     // CREATE_NO_WINDOW (0x0800_0000) により、非コンソールプロセスから
-    // Polaris のような GUI アプリを起動する際のコンソール表示を抑制する。
+    // GUI アプリを起動する際のコンソール表示を抑制する。
     #[cfg(windows)]
     cmd.creation_flags(0x0800_0000);
 
     cmd.spawn()
         .map_err(|err| utils::command_err(&format!("起動に失敗しました [{path}]"), err))?;
     Ok(())
-}
-
-/// Polaris プロセスがこのマシン上で実行中かどうかを確認する。
-pub fn get_polaris_status() -> bool {
-    let mut system = System::new();
-    system.refresh_processes(ProcessesToUpdate::All, true);
-    system.processes().values().any(|process| {
-        let process_name = process.name().to_string_lossy().to_lowercase();
-        process_name == "polaris.exe" || process_name == "polaris"
-    })
 }
 
 /// Windows スタートアップ一覧への登録・解除を行う。
