@@ -6,7 +6,6 @@
 pub(crate) mod archive;
 pub(crate) mod database;
 pub(crate) mod import;
-pub(crate) mod polaris;
 pub(crate) mod registry;
 pub(crate) mod settings;
 

@@ -15,7 +15,6 @@ tauri-build   = { version = "2.0.5", features = [] }
 tauri-plugin-fs     = "2.2.0"
 tauri-plugin-shell  = "2.3.5"
 windows       = { version = "0.58", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Threading"] }
-sysinfo       = "0.33.0"
 opener        = "0.8"
 
 [workspace.lints.clippy]

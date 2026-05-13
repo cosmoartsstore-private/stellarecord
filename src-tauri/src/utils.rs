@@ -1,6 +1,6 @@
 use std::fs::{self, OpenOptions};
-use std::io::{self, BufRead, BufReader, Write};
-use std::path::{Path, PathBuf};
+use std::io::{self, Write};
+use std::path::PathBuf;
 
 use chrono::Local;
 use tauri::{AppHandle, Emitter};
@@ -222,44 +222,3 @@ pub fn emit_event_warn<T: serde::Serialize + Clone>(app: &AppHandle, event_name:
     }
 }
 
-/// `path` のログファイルから最新 `limit` 行を読み取る。
-///
-/// # エラー
-/// ファイルを読み取り用に開けない場合にエラーを返す。
-pub fn read_recent_lines(path: &Path, limit: usize) -> Result<Vec<String>, String> {
-    // FILE_SHARE_READ | FILE_SHARE_WRITE により、Polaris が書き込み中のログでも
-    // 読み取り可能にし、Windows での「アクセス拒否」を回避する。
-    #[cfg(windows)]
-    let file = {
-        use std::os::windows::fs::OpenOptionsExt;
-        use windows::Win32::Storage::FileSystem::{FILE_SHARE_READ, FILE_SHARE_WRITE};
-
-        fs::OpenOptions::new()
-            .read(true)
-            .share_mode(FILE_SHARE_READ.0 | FILE_SHARE_WRITE.0)
-            .open(path)
-            .map_err(|err| command_open_err(path, err))?
-    };
-
-    #[cfg(not(windows))]
-    let file = fs::File::open(path).map_err(|err| command_open_err(path, err))?;
-
-    let reader = BufReader::new(file);
-    let mut lines: Vec<String> = Vec::new();
-    for line in reader.lines() {
-        match line {
-            Ok(line) => lines.push(line),
-            Err(err) => log_warn(&format!(
-                "ログ行を読み取れませんでした [{}]: {}",
-                path.display(),
-                err
-            )),
-        }
-    }
-
-    if lines.len() > limit {
-        lines = lines.split_off(lines.len() - limit);
-    }
-
-    Ok(lines)
-}

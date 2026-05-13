@@ -943,21 +943,6 @@ pub fn list_archive_files() -> Result<Vec<ArchiveFileItem>, String> {
     Ok(files)
 }
 
-/// ソースログを管理された `Data` ディレクトリにコピー・圧縮する。
-///
-/// # エラー
-/// ソースログディレクトリが存在しない、または同期に失敗した場合にエラーを返す。
-#[tauri::command]
-pub fn compress_logs() -> Result<String, String> {
-    let source_dir = get_source_log_dir()?;
-    let archive_store_dir = get_archive_store_dir()?;
-    let count = sync_source_logs_into_archive_store(&source_dir, &archive_store_dir)?;
-
-    Ok(format!(
-        "完了しました。{count}件のログを Data に圧縮同期しました。"
-    ))
-}
-
 /// ソース名で DB の正規化済みヒント（カテゴリ・キーワード）を取得する。
 ///
 /// DB が存在しない・該当セッションが未取り込みなど、ヒントが得られないケースは
@@ -1121,17 +1106,6 @@ pub fn read_archive_log_viewer(
         archive_name: file_name,
         source_name,
     })
-}
-
-/// `Data` で管理アーカイブがまだ必要なソースログの件数を数える。
-///
-/// # エラー
-/// ソースログまたは `Data` ディレクトリパスを解決できない場合にエラーを返す。
-#[tauri::command]
-pub fn get_pending_archive_log_count() -> Result<usize, String> {
-    let source_dir = get_source_log_dir()?;
-    let archive_store_dir = get_archive_store_dir()?;
-    Ok(collect_pending_archive_sync_plans(&source_dir, &archive_store_dir)?.len())
 }
 
 /// 現在のアーカイブディレクトリサイズと設定済み上限値を算出する。
