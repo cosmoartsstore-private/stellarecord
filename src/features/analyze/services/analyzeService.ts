@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { AnalyzeProgressEvent } from '../models/types';
+import type { AnalyzeProgressEvent, DeletableLogInfo } from '../models/types';
 
 /** 現在のアーカイブ使用量と設定上限を取得する */
 export const loadStorageStatus = () => invoke<[number, number]>('get_storage_status');
@@ -19,7 +19,7 @@ export const onAnalyzeFinished = (handler: () => void) => listen('analyze-finish
 
 /** アーカイブ済みで削除可能なソースログファイル一覧を取得する */
 export const getDeletableSourceLogs = () =>
-  invoke<import('../models/types').DeletableLogInfo[]>('get_deletable_source_logs');
+  invoke<DeletableLogInfo[]>('get_deletable_source_logs');
 
 /** 指定されたソースログファイルを削除し、削除件数を返す */
 export const deleteSourceLogs = (fileNames: string[]) =>
