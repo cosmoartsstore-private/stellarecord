@@ -86,25 +86,6 @@ pub static RE_IS_LOCAL: LazyLock<Regex> = LazyLock::new(|| {
     )
 });
 
-/// `USharpVideo` 経由でリクエストされた元 URL にマッチする。
-/// 例: `[USharpVideo] Started video load for URL: https://..., requested by Name`
-/// URL のみキャプチャし、リクエスト者情報は収集しない。
-pub static RE_VIDEO: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"\[(?:<[^>]+>)?USharpVideo(?:</[^>]+>)?\] Started video load for URL: (https?://[^,]+)",
-        "RE_VIDEO",
-    )
-});
-
-/// 再生開始後に出力される `USharpVideo` の別形式行にマッチする。
-/// 例: `[USharpVideo] Started video: https://...`
-pub static RE_VIDEO_ALT: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"\[(?:<[^>]+>)?USharpVideo(?:</[^>]+>)?\] Started video: (https?://\S+)",
-        "RE_VIDEO_ALT",
-    )
-});
-
 /// 受信通知行にマッチする。
 /// 例: `Received Notification: <Notification from username:Name, sender user id:usr_xxx ...>`
 /// キャプチャ1は `sender_username`、2は `sender_user_id`、3は `notif_type`、4は `notif_id`、
@@ -124,23 +105,6 @@ pub static RE_NOTIFICATION_WORLD_ID: LazyLock<Regex> =
 pub static RE_NOTIFICATION_WORLD_NAME: LazyLock<Regex> =
     LazyLock::new(|| compile_regex(r"worldName=([^,}]+)", "RE_NOTIFICATION_WORLD_NAME"));
 
-/// 移動先遷移イベント（requested、fetching、set）にマッチする。
-/// VRChat でのワールド移動シーケンスの各フェーズを表す。
-pub static RE_DESTINATION_EVENT: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"\[Behaviour\] Destination (requested|fetching|set): (wrld_[^\s]+)",
-        "RE_DESTINATION_EVENT",
-    )
-});
-
-/// ユーザーがホームに戻る際に出力される「Going to Home Location」行にマッチする。
-pub static RE_GOING_HOME: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"\[Behaviour\] Going to Home Location: (wrld_[^\s]+)",
-        "RE_GOING_HOME",
-    )
-});
-
 /// プレイヤーのロード完了を示す「OnPlayerJoinComplete」行にマッチする。
 pub static RE_PLAYER_JOIN_COMPLETE: LazyLock<Regex> = LazyLock::new(|| {
     compile_regex(
@@ -149,35 +113,11 @@ pub static RE_PLAYER_JOIN_COMPLETE: LazyLock<Regex> = LazyLock::new(|| {
     )
 });
 
-/// インデックス・名前・周波数範囲を含むオーディオデバイス列挙行にマッチする。
-pub static RE_DEVICE_LINE: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"^-- \[(\d+)\] device name = '([^']+)' min/max freq = (\d+) / (\d+)$",
-        "RE_DEVICE_LINE",
-    )
-});
-
 /// セッション開始時に出力される VRChat+ サブスクリプション状態行にマッチする。
 pub static RE_SUBSCRIPTION_STATUS: LazyLock<Regex> = LazyLock::new(|| {
     compile_regex(
         r"Get VRChat Subscription Details! Subscription Id:([^ ]*) active:(True|False) desc:(.*)",
         "RE_SUBSCRIPTION_STATUS",
-    )
-});
-
-/// 最適ネットワークリージョン決定行にマッチする。
-pub static RE_BEST_REGION: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"\[Behaviour\] Got best network region: (.+)",
-        "RE_BEST_REGION",
-    )
-});
-
-/// 同期所要時間を含む UTC 時刻同期行にマッチする。
-pub static RE_CURRENT_UTC: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"Current UTC Time is: ([^,]+), sync took ([^ ]+)s",
-        "RE_CURRENT_UTC",
     )
 });
 
@@ -191,16 +131,6 @@ pub static RE_SCREENSHOT: LazyLock<Regex> = LazyLock::new(|| {
     )
 });
 
-/// OSC/OSCQuery サービス広告行にマッチする。
-/// 例: `Advertising Service VRChat-Client-26262B of type OSCQuery on 53174`
-/// キャプチャ1は `service_name`、2は `service_type`、3は `port`。
-pub static RE_OSC_ADVERTISE: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"Advertising Service (.+?) of type (OSC\w*) on (\d+)",
-        "RE_OSC_ADVERTISE",
-    )
-});
-
 /// OSC サービス検出行にマッチする。
 /// 例: `Found new OSC Service: OyasumiVR at 127.0.0.1:61080`
 /// キャプチャ1は `service_name`、2は `ip_address`、3は `port`。
@@ -208,36 +138,6 @@ pub static RE_OSC_FOUND: LazyLock<Regex> = LazyLock::new(|| {
     compile_regex(
         r"Found new OSC Service: (.+?) at ([\d.]+):(\d+)",
         "RE_OSC_FOUND",
-    )
-});
-
-/// GDev ロガーからのグループ API 呼び出しログ行にマッチする。
-/// 例: `GDev: GetGroupProducts grp_c2e95ae1-b746-4f96-b851-2eb02c075d51`
-/// キャプチャ1は `api_operation`、2は `group_id`。
-pub static RE_GROUP_API: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"GDev: (\w+) (grp_[a-f0-9\-]+)",
-        "RE_GROUP_API",
-    )
-});
-
-/// アバター切り替え意図行にマッチする。
-/// 例: `[Behaviour] Switching NameHere to avatar AvatarName`
-/// キャプチャ1は `player_display_name`、2は `avatar_name`。
-pub static RE_AVATAR_SWITCH: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"\[Behaviour\] Switching (.+?) to avatar (.+)",
-        "RE_AVATAR_SWITCH",
-    )
-});
-
-/// アバター切り替え後に出力されるアバター ID 保存行にマッチする。
-/// 例: `Saving Avatar Data:avtr_b0cfc43c-c8de-4ed7-9264-94de9881ca1b`
-/// キャプチャ1は `avatar_id`。
-pub static RE_AVATAR_SAVE: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"Saving Avatar Data:(avtr_[a-f0-9\-]+)",
-        "RE_AVATAR_SAVE",
     )
 });
 

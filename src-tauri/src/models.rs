@@ -49,7 +49,7 @@ pub struct LogViewerMeta {
 /// ストリーミング中に Tauri イベントとして送出される処理済みログ行の1バッチ。
 ///
 /// Level:    0=plain 1=info 2=warning 3=error 4=debug
-/// Category: 0=plain 1=world 2=travel 3=notification 4=player_join 5=player_ready 6=player_left 7=video
+/// Category: 0=plain 1=world 2=notification 3=player_join 4=player_ready 5=player_left 6=debug-system
 #[derive(Debug, Clone, Serialize)]
 pub struct LogViewerChunk {
     pub session_id: String,
