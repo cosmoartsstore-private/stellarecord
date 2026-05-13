@@ -82,6 +82,22 @@
   display: flex;
   justify-content: center;
   min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--db-scrollbar-thumb) transparent;
+}
+
+.contentArea::-webkit-scrollbar {
+  display: block;
+  width: 6px;
+}
+
+.contentArea::-webkit-scrollbar-thumb {
+  background: var(--db-scrollbar-thumb);
+  border-radius: 999px;
+}
+
+.contentArea::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .navBrand {
@@ -180,14 +196,33 @@
 
 @media (width <= 1024px) {
   .topNavigation {
-    padding: 0 1.25rem;
-    padding-top: 1rem;
-    padding-bottom: 0.25rem;
+    position: relative;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem var(--content-pad) 0.5rem;
+  }
+
+  .navBrand {
+    grid-column: 1;
+  }
+
+  .pillNav {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    position: static;
+    transform: none;
+    justify-self: center;
+  }
+
+  .navSettingsButton {
+    grid-column: 3;
   }
 
   .contentArea {
-    padding: 1.25rem;
-    padding-top: calc(var(--nav-height) + 0.5rem);
+    padding: 0.75rem var(--content-pad);
+    padding-top: 0;
   }
 
   .toastContainer {
@@ -199,5 +234,37 @@
   .toast {
     min-width: 0;
     max-width: none;
+  }
+
+  .navLogoLight,
+  .navLogoDark,
+  .navLogoMidnight {
+    height: 30px;
+    transform: translateX(-8px);
+  }
+}
+
+@media (width <= 640px) {
+  .topNavigation {
+    padding: 0.5rem 0.75rem 0.35rem;
+    gap: 0.35rem;
+  }
+
+  .pillBtn {
+    padding: 6px 12px;
+    font-size: 0.78rem;
+  }
+
+  .navLogoLight,
+  .navLogoDark,
+  .navLogoMidnight {
+    height: 24px;
+    transform: translateX(-4px);
+  }
+
+  .navSettingsButton {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
   }
 }

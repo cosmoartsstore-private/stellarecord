@@ -227,3 +227,20 @@
 .attributionLink:hover {
   text-decoration-color: var(--accent);
 }
+
+@media (width <= 640px) {
+  .modal {
+    max-width: 100%;
+  }
+
+  .trigger {
+    left: 0.75rem;
+    bottom: 0.75rem;
+    width: 32px;
+    height: 32px;
+  }
+
+  .body {
+    padding: 1rem 1.25rem 1.25rem;
+  }
+}

@@ -32,6 +32,12 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  user-select: none;
+}
+
+input,
+textarea {
+  user-select: text;
 }
 
 #root {
@@ -83,6 +89,19 @@ button {
 @media (width <= 1024px) {
   :root {
     --content-pad: 1.25rem;
+    --card-pad: 1.25rem;
+    --card-radius: 20px;
+    --gap-lg: 1.25rem;
+  }
+}
+
+@media (width <= 640px) {
+  :root {
+    --content-pad: 0.75rem;
+    --card-pad: 1rem;
+    --card-radius: 16px;
+    --gap-base: 1rem;
+    --gap-lg: 1rem;
   }
 }
 

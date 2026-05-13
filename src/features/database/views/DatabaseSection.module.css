@@ -246,6 +246,7 @@
   white-space: nowrap;
   border-right: 1px solid var(--db-table-cell-border);
   vertical-align: top;
+  user-select: text;
 }
 
 .table tbody tr {
@@ -307,5 +308,36 @@
 
   .sidebar {
     max-height: 280px;
+  }
+
+  .content {
+    min-height: 400px;
+  }
+
+  .contentHeader {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pagination {
+    justify-content: center;
+  }
+}
+
+@media (width <= 640px) {
+  .sidebar {
+    max-height: 200px;
+    padding: 0.75rem;
+    border-radius: var(--card-radius);
+  }
+
+  .contentHeader {
+    padding: 0.75rem 1rem;
+  }
+
+  .table th,
+  .table td {
+    padding: 0.55rem 0.75rem;
+    font-size: 0.75rem;
   }
 }

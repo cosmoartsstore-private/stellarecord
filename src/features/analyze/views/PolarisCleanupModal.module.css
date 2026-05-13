@@ -194,3 +194,21 @@
   color: var(--text-faint);
   font-family: var(--font-mono);
 }
+
+@media (width <= 640px) {
+  .fileList {
+    border-radius: 12px;
+    padding: 0.5rem;
+    gap: 0.5rem;
+  }
+
+  .fileRow {
+    padding: 0.75rem 0.85rem;
+    border-radius: 12px;
+  }
+
+  .notice {
+    border-radius: 10px;
+    font-size: 0.75rem;
+  }
+}

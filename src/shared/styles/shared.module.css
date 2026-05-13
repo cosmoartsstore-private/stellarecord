@@ -206,3 +206,55 @@
   background: transparent;
   cursor: default;
 }
+
+@media (width <= 1024px) {
+  .modalOverlay {
+    padding: 1rem;
+  }
+
+  .modalContent {
+    border-radius: 20px;
+    padding: 1.5rem;
+  }
+
+  .btn {
+    padding: 0.6rem 1.1rem;
+    font-size: 0.82rem;
+    border-radius: 12px;
+  }
+
+  .card {
+    border-radius: var(--card-radius);
+  }
+
+  .sectionHeader {
+    margin-bottom: 1rem;
+  }
+}
+
+@media (width <= 640px) {
+  .modalOverlay {
+    padding: 0.5rem;
+  }
+
+  .modalContent {
+    border-radius: 16px;
+    padding: 1.25rem;
+    max-width: 100%;
+  }
+
+  .btn {
+    padding: 0.55rem 0.9rem;
+    font-size: 0.78rem;
+    border-radius: 10px;
+  }
+
+  .modalActions {
+    flex-direction: column;
+  }
+
+  .modalActions .btn {
+    min-width: 0;
+    width: 100%;
+  }
+}

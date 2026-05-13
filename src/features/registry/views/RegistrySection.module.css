@@ -10,13 +10,7 @@
 }
 
 .reloadButton {
-  display: inline-flex;
-  align-items: center;
   gap: 0.3rem;
-  padding: 0.45rem 0.8rem;
-  font-size: 0.75rem;
-  white-space: nowrap;
-  box-shadow: none;
 }
 
 .reloadButton:disabled {
@@ -47,6 +41,19 @@
   display: flex;
   align-items: center;
   gap: 0.6rem;
+}
+
+.headerActions > button {
+  padding: 0.45rem 0.8rem;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  box-shadow: none;
+}
+
+.headerActions > button :global(.icon-svg) {
+  width: 16px;
+  height: 16px;
+  fill: currentcolor;
 }
 
 .launcherViewSwitch {
@@ -287,19 +294,36 @@
 }
 
 @media (width <= 1024px) {
+  .sectionHeaderRow {
+    flex-wrap: wrap;
+  }
+
+  .headerActions {
+    flex-wrap: wrap;
+  }
+
   .launcherListItem {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .launcherListActions,
-  .launcherViewSwitch {
+  .launcherListActions {
     width: 100%;
   }
 
-  .launcherListActions > *,
-  .launcherViewSwitch > * {
+  .launcherListActions > * {
     flex: 1;
+  }
+
+  .launcherCardLarge {
+    padding: 1rem;
+    border-radius: 18px;
+  }
+
+  .launcherCardLargeIcon {
+    width: 64px;
+    height: 64px;
+    border-radius: 18px;
   }
 }
 
@@ -309,8 +333,23 @@
   }
 }
 
-@media (width <= 600px) {
+@media (width <= 640px) {
   .launcherCardGrid {
     grid-template-columns: 1fr;
+  }
+
+  .launcherListIcon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+  }
+
+  .launcherListItem {
+    padding: 0.9rem;
+    border-radius: 16px;
+  }
+
+  .launcherListActions {
+    gap: 0.5rem;
   }
 }
