@@ -31,7 +31,8 @@ export function SettingsControls({
           step={1}
           value={archiveLimitDraft}
           onChange={(e) => {
-            onArchiveLimitDraftChange(e.target.value);
+            const v = e.target.value;
+            if (v.length <= 8) onArchiveLimitDraftChange(v);
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') onSaveArchiveLimit();

@@ -13,7 +13,7 @@
 }
 
 .inlineNumberInput {
-  width: 72px;
+  width: 100px;
   padding: 0.4rem 0.6rem;
   border-radius: 10px;
   border: 1px solid var(--border);
@@ -74,4 +74,22 @@
   background: var(--accent-gradient);
   border-color: transparent;
   color: #fff;
+}
+
+@media (width <= 640px) {
+  .inlineSettingRow {
+    flex-wrap: wrap;
+  }
+
+  .inlineNumberInput {
+    width: 60px;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.78rem;
+  }
+
+  .autoStartBtn {
+    height: 30px;
+    padding: 0 0.65rem;
+    font-size: 0.75rem;
+  }
 }
