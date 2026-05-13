@@ -381,7 +381,6 @@
 /* ── カテゴリ色 ──────────────────────────── */
 
 .line.categoryWorld,    .legendWorld        { color: var(--terminal-world); }
-.line.categoryTravel                        { color: var(--terminal-travel); }
 .line.categoryNotification, .legendNotification { color: var(--terminal-notification); }
 .line.categoryPlayerJoin,
 .line.categoryPlayerReady,  .legendPlayerJoin   { color: var(--terminal-player-join); }
@@ -390,9 +389,6 @@
 .legendError                                { color: var(--terminal-error); }
 .legendDebug                                { color: var(--terminal-debug); }
 .line.categoryDebugSystem                   { color: var(--terminal-debug-system); }
-.line.categoryDebugAvatar                   { color: var(--terminal-debug-avatar); }
-.line.categoryDebugNetwork                  { color: var(--terminal-debug-network); }
-.line.categoryDebugInteract                 { color: var(--terminal-debug-interact); }
 
 /* ── レベル色 ─────────────────────────────── */
 
@@ -407,15 +403,6 @@
 @media (width <= 900px) {
   .sidebar {
     width: 200px;
-  }
-
-  .line {
-    grid-template-columns: 1fr;
-    gap: 0.2rem;
-  }
-
-  .time {
-    font-size: 0.72rem;
   }
 }
 
