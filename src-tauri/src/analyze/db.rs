@@ -119,7 +119,6 @@ CREATE TABLE IF NOT EXISTS apps (
     name            TEXT NOT NULL UNIQUE,
     description     TEXT NOT NULL DEFAULT '',
     path            TEXT NOT NULL,
-    category        TEXT NOT NULL DEFAULT 'thirdparty' CHECK(category IN ('fastparty', 'thirdparty')),
     icon            BLOB,
     registered_at   DATETIME DEFAULT (datetime('now', 'localtime'))
 );
@@ -212,5 +211,24 @@ pub fn init_main_db(conn: &Connection) -> Result<()> {
     conn.execute_batch("PRAGMA foreign_keys = ON;")?;
     conn.execute_batch(MAIN_SCHEMA)?;
     conn.execute_batch(MAIN_VIEWS)?;
+    drop_legacy_apps_category(conn)?;
+    Ok(())
+}
+
+/// 旧スキーマで残存している `apps.category` 列を削除するマイグレーション。
+///
+/// fastparty / thirdparty の区別を撤廃した際の後方互換のため、列が存在する場合のみ
+/// `ALTER TABLE ... DROP COLUMN` を発行する。新規 DB では無操作。
+fn drop_legacy_apps_category(conn: &Connection) -> Result<()> {
+    let has_column: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('apps') WHERE name = 'category')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
+    if has_column {
+        conn.execute("ALTER TABLE apps DROP COLUMN category", [])?;
+    }
     Ok(())
 }

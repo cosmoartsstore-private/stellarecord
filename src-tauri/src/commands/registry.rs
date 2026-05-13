@@ -31,7 +31,7 @@ pub fn extract_exe_display_name(path: String) -> Result<String, String> {
         .ok_or_else(|| "実行ファイルから表示名を取得できませんでした。".to_string())
 }
 
-/// StellaRecord 本体を `apps` テーブルへ fastparty として登録（または更新）する。
+/// StellaRecord 本体を `apps` テーブルへ登録（または更新）する。
 ///
 /// アプリ起動時に1度だけ呼び出すことを想定。失敗時はクリティカルではないため
 /// 呼び出し側で警告ログにとどめ、アプリ起動を継続できるようにする。
@@ -54,12 +54,11 @@ pub fn ensure_self_app_registered() -> Result<(), String> {
 
     // name UNIQUE 制約があるため、既存行があれば path / description / icon を最新化する。
     conn.execute(
-        "INSERT INTO apps (name, description, path, category, icon)
-         VALUES (?1, ?2, ?3, 'fastparty', ?4)
+        "INSERT INTO apps (name, description, path, icon)
+         VALUES (?1, ?2, ?3, ?4)
          ON CONFLICT(name) DO UPDATE SET
              description = excluded.description,
              path        = excluded.path,
-             category    = 'fastparty',
              icon        = excluded.icon",
         params![SELF_APP_NAME, SELF_APP_DESCRIPTION, path_str, icon_png],
     )
@@ -68,7 +67,7 @@ pub fn ensure_self_app_registered() -> Result<(), String> {
     Ok(())
 }
 
-/// サードパーティアプリをランチャーに登録する。
+/// 任意の exe をランチャーに登録する。
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
 pub fn register_app(path: String, name: String, description: String) -> Result<(), String> {
@@ -89,7 +88,7 @@ pub fn register_app(path: String, name: String, description: String) -> Result<(
         .map_err(|e| utils::command_open_err(&db_path, e))?;
 
     conn.execute(
-        "INSERT INTO apps (name, description, path, category, icon) VALUES (?1, ?2, ?3, 'thirdparty', ?4)",
+        "INSERT INTO apps (name, description, path, icon) VALUES (?1, ?2, ?3, ?4)",
         params![name, description, path, icon_png],
     )
     .map_err(|e| {
@@ -104,7 +103,9 @@ pub fn register_app(path: String, name: String, description: String) -> Result<(
     Ok(())
 }
 
-/// サードパーティアプリの登録を解除する。
+/// 登録済みアプリを解除する。自アプリも含めて任意の行を削除可能。
+///
+/// 自アプリを削除した場合、次回起動時の `ensure_self_app_registered` で再登録される。
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
 pub fn unregister_app(name: String) -> Result<(), String> {
@@ -113,10 +114,7 @@ pub fn unregister_app(name: String) -> Result<(), String> {
         .map_err(|e| utils::command_open_err(&db_path, e))?;
 
     let affected = conn
-        .execute(
-            "DELETE FROM apps WHERE name = ?1 AND category = 'thirdparty'",
-            params![name],
-        )
+        .execute("DELETE FROM apps WHERE name = ?1", params![name])
         .map_err(|e| utils::command_err("アプリの登録解除に失敗しました", e))?;
 
     if affected == 0 {

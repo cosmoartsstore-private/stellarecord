@@ -29,8 +29,7 @@ export function RegistrySection({
   onRegisterApp,
   onReload,
 }: RegistrySectionProps) {
-  // 両グループを統合した単一リストとして表示
-  const allApps = [...registryApps.fastparty, ...registryApps.thirdparty];
+  const allApps = registryApps.apps;
 
   /** Base64 PNGアイコンを描画する（未設定時はフォールバックアイコン） */
   const renderLauncherIcon = (app: AppCard) => {
@@ -119,15 +118,13 @@ export function RegistrySection({
                   >
                     フォルダを開く
                   </button>
-                  {app.category === 'thirdparty' && (
-                    <button
-                      className={styles.deleteButton}
-                      onClick={() => { onUnregisterApp(app); }}
-                      aria-label="登録解除"
-                    >
-                      <StellaIcon name={stellaIconNames.trash} />
-                    </button>
-                  )}
+                  <button
+                    className={styles.deleteButton}
+                    onClick={() => { onUnregisterApp(app); }}
+                    aria-label="登録解除"
+                  >
+                    <StellaIcon name={stellaIconNames.trash} />
+                  </button>
                 </div>
               </article>
             ))}
@@ -162,15 +159,13 @@ export function RegistrySection({
                   >
                     フォルダを開く
                   </button>
-                  {app.category === 'thirdparty' && (
-                    <button
-                      className={styles.deleteButton}
-                      onClick={() => { onUnregisterApp(app); }}
-                      aria-label="登録解除"
-                    >
-                      <StellaIcon name={stellaIconNames.trash} />
-                    </button>
-                  )}
+                  <button
+                    className={styles.deleteButton}
+                    onClick={() => { onUnregisterApp(app); }}
+                    aria-label="登録解除"
+                  >
+                    <StellaIcon name={stellaIconNames.trash} />
+                  </button>
                 </div>
               </article>
             ))}

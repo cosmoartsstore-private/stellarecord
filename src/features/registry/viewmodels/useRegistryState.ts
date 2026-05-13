@@ -4,8 +4,7 @@ import { loadRegistryCatalog } from '../services/registryService';
 
 /** データ取得前に使用する空のカタログ */
 const emptyRegistryCatalog: RegistryCatalog = {
-  fastparty: [],
-  thirdparty: [],
+  apps: [],
 };
 
 /** レジストリアプリカタログの取得・リロードを管理するフック */
