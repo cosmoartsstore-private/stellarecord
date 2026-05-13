@@ -176,7 +176,6 @@ const APPS_COLUMNS: &[ColumnComment] = &[
     ColumnComment { name: "name", label: "アプリ名", description: "連携アプリの表示名" },
     ColumnComment { name: "description", label: "説明", description: "連携アプリの説明文" },
     ColumnComment { name: "path", label: "パス", description: "実行ファイルのパス" },
-    ColumnComment { name: "category", label: "カテゴリ", description: "fastparty / thirdparty の区分" },
     ColumnComment { name: "icon", label: "アイコン", description: "アイコン画像データ (BLOB)" },
 ];
 

@@ -74,17 +74,14 @@ pub struct AppCard {
     pub name: String,
     pub description: String,
     pub path: String,
-    pub category: String,
     pub icon_data: Option<String>,
 }
 
-/// UI で使用するレジストリカテゴリ別に起動可能アプリをグループ化する。
+/// ランチャーに表示するアプリ一覧。区別なしの平坦リスト。
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct RegistryCatalog {
     #[serde(default)]
-    pub fastparty: Vec<AppCard>,
-    #[serde(default)]
-    pub thirdparty: Vec<AppCard>,
+    pub apps: Vec<AppCard>,
 }
 
 /// レジストリから Polaris 設定を読み込む。キーが存在しない場合はデフォルト値を返す。
@@ -184,7 +181,7 @@ pub fn load_registry_catalog() -> RegistryCatalog {
     }
 
     let mut stmt = match conn.prepare(
-        "SELECT name, description, path, category, icon FROM apps ORDER BY name",
+        "SELECT name, description, path, icon FROM apps ORDER BY name",
     ) {
         Ok(s) => s,
         Err(err) => {
@@ -197,14 +194,12 @@ pub fn load_registry_catalog() -> RegistryCatalog {
         let name: String = row.get(0)?;
         let description: String = row.get(1)?;
         let path: String = row.get(2)?;
-        let category: String = row.get(3)?;
-        let icon: Option<Vec<u8>> = row.get(4)?;
+        let icon: Option<Vec<u8>> = row.get(3)?;
         let icon_data = icon.map(|bytes| BASE64.encode(&bytes));
         Ok(AppCard {
             name,
             description,
             path,
-            category,
             icon_data,
         })
     }) {
@@ -217,10 +212,7 @@ pub fn load_registry_catalog() -> RegistryCatalog {
 
     let mut catalog = RegistryCatalog::default();
     for card in rows.flatten() {
-        match card.category.as_str() {
-            "fastparty" => catalog.fastparty.push(card),
-            _ => catalog.thirdparty.push(card),
-        }
+        catalog.apps.push(card);
     }
 
     catalog
