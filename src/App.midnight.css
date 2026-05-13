@@ -72,6 +72,8 @@
   --db-table-cell-border: #1c1c1e;
   --db-table-row-border: #1c1c1e;
   --db-table-row-hover-bg: rgb(123 147 248 / 8%);
+  --db-scrollbar-thumb: rgb(161 161 170 / 35%);
+  --db-scrollbar-track: rgb(39 39 42 / 50%);
 
   /* ── トースト ──────────────────────────────────── */
   --toast-bg: rgb(18 18 20 / 95%);
@@ -89,7 +91,7 @@
   --archive-file-selected-bg: rgb(123 147 248 / 12%);
   --file-checkbox-border: rgb(123 147 248 / 40%);
   --file-list-bg: rgb(12 12 14 / 60%);
-  --file-scrollbar-thumb: rgb(123 147 248 / 22%);
+  --file-scrollbar-thumb: rgb(123 147 248 / 45%);
   --file-item-border: #27272a;
   --file-item-selected-bg: rgb(123 147 248 / 12%);
 
@@ -108,7 +110,7 @@
   --terminal-highlight-bg: rgb(123 147 248 / 20%);
   --terminal-highlight-text: #ffffff;
   --terminal-highlight-border: rgb(160 180 252 / 18%);
-  --terminal-scrollbar-thumb: rgb(123 147 248 / 20%);
+  --terminal-scrollbar-thumb: rgb(123 147 248 / 45%);
 
   /* ── 共有 ─────────────────────────────────── */
   --sr-shared-body-background: var(--bg-gradient);

@@ -38,7 +38,7 @@
 
 .sectionHeader h2 {
   margin: 0 0 0.3rem;
-  font-size: clamp(2.2rem, 4vw, 3.4rem);
+  font-size: clamp(1.5rem, 2.8vw, 2rem);
   font-weight: 800;
   letter-spacing: -0.05em;
 }

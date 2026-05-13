@@ -22,4 +22,4 @@ export const registerApp = (path: string, name: string, description: string) =>
   invoke('register_app', { path, name, description });
 
 /** サードパーティアプリの登録を解除する */
-export const unregisterApp = (name: string) => invoke('unregister_app', { name });
+export const unregisterApp = (path: string) => invoke('unregister_app', { path });

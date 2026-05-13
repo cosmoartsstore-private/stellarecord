@@ -76,8 +76,8 @@ export function useSettingsState() {
   /** 警告ラインの入力値をバリデーションして保存する */
   const saveArchiveLimit = useCallback(async () => {
     const parsed = Number(archiveLimitDraft);
-    if (!Number.isFinite(parsed) || parsed <= 0 || !Number.isInteger(parsed)) {
-      throw new Error('警告ラインは 1MB 単位の正の整数で指定してください');
+    if (!Number.isFinite(parsed) || parsed <= 0 || !Number.isInteger(parsed) || parsed > 10485760) {
+      throw new Error('警告ラインは 1MB～10,485,760MB (10TB) の整数で指定してください');
     }
     await saveManagementSettings(isStartupEnabledDraft, parsed);
   }, [archiveLimitDraft, isStartupEnabledDraft, saveManagementSettings]);

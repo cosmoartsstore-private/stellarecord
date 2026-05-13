@@ -50,20 +50,11 @@ export function DatabaseSection({
         type="button"
         onClick={() => { onSelectTable(table.name); }}
         className={`${styles.tableItem} ${isActive ? styles.tableItemActive : ''}`}
-        title={table.is_view ? 'ビュー (VIEW)' : 'テーブル (TABLE)'}
+
       >
-        {showPhysicalNames ? (
-          <span className={styles.tableItemLabel}>
-            {table.is_view && <span className={styles.viewBadge}>!</span>}
-            {table.name}
-          </span>
-        ) : (
-          <span className={styles.tableItemLabel}>
-            {table.is_view && <span className={styles.viewBadge}>!</span>}
-            {table.label}
-            <span className={styles.tableItemDesc}>{table.description}</span>
-          </span>
-        )}
+        <span className={styles.tableItemLabel}>
+          {showPhysicalNames ? table.name : table.label}
+        </span>
       </button>
     );
   };
@@ -82,9 +73,8 @@ export function DatabaseSection({
               type="button"
               className={styles.nameToggle}
               onClick={() => { setShowPhysicalNames((prev) => !prev); }}
-              title={showPhysicalNames ? '論理名に切替' : '物理名に切替'}
             >
-              {showPhysicalNames ? 'ABC' : 'あ'}
+              {showPhysicalNames ? 'Physical' : 'Logical'}
             </button>
           </div>
           {dbTables.length === 0 && (
@@ -111,6 +101,9 @@ export function DatabaseSection({
                     ? selectedTableSummary.label
                     : 'DB プレビュー'}
               </h3>
+              {selectedTableSummary && selectedTableSummary.description.length > 0 && (
+                <span className={styles.headerDesc}>{selectedTableSummary.description}</span>
+              )}
               <span className={styles.headerMeta}>
                 {tableData.total_rows > 0
                   ? `${String(rangeStart)}～${String(rangeEnd)} / 全 ${String(tableData.total_rows)} 件`

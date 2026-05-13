@@ -112,17 +112,21 @@ pub fn set_startup_enabled(value_name: &str, enabled: bool) -> Result<(), String
 }
 
 /// exe ファイルからアイコンを抽出し、PNG バイト列として返す。
+///
+/// シェルの Jumbo イメージリスト (256×256) から高解像度アイコンの取得を試み、
+/// 失敗した場合は `ExtractIconExW` (32×32) にフォールバックする。
 pub fn extract_exe_icon_png(exe_path: &Path) -> Option<Vec<u8>> {
-    use std::io::Cursor;
+    extract_icon_jumbo(exe_path).or_else(|| extract_icon_legacy(exe_path))
+}
+
+/// SHGetImageList(SHIL_JUMBO) 経由で 256×256 アイコンを取得する。
+fn extract_icon_jumbo(exe_path: &Path) -> Option<Vec<u8>> {
     use std::os::windows::ffi::OsStrExt;
 
-    use image::{ImageFormat, RgbaImage};
-    use windows::Win32::Graphics::Gdi::{
-        CreateCompatibleDC, DeleteDC, DeleteObject, GetDIBits, GetObjectW, BITMAP,
-        BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
-    };
-    use windows::Win32::UI::Shell::ExtractIconExW;
-    use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo};
+    use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
+    use windows::Win32::UI::Controls::IImageList;
+    use windows::Win32::UI::Shell::{SHGetFileInfoW, SHGetImageList, SHFILEINFOW, SHGFI_SYSICONINDEX};
+    use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, HICON};
 
     let wide_path: Vec<u16> = exe_path
         .as_os_str()
@@ -130,7 +134,55 @@ pub fn extract_exe_icon_png(exe_path: &Path) -> Option<Vec<u8>> {
         .chain(std::iter::once(0))
         .collect();
 
-    let mut large_icon = windows::Win32::UI::WindowsAndMessaging::HICON::default();
+    let com_ok = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }.is_ok();
+
+    let result = (|| -> Option<Vec<u8>> {
+        let mut file_info = SHFILEINFOW::default();
+        #[allow(clippy::cast_possible_truncation)]
+        let ret = unsafe {
+            SHGetFileInfoW(
+                windows::core::PCWSTR(wide_path.as_ptr()),
+                Default::default(),
+                Some(&mut file_info),
+                std::mem::size_of::<SHFILEINFOW>() as u32,
+                SHGFI_SYSICONINDEX,
+            )
+        };
+        if ret == 0 {
+            return None;
+        }
+
+        const SHIL_JUMBO: i32 = 4;
+        let image_list: IImageList = unsafe { SHGetImageList(SHIL_JUMBO) }.ok()?;
+
+        let hicon: HICON = unsafe { image_list.GetIcon(file_info.iIcon, 1) }.ok()?;
+        let png = hicon_to_png(hicon);
+        unsafe {
+            let _ = DestroyIcon(hicon);
+        }
+        png
+    })();
+
+    if com_ok {
+        unsafe { CoUninitialize(); }
+    }
+    result
+}
+
+/// ExtractIconExW による 32×32 フォールバック。
+fn extract_icon_legacy(exe_path: &Path) -> Option<Vec<u8>> {
+    use std::os::windows::ffi::OsStrExt;
+
+    use windows::Win32::UI::Shell::ExtractIconExW;
+    use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, HICON};
+
+    let wide_path: Vec<u16> = exe_path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+
+    let mut large_icon = HICON::default();
     let count = unsafe {
         ExtractIconExW(
             windows::core::PCWSTR(wide_path.as_ptr()),
@@ -144,84 +196,95 @@ pub fn extract_exe_icon_png(exe_path: &Path) -> Option<Vec<u8>> {
         return None;
     }
 
-    let result = (|| -> Option<Vec<u8>> {
-        let mut icon_info = windows::Win32::UI::WindowsAndMessaging::ICONINFO::default();
-        unsafe { GetIconInfo(large_icon, &raw mut icon_info) }.ok()?;
-
-        let color_bmp = icon_info.hbmColor;
-        let mask_bmp = icon_info.hbmMask;
-
-        let cleanup_bitmaps = || unsafe {
-            let _ = DeleteObject(color_bmp);
-            let _ = DeleteObject(mask_bmp);
-        };
-
-        let mut bmp = BITMAP::default();
-        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-        let bmp_size = std::mem::size_of::<BITMAP>() as i32;
-        if unsafe { GetObjectW(color_bmp, bmp_size, Some((&raw mut bmp).cast())) } == 0 {
-            cleanup_bitmaps();
-            return None;
-        }
-
-        let width = bmp.bmWidth;
-        let height = bmp.bmHeight;
-        if width <= 0 || height <= 0 {
-            cleanup_bitmaps();
-            return None;
-        }
-
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let (w, h) = (width as u32, height as u32);
-
-        #[allow(clippy::cast_possible_truncation)]
-        let mut info_header = BITMAPINFOHEADER {
-            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-            biWidth: width,
-            biHeight: -height, // top-down
-            biPlanes: 1,
-            biBitCount: 32,
-            biCompression: BI_RGB.0,
-            ..Default::default()
-        };
-
-        let mut pixels = vec![0u8; (w * h * 4) as usize];
-        let hdc = unsafe { CreateCompatibleDC(None) };
-
-        let scan_result = unsafe {
-            GetDIBits(
-                hdc,
-                color_bmp,
-                0,
-                h,
-                Some(pixels.as_mut_ptr().cast()),
-                (&raw mut info_header).cast(),
-                DIB_RGB_COLORS,
-            )
-        };
-
-        let _ = unsafe { DeleteDC(hdc) };
-        cleanup_bitmaps();
-
-        if scan_result == 0 {
-            return None;
-        }
-
-        // BGRA → RGBA
-        for chunk in pixels.chunks_exact_mut(4) {
-            chunk.swap(0, 2);
-        }
-
-        let img = RgbaImage::from_raw(w, h, pixels)?;
-        let mut buf = Cursor::new(Vec::new());
-        img.write_to(&mut buf, ImageFormat::Png).ok()?;
-        Some(buf.into_inner())
-    })();
-
+    let result = hicon_to_png(large_icon);
     unsafe {
         let _ = DestroyIcon(large_icon);
     }
     result
+}
+
+/// HICON → PNG バイト列変換。
+fn hicon_to_png(hicon: windows::Win32::UI::WindowsAndMessaging::HICON) -> Option<Vec<u8>> {
+    use std::io::Cursor;
+
+    use image::{ImageFormat, RgbaImage};
+    use windows::Win32::Graphics::Gdi::{
+        CreateCompatibleDC, DeleteDC, DeleteObject, GetDIBits, GetObjectW, BITMAP,
+        BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::GetIconInfo;
+
+    let mut icon_info = windows::Win32::UI::WindowsAndMessaging::ICONINFO::default();
+    unsafe { GetIconInfo(hicon, &raw mut icon_info) }.ok()?;
+
+    let color_bmp = icon_info.hbmColor;
+    let mask_bmp = icon_info.hbmMask;
+
+    let cleanup_bitmaps = || unsafe {
+        let _ = DeleteObject(color_bmp);
+        let _ = DeleteObject(mask_bmp);
+    };
+
+    let mut bmp = BITMAP::default();
+    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+    let bmp_size = std::mem::size_of::<BITMAP>() as i32;
+    if unsafe { GetObjectW(color_bmp, bmp_size, Some((&raw mut bmp).cast())) } == 0 {
+        cleanup_bitmaps();
+        return None;
+    }
+
+    let width = bmp.bmWidth;
+    let height = bmp.bmHeight;
+    if width <= 0 || height <= 0 {
+        cleanup_bitmaps();
+        return None;
+    }
+
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let (w, h) = (width as u32, height as u32);
+
+    #[allow(clippy::cast_possible_truncation)]
+    let mut info_header = BITMAPINFOHEADER {
+        biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+        biWidth: width,
+        biHeight: -height, // top-down
+        biPlanes: 1,
+        biBitCount: 32,
+        biCompression: BI_RGB.0,
+        ..Default::default()
+    };
+
+    let mut pixels = vec![0u8; (w * h * 4) as usize];
+    let hdc = unsafe { CreateCompatibleDC(None) };
+
+    let scan_result = unsafe {
+        GetDIBits(
+            hdc,
+            color_bmp,
+            0,
+            h,
+            Some(pixels.as_mut_ptr().cast()),
+            (&raw mut info_header).cast(),
+            DIB_RGB_COLORS,
+        )
+    };
+
+    let _ = unsafe { DeleteDC(hdc) };
+    cleanup_bitmaps();
+
+    if scan_result == 0 {
+        return None;
+    }
+
+    // BGRA → RGBA
+    for chunk in pixels.chunks_exact_mut(4) {
+        chunk.swap(0, 2);
+    }
+
+    let img = RgbaImage::from_raw(w, h, pixels)?;
+    let mut buf = Cursor::new(Vec::new());
+    img.write_to(&mut buf, ImageFormat::Png).ok()?;
+    Some(buf.into_inner())
 }
 
 /// exe の Windows VersionInfo から表示名を抽出する。
@@ -472,5 +535,100 @@ pub fn pick_folder_dialog() -> Result<Option<String>, String> {
     #[cfg(not(windows))]
     {
         Err("このプラットフォームではフォルダ選択ダイアログを利用できません。".to_string())
+    }
+}
+
+/// ネイティブファイル選択ダイアログでログファイルを複数選択する。
+pub fn pick_log_files_dialog() -> Result<Vec<String>, String> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStringExt;
+
+        use windows::core::{HSTRING, PCWSTR};
+        use windows::Win32::System::Com::{
+            CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
+            COINIT_APARTMENTTHREADED,
+        };
+        use windows::Win32::UI::Shell::Common::COMDLG_FILTERSPEC;
+        use windows::Win32::UI::Shell::{
+            FileOpenDialog, IFileOpenDialog, FOS_ALLOWMULTISELECT, FOS_FILEMUSTEXIST,
+            FOS_PATHMUSTEXIST, SIGDN_FILESYSPATH,
+        };
+
+        let hr = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+        if hr.is_err() {
+            return Err(format!("COM 初期化に失敗しました: {hr}"));
+        }
+
+        let result = (|| -> Result<Vec<String>, String> {
+            let dialog: IFileOpenDialog =
+                unsafe { CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER) }
+                    .map_err(|e| format!("ファイルダイアログを作成できませんでした: {e}"))?;
+
+            let filter_name = HSTRING::from("VRChat ログ (*.txt;*.tar.zst)");
+            let filter_spec = HSTRING::from("output_log_*.txt;output_log_*.tar.zst");
+            let all_name = HSTRING::from("すべてのファイル (*.*)");
+            let all_spec = HSTRING::from("*.*");
+            let filters = [
+                COMDLG_FILTERSPEC {
+                    pszName: PCWSTR(filter_name.as_ptr()),
+                    pszSpec: PCWSTR(filter_spec.as_ptr()),
+                },
+                COMDLG_FILTERSPEC {
+                    pszName: PCWSTR(all_name.as_ptr()),
+                    pszSpec: PCWSTR(all_spec.as_ptr()),
+                },
+            ];
+
+            unsafe {
+                dialog
+                    .SetFileTypes(&filters)
+                    .map_err(|e| format!("フィルター設定に失敗しました: {e}"))?;
+                dialog
+                    .SetOptions(
+                        FOS_ALLOWMULTISELECT | FOS_FILEMUSTEXIST | FOS_PATHMUSTEXIST,
+                    )
+                    .map_err(|e| format!("オプション設定に失敗しました: {e}"))?;
+            }
+
+            let hr = unsafe { dialog.Show(None) };
+            if hr.is_err() {
+                return Ok(Vec::new());
+            }
+
+            let results = unsafe { dialog.GetResults() }
+                .map_err(|e| format!("選択結果を取得できませんでした: {e}"))?;
+            let count = unsafe { results.GetCount() }
+                .map_err(|e| format!("選択件数を取得できませんでした: {e}"))?;
+
+            let mut paths = Vec::with_capacity(count as usize);
+            for i in 0..count {
+                let item = unsafe { results.GetItemAt(i) }
+                    .map_err(|e| format!("選択項目を取得できませんでした: {e}"))?;
+                let display_name = unsafe { item.GetDisplayName(SIGDN_FILESYSPATH) }
+                    .map_err(|e| format!("ファイルパスを取得できませんでした: {e}"))?;
+                let path = unsafe {
+                    let len = (0..).take_while(|&j| *display_name.0.add(j) != 0).count();
+                    let slice = std::slice::from_raw_parts(display_name.0, len);
+                    std::ffi::OsString::from_wide(slice)
+                        .to_string_lossy()
+                        .into_owned()
+                };
+                unsafe {
+                    windows::Win32::System::Com::CoTaskMemFree(Some(display_name.0.cast()));
+                }
+                paths.push(path);
+            }
+
+            Ok(paths)
+        })();
+
+        unsafe { CoUninitialize() };
+        result
+    }
+
+    #[cfg(not(windows))]
+    {
+        Err("このプラットフォームではファイル選択ダイアログを利用できません。".to_string())
     }
 }

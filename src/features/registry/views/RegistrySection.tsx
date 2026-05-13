@@ -98,7 +98,7 @@ export function RegistrySection({
                   </div>
                   <div className={styles.launcherListCopy}>
                     <h4>{app.name}</h4>
-                    <p>{app.description}</p>
+                    <p className={app.description ? undefined : styles.noDescription}>{app.description || 'No description'}</p>
                   </div>
                 </div>
                 <div className={styles.launcherListActions}>
@@ -140,7 +140,7 @@ export function RegistrySection({
                 </div>
                 <div className={styles.launcherCardLargeCopy}>
                   <h4>{app.name}</h4>
-                  <p>{app.description}</p>
+                  <p className={app.description ? undefined : styles.noDescription}>{app.description || 'No description'}</p>
                 </div>
                 <div className={styles.launcherCardLargeActions}>
                   <button

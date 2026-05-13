@@ -10,16 +10,10 @@ import {
   launchEnhancedImport,
   launchStartupArchiveImport,
   loadArchiveFiles,
-  loadExternalLogFiles,
-  pickLogFolder,
+  pickLogFiles,
   startExternalLogViewerStream,
   startLogViewerStream,
 } from '../services/archiveService';
-
-/** 外部フォルダの一覧を表示する閲覧ソース。null は既定アーカイブストア。 */
-export interface ExternalLogSource {
-  folderPath: string;
-}
 
 /** 受信チャンクを蓄積データにマージする（純粋関数） */
 function appendChunk(data: LogViewerData, chunk: LogViewerChunk): LogViewerData {
@@ -61,23 +55,21 @@ export function useArchiveState() {
   const [archiveFiles, setArchiveFiles] = useState<ArchiveFileItem[]>([]);
   const [logViewerData, setLogViewerData] = useState<LogViewerData | null>(null);
   const [isLogViewerLoaded, setIsLogViewerLoaded] = useState(false);
-  const [externalSource, setExternalSource] = useState<ExternalLogSource | null>(null);
-  const [externalFiles, setExternalFiles] = useState<ArchiveFileItem[]>([]);
+  /** ユーザーが選択した外部ログファイルの絶対パス一覧 */
+  const [externalFiles, setExternalFiles] = useState<string[]>([]);
 
   /** 現在のTauriイベントリスナーの解除コールバック */
   const unlistenRef = useRef<(() => void) | null>(null);
 
   /**
-   * ストリーム呼び出し中に最新の閲覧ソースを参照するための ref。
-   * 状態の反映は次のレンダリングまで遅延するため、選択直後に同期実行される
-   * openStreamForFile が直前のソースで起動してしまう。setState と同時に
-   * ref も更新する必要があるので、`setExternalSource` のラッパーを介して
-   * 両者を必ずペアで更新する。
+   * 外部ファイルが選択されているかどうかを同期的に判定するための ref。
+   * setState は次のレンダリングまで反映されないため、選択直後に同期実行される
+   * openStreamForFile が古い状態で起動してしまうことを防ぐ。
    */
-  const externalSourceRef = useRef<ExternalLogSource | null>(null);
-  const updateExternalSource = useCallback((value: ExternalLogSource | null) => {
-    externalSourceRef.current = value;
-    setExternalSource(value);
+  const externalFilesRef = useRef<string[]>([]);
+  const updateExternalFiles = useCallback((value: string[]) => {
+    externalFilesRef.current = value;
+    setExternalFiles(value);
   }, []);
 
   /** イベントリスナーを解除してチャンク受信を停止する */
@@ -98,8 +90,8 @@ export function useArchiveState() {
     setLogViewerData((prev) => (prev ? chunks.reduce(appendChunk, prev) : prev));
   }, []);
 
-  /** 指定アーカイブファイルのストリーミングビューアセッションを開始する */
-  const openStreamForFile = useCallback(async (fileName: string) => {
+  /** 指定ファイルのストリーミングビューアセッションを開始する */
+  const openStreamForFile = useCallback(async (fileKey: string) => {
     stopStream();
     if (flushTimerRef.current) {
       clearTimeout(flushTimerRef.current);
@@ -107,19 +99,16 @@ export function useArchiveState() {
     }
     pendingChunksRef.current = [];
 
-    // flushSyncでDOM を同期的にリセットし、前ファイルの内容が一瞬表示されるのを防ぐ
     flushSync(() => {
-      setLogViewerData(emptyViewerData(fileName));
+      setLogViewerData(emptyViewerData(fileKey));
       setIsLogViewerLoaded(false);
     });
 
-    // 一意のセッションIDでファイル切替前のストリームイベントを識別・破棄
     const sessionId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
     const unlistenChunk = await listen<LogViewerChunk>('log_viewer_chunk', (e) => {
       if (e.payload.session_id !== sessionId) return;
       pendingChunksRef.current.push(e.payload);
-      // 100msのフラッシュタイマーで高頻度チャンクを1回のReact更新に集約
       if (!flushTimerRef.current) {
         flushTimerRef.current = setTimeout(flushChunks, 100);
       }
@@ -141,10 +130,10 @@ export function useArchiveState() {
       unlistenDone();
     };
 
-    const source = externalSourceRef.current;
-    const meta = source
-      ? await startExternalLogViewerStream(source.folderPath, fileName, sessionId)
-      : await startLogViewerStream(fileName, sessionId);
+    const isExternal = externalFilesRef.current.includes(fileKey);
+    const meta = isExternal
+      ? await startExternalLogViewerStream(fileKey, sessionId)
+      : await startLogViewerStream(fileKey, sessionId);
     setLogViewerData((prev) => (prev ? { ...prev, source_name: meta.source_name } : prev));
     return meta.archive_name;
   }, [stopStream, flushChunks]);
@@ -161,30 +150,31 @@ export function useArchiveState() {
 
   /** 閲覧モードでアーカイブ選択画面を開く（既定アーカイブストア） */
   const openLogViewerSelection = useCallback(async () => {
-    updateExternalSource(null);
-    setExternalFiles([]);
+    updateExternalFiles([]);
     return loadArchiveSelection();
-  }, [loadArchiveSelection, updateExternalSource]);
+  }, [loadArchiveSelection, updateExternalFiles]);
 
   /**
-   * ネイティブダイアログで外部フォルダを選択し、合致するログ一覧に切り替える。
+   * ネイティブダイアログで外部ログファイルを選択し、一覧に追加する。
    * キャンセル時は null を返し、状態は変更しない。
+   * 既に選択済みのファイルは重複追加しない。
    */
-  const selectExternalLogFolder = useCallback(async (): Promise<ArchiveFileItem[] | null> => {
-    const folderPath = await pickLogFolder();
-    if (!folderPath) return null;
-    const files = await loadExternalLogFiles(folderPath);
-    updateExternalSource({ folderPath });
-    setExternalFiles(files);
-    return files;
-  }, [updateExternalSource]);
+  const selectExternalLogFiles = useCallback(async (): Promise<string[] | null> => {
+    const paths = await pickLogFiles();
+    if (paths.length === 0) return null;
+    const merged = [...externalFilesRef.current];
+    for (const p of paths) {
+      if (!merged.includes(p)) merged.push(p);
+    }
+    updateExternalFiles(merged);
+    return merged;
+  }, [updateExternalFiles]);
 
-  /** 外部フォルダ選択を解除して既定アーカイブストアに戻す */
-  const clearExternalLogFolder = useCallback(async () => {
-    updateExternalSource(null);
-    setExternalFiles([]);
+  /** 外部ファイル選択を解除して既定アーカイブストアに戻す */
+  const clearExternalLogFiles = useCallback(async () => {
+    updateExternalFiles([]);
     return loadArchiveSelection();
-  }, [loadArchiveSelection, updateExternalSource]);
+  }, [loadArchiveSelection, updateExternalFiles]);
 
   /** 選択されたアーカイブファイルのバッチインポートを実行する */
   const executeEnhancedSync = useCallback(async (selectedFiles: string[]) => {
@@ -193,7 +183,7 @@ export function useArchiveState() {
 
   /** 指定ファイルのログビューアを開く */
   const openSelectedLogViewer = useCallback(
-    (selectedFileName: string) => openStreamForFile(selectedFileName),
+    (selectedFileKey: string) => openStreamForFile(selectedFileKey),
     [openStreamForFile],
   );
 
@@ -202,18 +192,23 @@ export function useArchiveState() {
     stopStream();
     setLogViewerData(null);
     setIsLogViewerLoaded(false);
-    updateExternalSource(null);
-    setExternalFiles([]);
-  }, [stopStream, updateExternalSource]);
+    updateExternalFiles([]);
+  }, [stopStream, updateExternalFiles]);
 
   /** アプリ起動時の一回限りの自動取り込みを実行する */
   const runStartupImport = useCallback(async () => {
     return await launchStartupArchiveImport();
   }, []);
 
-  // アンマウント時にイベントリスナーをクリーンアップ
+  // アンマウント時にイベントリスナーとフラッシュタイマーをクリーンアップ
   useEffect(() => {
-    return () => stopStream();
+    return () => {
+      stopStream();
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current);
+        flushTimerRef.current = null;
+      }
+    };
   }, [stopStream]);
 
   // 空のビューアデータがあり読み込み未完了の場合のみローディング状態
@@ -225,7 +220,6 @@ export function useArchiveState() {
     logViewerData,
     isLogViewerLoading,
     isLogViewerLoaded,
-    externalSource,
     externalFiles,
     openEnhancedSync,
     openLogViewerSelection,
@@ -233,7 +227,7 @@ export function useArchiveState() {
     openSelectedLogViewer,
     closeLogViewer,
     runStartupImport,
-    selectExternalLogFolder,
-    clearExternalLogFolder,
+    selectExternalLogFiles,
+    clearExternalLogFiles,
   };
 }
