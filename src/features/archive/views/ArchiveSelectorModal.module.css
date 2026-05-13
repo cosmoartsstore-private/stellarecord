@@ -70,10 +70,6 @@
   overflow-x: hidden;
 }
 
-.viewerList {
-  gap: 0.75rem;
-}
-
 .item {
   display: flex;
   width: 100%;
@@ -144,10 +140,6 @@
 
 .checkboxChecked .checkIcon {
   stroke-dashoffset: 0;
-}
-
-.viewerList .checkbox {
-  display: none;
 }
 
 .icon {

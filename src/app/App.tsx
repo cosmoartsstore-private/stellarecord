@@ -332,11 +332,9 @@ function App() {
         <ArchiveSelectorModal
           archiveFiles={archiveFiles}
           selectedFiles={batchSelectedFiles}
-          modalMode="import"
           onClose={modals.closeArchiveSelector}
           onSelectAll={handleBatchSelectAll}
           onFileAction={handleBatchFileAction}
-          onSelectSingleFile={() => undefined}
           onConfirm={() => { void modals.handleConfirmImport(); }}
         />
       )}
