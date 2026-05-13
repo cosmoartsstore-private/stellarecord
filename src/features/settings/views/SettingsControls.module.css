@@ -1,0 +1,77 @@
+.inlineSettingRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: default;
+}
+
+.inlineSettingLabel {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.inlineNumberInput {
+  width: 72px;
+  padding: 0.4rem 0.6rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+.inlineNumberInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.inlineUnit {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  font-weight: 700;
+}
+
+.inlineToggleRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: default;
+}
+
+.autoStartBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 34px;
+  padding: 0 0.85rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-card-soft);
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+  white-space: nowrap;
+}
+
+.autoStartBtn svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.autoStartBtn:hover {
+  border-color: var(--border-strong);
+}
+
+.autoStartBtnOn {
+  background: var(--accent-gradient);
+  border-color: transparent;
+  color: #fff;
+}

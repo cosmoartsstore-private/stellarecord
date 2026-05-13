@@ -1,6 +1,7 @@
 import { StellaIcon, stellaIconNames } from '../../../shared/components/Icons';
 import { formatStorageMeter } from '../../../shared/lib/storageFormat';
 import shared from '../../../shared/styles/shared.module.css';
+import { SettingsControls } from '../../settings/views/SettingsControls';
 import type { StorageStatus } from '../models/types';
 import styles from './AnalyzeSection.module.css';
 
@@ -54,35 +55,13 @@ export function AnalyzeSection({
             <h3 className={styles.sectionMiniTitle}>ストレージ管理</h3>
           </div>
           <div className={styles.dbActionRow}>
-            <label className={styles.inlineSettingRow}>
-              <span className={styles.inlineSettingLabel}>警告ライン</span>
-              <input
-                className={styles.inlineNumberInput}
-                type="number"
-                min={1}
-                step={1}
-                value={archiveLimitDraft}
-                onChange={(e) => {
-                  onArchiveLimitDraftChange(e.target.value);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') onSaveArchiveLimit();
-                }}
-              />
-              <span className={styles.inlineUnit}>MB</span>
-              <button className={shared.btn} onClick={onSaveArchiveLimit}>
-                保存
-              </button>
-            </label>
-            <div className={styles.inlineToggleRow}>
-              <button
-                className={`${styles.autoStartBtn} ${isStartupEnabledDraft ? styles.autoStartBtnOn : ''}`}
-                onClick={onToggleStartup}
-              >
-                <StellaIcon name={stellaIconNames.power} />
-                <span>自動起動</span>
-              </button>
-            </div>
+            <SettingsControls
+              archiveLimitDraft={archiveLimitDraft}
+              isStartupEnabledDraft={isStartupEnabledDraft}
+              onArchiveLimitDraftChange={onArchiveLimitDraftChange}
+              onSaveArchiveLimit={onSaveArchiveLimit}
+              onToggleStartup={onToggleStartup}
+            />
           </div>
         </div>
 
