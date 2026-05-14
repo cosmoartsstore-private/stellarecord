@@ -1,203 +1,297 @@
-# STELLA RECORD
+# StellaRecord
 
-> **VRChat のログ、消える前に守る。**
-> 古いログを `.tar.zst` で圧縮保管し、ワールド訪問・通知・スクリーンショットを SQLite に整理する Windows デスクトップアプリ。
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6)](https://www.microsoft.com/windows)
+[![Tauri](https://img.shields.io/badge/Tauri-2.2-24C8DB)](https://tauri.app/)
+[![React](https://img.shields.io/badge/React-19-61DAFB)](https://react.dev/)
+[![Rust](https://img.shields.io/badge/Rust-2021-DEA584)](https://www.rust-lang.org/)
+[![License](https://img.shields.io/badge/license-Proprietary-lightgrey)](#license)
 
-<!-- TODO: docs/images/hero.png にメインビジュアル/ロゴを配置 -->
-![STELLA RECORD](docs/images/hero.png)
-
----
-
-## こんな悩みを解決します
-
-- 📦 **「3 ヶ月前のあのワールド、どこだったっけ…」**
-  → VRChat のログは古いものから順に消えていきます。STELLA RECORD は自動で圧縮保管します。
-- 🔎 **「あの人と初めて会ったの、いつだっけ？」**
-  → ワールド訪問と同席ユーザーがすべて SQLite に記録されます。
-- 📸 **「あのスクショ、どのワールドで撮ったか分からない…」**
-  → スクリーンショットも訪問先と紐付けて保管。
-- 💾 **「ログがディスクを圧迫してきた」**
-  → zstd 圧縮で生ログから約 90% 削減。容量警告ラインの設定も可能。
+VRChat のゲームログを圧縮アーカイブと SQLite に正規化して保管・閲覧する Windows デスクトップアプリケーション。
 
 ---
 
-## できること
+## Table of Contents
 
-### 🗄 ログを圧縮して恒久保管
-
-VRChat の生ログ (`output_log_*.txt`) を `.tar.zst` 形式で自動アーカイブ。アンインストールしてもアーカイブと DB は保護されます。
-
-<!-- TODO: docs/images/analyze.png に解析画面 (Light + Dark) を配置 -->
-![解析画面](docs/images/analyze.png)
-
-### 📊 ログを構造化データに変換
-
-ログを行単位で解析し、SQLite に整理。ワールド訪問、同席ユーザー、通知、スクリーンショット、OSC 連携などを横断的に検索できます。
-
-<!-- TODO: docs/images/database.png に DB プレビュー画面を配置 -->
-![DB プレビュー](docs/images/database.png)
-
-### 📖 圧縮済みログをそのまま閲覧
-
-`.tar.zst` を展開せずに直接ビューア表示。10 万行超のログでも仮想スクロールでサクサク動きます。レベル（エラー／警告／デバッグ）やカテゴリ（ワールド／通知／入退室）でフィルタ可能。
-
-<!-- TODO: docs/images/logviewer.png にログビューア画面を配置 -->
-![ログビューア](docs/images/logviewer.png)
-
-### 🚀 連携アプリのランチャー
-
-VRChat 関連の自作ツール（OyasumiVR など）を STELLA RECORD から直接起動。アイコンは EXE から自動抽出します。
-
-<!-- TODO: docs/images/launcher.png にランチャー画面 (リスト / カード両方) を配置 -->
-![ランチャー](docs/images/launcher.png)
-
-### 🎨 3 つのテーマ
-
-Light / Dark / Midnight の 3 テーマを切替可能。長時間の作業も目に優しく。
-
-<!-- TODO: docs/images/themes.png に 3テーマ並びショットを配置 -->
-![テーマ](docs/images/themes.png)
+- [Overview](#overview)
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [Tech Stack](#tech-stack)
+- [Architecture](#architecture)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Build from Source](#build-from-source)
+- [Project Structure](#project-structure)
+- [Data and Privacy](#data-and-privacy)
+- [Security](#security)
+- [Documentation](#documentation)
+- [Acknowledgements](#acknowledgements)
+- [License](#license)
 
 ---
 
-## 動作環境
+## Overview
 
-- **OS**: Windows 10 / 11（64bit）
-- **ディスク**: 50 MB 以上（アーカイブストアは別途、デフォルト上限 300 MB）
-- **VRChat**: ログ出力フォルダがデフォルトの場所にあること
+StellaRecord は VRChat が出力するゲームログ (`output_log_*.txt`) を恒久保管し、構造化データに変換して閲覧するための Windows デスクトップアプリケーションである。
 
----
+VRChat のログファイルは古いものから順に削除されるため、過去の訪問履歴・同席ユーザー・通知などの情報を後から参照できなくなる。本アプリは生ログを `tar + zstd` で圧縮保管しつつ、行単位パーサで内容を SQLite に正規化することで、過去のログを検索可能なデータとして長期保存する。
 
-## インストール
-
-1. [Releases ページ](https://github.com/cosmoartsstore-private/stellarecord/releases) から最新の `StellaRecord_Setup.exe` をダウンロード <!-- TODO: 配布開始後にリンク有効化 -->
-2. インストーラを実行（管理者権限は不要）
-3. インストール先は既定で `%LOCALAPPDATA%\Programs\StellaRecord`
-4. インストール完了後、自動でアプリが起動します
-
-> ⚠️ **Program Files 配下にはインストールできません。** ユーザーが書き込み可能な領域（既定値）を選択してください。
-
-### アンインストール時
-
-- アプリ本体は完全に削除されます
-- `Data/archive/` のアーカイブと `Data/db/stellarecord.db` は**保護され削除されません**
-- 完全に削除したい場合は手動で `%LOCALAPPDATA%\Programs\StellaRecord\Data\` を削除してください
+WebView2 (Edge) + Rust の Tauri v2 アーキテクチャで実装され、外部サーバとの通信は行わない。アンインストール時もアーカイブと DB ファイルは保護対象として残される。
 
 ---
 
-## 使い方
+## Features
 
-### 初回起動
-
-1. アプリ起動時に**自動で起動時取り込み**が走ります（既存ログをアーカイブ＋DB に反映）
-2. 進捗バーが表示され、完了するとランチャー画面が開きます
-
-### 古いログを再取り込み
-
-「解析」タブ →「復元」ボタン → アーカイブを選択して「取込開始」
-
-### ログを閲覧
-
-「解析」タブ →「ログビューア」ボタン → 閲覧したいアーカイブを選択
-
-- 左サイドバーでファイル切替
-- 上部チップでカテゴリフィルタ（ワールド／通知／入退室／警告／エラー／デバッグ）
-- `Ctrl + マウスホイール` でズーム
-
-### DB を覗く
-
-「DB」タブで全テーブル／ビューをページネーション付きで閲覧。ヘッダクリックでソート可能。
-
-### 設定
-
-「解析」タブ →「ストレージ管理」セクション
-
-- **アーカイブ容量警告ライン**：MB 単位で設定（既定 300 MB）
-- **自動起動**：Windows 起動時に STELLA RECORD を自動起動するか
-- **テーマ**：右上のテーマアイコンで Light → Dark → Midnight を切替
-
-### 連携アプリの登録
-
-「ランチャー」タブ →「登録」ボタン → 任意の EXE を選択
-
-- アイコンは自動抽出
-- 表示名は EXE の VersionInfo から自動取得（編集可能）
-- 「起動」「フォルダを開く」「登録解除」が可能
+- 生ログの `.tar.zst` 圧縮アーカイブ化（zstd level 3）
+- 行単位パーサによる VRChat ログの SQLite 構造化保管（9 テーブル + 3 ビュー、検出イベント 10 種）
+- 圧縮アーカイブを展開せずストリーム閲覧する仮想スクロール対応のログビューア
+- カテゴリ／レベルフィルタおよび DB キーワードハイライト
+- アーカイブ容量警告ラインの設定とストレージメーター
+- 登録 EXE のランチャー機能（Windows VersionInfo からの表示名抽出と高解像度アイコン取得）
+- DB プレビュー（テーブル／ビューのページネーション・ソート閲覧）
+- Light / Dark / Midnight の 3 テーマ切替
+- Windows 起動時の自動起動オプション
+- 取り込み処理のキャンセル機能（savepoint による部分ロールバック）
 
 ---
 
-## FAQ
+## Screenshots
 
-<details>
-<summary><strong>Q. VRChat 公式に怒られませんか？</strong></summary>
+<!-- TODO: docs/images/ 配下にスクリーンショットを配置後に有効化 -->
 
-STELLA RECORD は VRChat の**公式に出力されるログファイルを読むだけ**で、ゲームクライアントの改造やネットワーク通信の傍受は一切行いません。VRChat の利用規約に違反する動作はありません。
-</details>
+| Launcher | Analyze |
+| -------- | ------- |
+| ![Launcher](docs/images/launcher.png) | ![Analyze](docs/images/analyze.png) |
 
-<details>
-<summary><strong>Q. ログが取り込まれません</strong></summary>
-
-VRChat のログ出力先が既定 (`%USERPROFILE%\AppData\LocalLow\VRChat\VRChat\`) になっているかご確認ください。また姉妹アプリ Polaris がインストールされている場合、Polaris の `archive` フォルダが参照先になります。
-</details>
-
-<details>
-<summary><strong>Q. アーカイブが警告ラインを超えました</strong></summary>
-
-容量警告は**通知のみ**で、自動削除はしません。容量を減らしたい場合は「元ログの削除」モーダルから古いアーカイブを選択して削除してください（アーカイブされていない生ログは保護されます）。
-</details>
-
-<details>
-<summary><strong>Q. 多重起動できません</strong></summary>
-
-仕様です。STELLA RECORD は単一インスタンスで動作します（DB の整合性を保つため）。
-</details>
-
-<details>
-<summary><strong>Q. データを別 PC に移行したい</strong></summary>
-
-`%LOCALAPPDATA%\Programs\StellaRecord\Data\` フォルダごとコピーすれば、移行先で同じデータベースとアーカイブが利用できます。
-</details>
+| Database | Log Viewer |
+| -------- | ---------- |
+| ![Database](docs/images/database.png) | ![Log Viewer](docs/images/logviewer.png) |
 
 ---
 
-## トラブルシューティング
+## Tech Stack
 
-### 起動しない
+### Frontend
 
-1. `%LOCALAPPDATA%\Programs\StellaRecord\Data\logs\info-YYYY-MM.log` を確認
-2. Microsoft Edge WebView2 Runtime がインストールされているか確認
-3. [Issues](https://github.com/cosmoartsstore-private/stellarecord/issues) でログを添えて報告 <!-- TODO: Issues 受付フロー確定後にリンク有効化 -->
+| Layer | Technology | Version |
+| ----- | ---------- | ------- |
+| Language | TypeScript | 5.9 |
+| UI Framework | React | 19.2 |
+| Build Tool | Vite | 7.3 |
+| Virtual Scroll | @tanstack/react-virtual | 3.13 |
+| Styling | CSS Modules | - |
+| Tauri SDK | @tauri-apps/api | 2.10 |
 
-### ログビューアが途中で止まる
+### Backend
 
-非 UTF-8 バイトを含むログ行で停止する既知問題があります。ログを開き直すか、別のアーカイブをお試しください。
+| Layer | Technology | Version |
+| ----- | ---------- | ------- |
+| Language | Rust | Edition 2021 |
+| Application Framework | Tauri | 2.2.4 |
+| Database | rusqlite (bundled SQLite) | 0.38 |
+| Compression | zstd | 0.13 |
+| Archive Format | tar | 0.4 |
+| Win32 API | windows-rs | 0.58 |
+| Registry I/O | winreg | 0.52 |
+| Image Processing | image (PNG only) | 0.25 |
 
-### アイコンが取得できない
+### Distribution
 
-EXE が破損している、または保護フォルダ配下にある可能性があります。別のパスに EXE をコピーしてから登録してください。
+| Layer | Technology |
+| ----- | ---------- |
+| Installer | NSIS (via Tauri Bundler) |
+| Install mode | currentUser |
+| Code Signing | （未実装） |
+
+技術選定の詳細と意思決定記録は [docs/tech-stack.md](docs/tech-stack.md) を参照。
 
 ---
 
-## クレジット
+## Architecture
 
-- 開発: **ぷらねっと** ([@cosmoartsstore](https://github.com/cosmoartsstore-private)) <!-- TODO: 表記揺れ確認、SNS リンクなど -->
-- アイコン素材: アプリ内クレジットモーダルを参照
-- 姉妹アプリ: [Polaris](https://github.com/cosmoartsstore-private/polaris) — 生ログのバックアップ／同期 <!-- TODO: Polaris 公開リポジトリリンク確定後 -->
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  Windows 10 / 11 (x64)                      │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │              StellaRecord.exe (Tauri v2)            │    │
+│  │                                                     │    │
+│  │   WebView2 (Chromium)             Rust Backend      │    │
+│  │   ─────────────────────────       ───────────────   │    │
+│  │   React 19 + TypeScript      ◀──▶ Tauri 2.2         │    │
+│  │   Vite 7                  IPC     rusqlite 0.38     │    │
+│  │   @tanstack/react-virtual         tar + zstd        │    │
+│  │   CSS Modules                     windows-rs 0.58   │    │
+│  │                                                     │    │
+│  └────────────────────────┬────────────────────────────┘    │
+│                           │                                 │
+│       ┌───────────────────┴────────────────────┐            │
+│       ▼                                        ▼            │
+│   ┌──────────────────────┐       ┌──────────────────────┐   │
+│   │ SQLite (WAL mode)    │       │ Compressed Archives  │   │
+│   │ Data/db/             │       │ Data/archive/        │   │
+│   │   stellarecord.db    │       │   *.tar.zst          │   │
+│   └──────────────────────┘       └──────────────────────┘   │
+│                                                             │
+│   Windows Registry: HKCU\Software\CosmoArtsStore\...        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+詳細なモジュール構成・データフロー・並行性モデルは [docs/spec.md](docs/spec.md) を参照。
 
 ---
 
-## 開発者向け情報
+## Requirements
 
-ビルド方法・アーキテクチャ・技術選定の詳細は [`docs/`](docs/) を参照してください。
+### Runtime
 
-| ドキュメント | 内容 |
-|---|---|
-| [`docs/spec.md`](docs/spec.md) | 機能仕様書（設計判断・データフロー） |
-| [`docs/database.md`](docs/database.md) | DB 定義書（ER 図 + スキーマ） |
-| [`docs/tech-stack.md`](docs/tech-stack.md) | 技術スタックと選定理由 |
+- Windows 10 (1809 以降) または Windows 11 (x64)
+- Microsoft Edge WebView2 Runtime（Windows 10 1809 以降は OS 標準同梱）
+- 約 50 MB のディスク空き容量（ログアーカイブストアは別途）
+
+### Build
+
+- [Node.js](https://nodejs.org/) 18 以上
+- [Rust](https://rustup.rs/) toolchain（バージョンは `rust-toolchain.toml` で固定）
+- Windows SDK（`windows` crate のビルドに必要）
 
 ---
 
-## ライセンス
+## Installation
 
-Proprietary — CosmoArtsStore. 本ソフトウェアの再配布・改変は許可されていません。
+### From Installer
+
+1. [Releases](https://github.com/cosmoartsstore-private/stellarecord/releases) ページから最新の `StellaRecord_Setup.exe` をダウンロード
+2. インストーラを実行
+3. 既定のインストール先は `%LOCALAPPDATA%\Programs\StellaRecord`
+
+管理者権限は不要。Program Files / Windows ディレクトリ配下へのインストールはインストーラが拒否する。
+
+### Uninstallation
+
+Windows の「アプリと機能」から `StellaRecord` をアンインストールする。アプリ本体は完全に削除されるが、`Data/archive/` および `Data/db/` ディレクトリは保護対象として残される。完全に削除する場合は手動で `Data/` ディレクトリを削除する。
+
+---
+
+## Build from Source
+
+```bash
+# 依存関係のインストール
+npm install
+
+# 開発ビルド（Vite dev server + Tauri dev）
+npm run tauri dev
+
+# 本番ビルド（NSIS インストーラを生成）
+npm run tauri build
+```
+
+ビルド成果物は `src-tauri/target/release/bundle/nsis/` に出力される。
+
+### Lint and Format
+
+```bash
+npm run lint                              # ESLint (typescript-eslint strict)
+npm run format                            # Prettier
+npm run stylelint                         # Stylelint
+cargo clippy --workspace --all-targets    # Rust clippy（unwrap/expect/panic = deny）
+```
+
+---
+
+## Project Structure
+
+```
+.
+├── src/                        React frontend (TypeScript)
+│   ├── app/                    アプリケーションルート、ルーティング、モーダル統括
+│   ├── features/               機能モジュール
+│   │   ├── analyze/            解析セクション
+│   │   ├── archive/            アーカイブ取り込み・ログビューア
+│   │   ├── database/           DB プレビュー
+│   │   ├── registry/           ランチャー
+│   │   └── settings/           設定
+│   └── shared/                 共通コンポーネント・ユーティリティ
+├── src-tauri/                  Rust backend
+│   ├── src/
+│   │   ├── lib.rs              Tauri 起動と IPC ハンドラ登録
+│   │   ├── commands/           Tauri IPC コマンドハンドラ
+│   │   ├── analyze/            ログ解析パイプライン
+│   │   ├── config.rs           Windows レジストリ I/O
+│   │   ├── platform.rs         Win32 API 連携
+│   │   └── utils.rs            ロガー・エラー整形
+│   ├── capabilities/           Tauri capability 定義
+│   └── windows/                NSIS インストーラスクリプト
+├── docs/                       技術ドキュメント
+└── package.json
+```
+
+各 feature は `views/` `viewmodels/` `services/` `models/` に分割した MVVM 風構成を採用している。feature 間の相互参照は ESLint の `no-restricted-imports` で禁止されている。
+
+---
+
+## Data and Privacy
+
+本アプリはローカル完結で動作する。以下のデータをローカル保存する。
+
+| Data | Location | Purpose |
+| ---- | -------- | ------- |
+| 圧縮ログアーカイブ (`*.tar.zst`) | `%LOCALAPPDATA%\Programs\StellaRecord\Data\archive\` | VRChat 生ログの恒久保管 |
+| SQLite データベース | `%LOCALAPPDATA%\Programs\StellaRecord\Data\db\stellarecord.db` | 解析済みログデータと登録アプリ情報 |
+| アプリ運用ログ | `%LOCALAPPDATA%\Programs\StellaRecord\Data\logs\info-YYYY-MM.log` | 障害調査用ログ（月次ローテーション） |
+| ユーザー設定 | Windows Registry `HKCU\Software\CosmoArtsStore\StellaRecord` | アプリ設定（容量上限、自動起動等） |
+| UI テーマ | LocalStorage `stella-theme` | テーマ選択（Light/Dark/Midnight） |
+
+**外部通信**: 本アプリは外部サーバとの通信を行わない。テレメトリ送信、クラッシュレポート送信、自動アップデートチェックは未実装。
+
+**データの可搬性**: `Data/` ディレクトリ全体をコピーすることで別 PC への移行が可能。SQLite データベースは `sqlite3` CLI など標準ツールで直接読み出すことができる。
+
+---
+
+## Security
+
+### Application
+
+- **Tauri Capabilities**: 許可しているのは `core:default`, `shell:default`, `shell:allow-open` のみ。ファイルシステム操作は Rust 側で実装し、フロントエンドには直接公開していない。
+- **Content Security Policy**: `default-src 'self'; script-src 'self'; img-src 'self' asset: https: data:; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:* ipc:;`
+- **SQL Injection 対策**: 動的テーブル名・カラム名は ASCII 英数字と `_` のみを許可するバリデーションを通過した値のみ SQL に補間。すべての値は `params!` でバインドする。
+- **多重起動防止**: Windows カーネル名前付き Mutex (`Local\StellaRecord_SingleInstance`) で単一インスタンスを保証。
+- **クラッシュ抑制**: Rust リントで `unwrap_used`, `expect_used`, `panic` を `deny` に設定。コンパイル時にクラッシュ経路を排除している。
+
+### Installation
+
+- **管理者権限不要**: `installMode: currentUser` で `%LOCALAPPDATA%` 配下にインストール。
+- **インストール先制限**: NSIS インストーラスクリプトが Program Files / `%WINDIR%` 配下への配置を拒否する。
+- **コード署名**: 現バージョンでは未実装。SmartScreen 警告が表示される可能性がある。
+
+### Known Risks
+
+- 本アプリは現在コード署名されていない。Windows SmartScreen による起動時警告が表示される。
+- 取り込み処理中に外部から DB ファイルを直接編集した場合の動作は保証されない。
+
+脆弱性報告は GitHub Issues ではなく CosmoArtsStore へ直接連絡すること。
+
+---
+
+## Documentation
+
+| Document | Description |
+| -------- | ----------- |
+| [docs/spec.md](docs/spec.md) | 機能仕様書（アーキテクチャ、モジュール、IPC リファレンス、データフロー） |
+| [docs/database.md](docs/database.md) | データベース定義書（ER 図、スキーマ、インデックス、マイグレーション） |
+| [docs/tech-stack.md](docs/tech-stack.md) | 技術スタック詳細と意思決定記録（ADR） |
+
+---
+
+## Acknowledgements
+
+本アプリは以下の OSS を利用している。各ライセンス条項は配布物に同梱される NOTICE ファイル <!-- TODO: NOTICE ファイル整備 --> を参照。
+
+主要な依存関係：[Tauri](https://tauri.app/), [React](https://react.dev/), [Vite](https://vitejs.dev/), [TanStack Virtual](https://tanstack.com/virtual), [rusqlite](https://github.com/rusqlite/rusqlite), [zstd](https://github.com/gyscos/zstd-rs), [tar-rs](https://github.com/alexcrichton/tar-rs), [windows-rs](https://github.com/microsoft/windows-rs)
+
+---
+
+## License
+
+Proprietary — Copyright (c) CosmoArtsStore. All rights reserved.
+
+本ソフトウェアの再配布・改変・リバースエンジニアリングは許可されていない。
