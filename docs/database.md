@@ -1,61 +1,107 @@
-# データベース設計書 — スキーマと設計判断
+# Database Schema
 
-> 本書はポートフォリオ用に、STELLA RECORD の DB 設計を**「なぜこのスキーマか」「なぜこのインデックスか」「なぜこの正規化レベルか」**の観点で説明する。
-> 単なるテーブル定義の羅列ではなく、設計者の意思決定が読み取れるよう構成している。
+> StellaRecord のメインデータベース (`Data/db/stellarecord.db`) のスキーマリファレンス。
+> スキーマ定義の一次情報は `src-tauri/src/analyze/db.rs` の `MAIN_SCHEMA` / `MAIN_VIEWS` 定数。
 
----
+## Table of Contents
 
-## 目次
-
-1. [全体設計方針](#1-全体設計方針)
-2. [ER 図と関係性](#2-er-図と関係性)
-3. [テーブル設計の意図](#3-テーブル設計の意図)
-4. [インデックス選定](#4-インデックス選定)
-5. [ビュー設計](#5-ビュー設計)
-6. [トランザクション戦略](#6-トランザクション戦略)
-7. [マイグレーション戦略](#7-マイグレーション戦略)
-8. [運用上のトレードオフ](#8-運用上のトレードオフ)
-
----
-
-## 1. 全体設計方針
-
-### 設計原則
-
-| 原則 | 意図 |
-|---|---|
-| **第 3 正規形を基準、必要に応じて派生ビューで非正規化** | 書き込み時の冗長性を排除しつつ、読み取りはビュー経由で利便性確保 |
-| **冪等性は UNIQUE 制約で保証** | 再取り込みしてもデータが重複しない |
-| **時刻は DATETIME 文字列で統一** | SQLite に DATE 型はないため `YYYY-MM-DD HH:MM:SS` で正規化 |
-| **CHECK 制約で列挙型を表現** | アプリケーション層に頼らずスキーマで値域を縛る |
-| **削除は CASCADE しない** | FK 違反を意図的にエラーにし、誤って親レコードを削除する事故を防ぐ |
-
-### 採用しなかった選択肢
-
-| 不採用 | 理由 |
-|---|---|
-| ORM (Diesel / SeaORM) | スキーマが小規模で生 SQL の方が読みやすい。ビルド時間も短縮 |
-| マイクロサービス的な分割 DB | パーソナルツールで集約 DB の方が JOIN コストが低い |
-| NoSQL (lmdb / sled) | 関係性 (visits ←→ with_users ←→ find_users) が中心で RDBMS が自然 |
-| Migration ツール (refinery 等) | 現状は 2 つのアドホック migration のみで導入コスト過多 |
+- [Overview](#overview)
+- [Conventions](#conventions)
+- [ER Diagram](#er-diagram)
+- [Tables](#tables)
+  - [sessions](#sessions)
+  - [visits](#visits)
+  - [find_users](#find_users)
+  - [with_users](#with_users)
+  - [notifications](#notifications)
+  - [screenshots](#screenshots)
+  - [osc](#osc)
+  - [subscription](#subscription)
+  - [apps](#apps)
+- [Views](#views)
+  - [visit_summary](#visit_summary)
+  - [with_users_detail](#with_users_detail)
+  - [screenshots_detail](#screenshots_detail)
+- [Indexes](#indexes)
+- [Initialization and PRAGMA](#initialization-and-pragma)
+- [Migrations](#migrations)
+- [Backup and Restore](#backup-and-restore)
+- [Performance Notes](#performance-notes)
 
 ---
 
-## 2. ER 図と関係性
+## Overview
+
+| Property | Value |
+| -------- | ----- |
+| Engine | SQLite 3 (via rusqlite 0.38, `bundled` feature) |
+| Journal Mode | WAL (Write-Ahead Logging) |
+| Foreign Keys | Enforced (`PRAGMA foreign_keys = ON`) |
+| Tables | 9 |
+| Views | 3 |
+| Indexes | 8 (UNIQUE 制約による自動生成を除く) |
+| Schema Definition | `src-tauri/src/analyze/db.rs` |
+
+データベースは VRChat ログから抽出した正規化データを保管するメインドメインのテーブル群と、ランチャー機能で使用する `apps` テーブルで構成される。
+
+---
+
+## Conventions
+
+### Naming
+
+| Element | Convention | Example |
+| ------- | ---------- | ------- |
+| Table name | snake_case (複数形) | `sessions`, `visits` |
+| Column name | snake_case | `account_name`, `join_time` |
+| Primary key | `id INTEGER PRIMARY KEY AUTOINCREMENT` （`find_users` を除く） | - |
+| Foreign key | `<table>_id INTEGER NOT NULL REFERENCES <table>(id)` | `session_id` |
+| Timestamp | `DATETIME` 型、`'YYYY-MM-DD HH:MM:SS'` 文字列で保管 | `join_time` |
+| Boolean | `BOOLEAN`（SQLite 内部は INTEGER 0/1） | `is_self`, `is_active` |
+| Enum | `TEXT CHECK(col IN (...))` | `instance_type` |
+
+### Type Mapping
+
+SQLite はストレージクラスのみを持ち、宣言型は親和性ヒントとして機能する。本プロジェクトでは以下の対応で運用する。
+
+| Declared Type | Storage Class | Rust Type |
+| ------------- | ------------- | --------- |
+| `INTEGER` | INTEGER | `i64`, `u32` |
+| `TEXT` | TEXT | `String` |
+| `DATETIME` | TEXT | `String`（`chrono::NaiveDateTime` でパース） |
+| `BOOLEAN` | INTEGER | `bool` |
+| `BLOB` | BLOB | `Vec<u8>` |
+
+### Idempotency
+
+再取り込みやエラー時の冪等性を保証するため、各テーブルで以下の戦略を採用する。
+
+| Table | Idempotency Mechanism |
+| ----- | --------------------- |
+| `sessions` | `log_name UNIQUE` + `INSERT OR IGNORE` |
+| `notifications` | `notif_id UNIQUE` + `INSERT OR IGNORE` |
+| `with_users` | `UNIQUE(visit_id, vrchat_id)` + `INSERT OR IGNORE` |
+| `find_users` | `vrchat_id PRIMARY KEY` + `ON CONFLICT DO UPDATE` (表示名最新化) |
+| `subscription` | `session_id UNIQUE` + `INSERT OR IGNORE` |
+| `apps` | `path UNIQUE` |
+
+---
+
+## ER Diagram
 
 ```mermaid
 erDiagram
-    sessions ||--o{ visits          : "1セッションがN個のワールド訪問を持つ"
-    sessions ||--o{ notifications   : "1セッションがN件の通知を受信"
-    sessions ||--o{ osc             : "1セッションがN件のOSC検出イベント"
-    sessions ||--|| subscription    : "1セッションが0-1件のVRChat+状態"
-    visits   ||--o{ with_users      : "1訪問でN人の同席ユーザー"
-    visits   ||--o{ screenshots     : "1訪問でN枚のスクリーンショット"
-    find_users ||--o{ with_users    : "1ユーザーがN訪問に登場"
+    sessions ||--o{ visits          : has
+    sessions ||--o{ notifications   : receives
+    sessions ||--o{ osc             : logs
+    sessions ||--o| subscription    : has
+    visits   ||--o{ with_users      : "co-present"
+    visits   ||--o{ screenshots     : captures
+    find_users ||--o{ with_users    : "appears in"
 
     sessions {
         INTEGER  id PK
-        TEXT     log_name "UNIQUE: 再取り込み防止"
+        TEXT     log_name UK
         TEXT     account_id
         TEXT     account_name
         DATETIME start_time
@@ -67,15 +113,15 @@ erDiagram
         INTEGER  session_id FK
         TEXT     world_name
         TEXT     instance_id
-        TEXT     instance_type "CHECK in (private,friends,hidden,public,group)"
+        TEXT     instance_type
         TEXT     region
         DATETIME join_time
         DATETIME leave_time
     }
 
     find_users {
-        TEXT     vrchat_id PK "usr_xxx, ユーザーカタログとして独立"
-        TEXT     account_name
+        TEXT vrchat_id PK
+        TEXT account_name
     }
 
     with_users {
@@ -90,8 +136,8 @@ erDiagram
     notifications {
         INTEGER  id PK
         INTEGER  session_id FK
-        TEXT     notif_id "UNIQUE: 再取り込み時の重複防止"
-        TEXT     notif_type "CHECK in (boop,friendRequest,requestInvite,invite,group)"
+        TEXT     notif_id UK
+        TEXT     notif_type
         TEXT     sender_user_id
         TEXT     sender_name
         TEXT     message
@@ -106,7 +152,7 @@ erDiagram
 
     screenshots {
         INTEGER  id PK
-        INTEGER  visit_id FK "nullable: ワールド外撮影に対応"
+        INTEGER  visit_id FK
         TEXT     file_path
         INTEGER  resolution_width
         INTEGER  resolution_height
@@ -116,7 +162,7 @@ erDiagram
     osc {
         INTEGER  id PK
         INTEGER  session_id FK
-        TEXT     event_type "CHECK in (found)"
+        TEXT     event_type
         TEXT     service_name
         TEXT     service_type
         TEXT     ip_address
@@ -126,7 +172,7 @@ erDiagram
 
     subscription {
         INTEGER  id PK
-        INTEGER  session_id FK "UNIQUE: 1セッション1レコード"
+        INTEGER  session_id FK,UK
         BOOLEAN  is_active
         TEXT     subscription_id
         TEXT     description
@@ -137,325 +183,367 @@ erDiagram
         INTEGER  id PK
         TEXT     name
         TEXT     description
-        TEXT     path "UNIQUE: 同一EXEの重複登録防止"
+        TEXT     path UK
         BLOB     icon
         DATETIME registered_at
     }
 ```
 
-### 主要な関係性の判断
-
-#### `sessions → visits` (1:N)
-
-セッション = ログファイル 1 つ。1 つのセッション内で複数のワールド訪問が発生するため 1:N。
-
-#### `find_users` を独立テーブルとした理由
-
-最初は `with_users` に `account_name` 列を直接持たせる案もあったが、以下の理由で **find_users をユーザーカタログとして独立**させた：
-
-| 課題 | find_users 独立による解決 |
-|---|---|
-| ユーザーが表示名を変更した場合 | `find_users.account_name` を 1 行 UPDATE するだけで全訪問の表示名が更新される |
-| 「初めて会った日」を出したい | `with_users` から `MIN(join_time) GROUP BY vrchat_id` で集計可能 |
-| 過去の表示名履歴を将来追加する余地 | `find_users` に history テーブルを追加すれば対応可能 |
-
-#### `visits ←→ with_users` の中間テーブル設計
-
-VRChat ログでは「**プレイヤー A がワールド X に滞在中の途中で離脱**」が頻繁に起きる。これを正確に記録するため：
-
-- `with_users.join_time` / `leave_time` を**プレイヤーごと**に持つ
-- 1 訪問内に同じプレイヤーが**入退室を繰り返す**ことは VRChat 仕様上ない（再入室は別 visit になる）ため `UNIQUE(visit_id, vrchat_id)` で十分
+`apps` テーブルは VRChat ログとは独立しており、ランチャー機能で登録された外部 EXE のメタデータを保管する。
 
 ---
 
-## 3. テーブル設計の意図
+## Tables
 
-### 3.1 sessions
+### sessions
 
-```sql
-CREATE TABLE sessions (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    log_name        TEXT UNIQUE NOT NULL,      -- ← 冪等性のキー
-    account_id      TEXT,
-    account_name    TEXT,
-    start_time      DATETIME,
-    end_time        DATETIME
-);
-```
+ログファイル単位のセッション情報。1 ログファイル = 1 セッション。
 
-**設計判断**:
+| Column | Type | Nullable | Default | Description |
+| ------ | ---- | -------- | ------- | ----------- |
+| `id` | INTEGER | NO | AUTOINCREMENT | プライマリキー |
+| `log_name` | TEXT | NO | - | 元ログファイル名 (例: `output_log_2025-10-21_00-59-15.txt`) |
+| `account_id` | TEXT | YES | NULL | 自分の VRChat ID (`usr_xxx`) |
+| `account_name` | TEXT | YES | NULL | 自分の表示名 |
+| `start_time` | DATETIME | YES | NULL | セッション開始時刻 |
+| `end_time` | DATETIME | YES | NULL | セッション終了時刻 |
 
-- `log_name UNIQUE`: 取り込み済みファイルの再取り込みを `INSERT OR IGNORE` で吸収する基盤
-- `account_id` / `account_name` を nullable に: 認証行 `User Authenticated: ...` が出る前にログが終わるケース（クラッシュ等）を許容
-- `start_time` / `end_time` を nullable に: ログが空の場合や時刻パース失敗時にも sessions 行は生成する（後段の parse_and_import が visits を作れるように）
+**Constraints**
 
-### 3.2 visits
-
-```sql
-CREATE TABLE visits (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id      INTEGER NOT NULL REFERENCES sessions(id),
-    world_name      TEXT NOT NULL,
-    instance_id     TEXT NOT NULL,
-    instance_type   TEXT CHECK(
-        instance_type IN ('private','friends','hidden','public','group')
-        OR instance_type IS NULL
-    ),
-    region          TEXT,
-    join_time       DATETIME NOT NULL,
-    leave_time      DATETIME
-);
-```
-
-**設計判断**:
-
-- `instance_type` の CHECK 制約: アプリケーション層のバグでスキーマ違反な値が入る事故を防止。`NULL` 許容は古いログ形式への後方互換
-- `leave_time` nullable: VRChat クラッシュで `OnLeftRoom` が出ないケース（取り込み時点で滞在中扱い）
-- `world_name TEXT NOT NULL`: `Entering Room: <name>` が必ず先行する設計のため
-- `(world_name, instance_id)` の複合 UNIQUE は**敢えて作らない**: 同じインスタンスへの再訪問は別レコードとして記録すべきため
-
-### 3.3 find_users / with_users
-
-```sql
-CREATE TABLE find_users (
-    vrchat_id    TEXT PRIMARY KEY,    -- usr_xxx 自体を PK にする
-    account_name TEXT NOT NULL
-);
-
-CREATE TABLE with_users (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    visit_id     INTEGER NOT NULL REFERENCES visits(id),
-    vrchat_id    TEXT NOT NULL REFERENCES find_users(vrchat_id),
-    is_self      BOOLEAN NOT NULL DEFAULT 0,
-    join_time    DATETIME NOT NULL,
-    leave_time   DATETIME,
-    UNIQUE(visit_id, vrchat_id)        -- ← 同訪問内重複防止
-);
-```
-
-**設計判断**:
-
-- `find_users.vrchat_id` を PK に: VRChat ID は不変な永続識別子なので INTEGER 代理キーは不要
-- 取り込み時のクエリは `INSERT INTO find_users ... ON CONFLICT(vrchat_id) DO UPDATE SET account_name = excluded.account_name` で**表示名を最新化**
-- `with_users.UNIQUE(visit_id, vrchat_id)`: ログ内の `OnPlayerJoined` 重複出現に備える防衛策
-
-### 3.4 notifications
-
-```sql
-CREATE TABLE notifications (
-    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id            INTEGER NOT NULL REFERENCES sessions(id),
-    notif_id              TEXT UNIQUE,
-    notif_type            TEXT NOT NULL CHECK(
-        notif_type IN ('boop','friendRequest','requestInvite','invite','group')
-    ),
-    sender_user_id        TEXT,
-    sender_name           TEXT,
-    message               TEXT,
-    created_at            DATETIME,
-    received_at           DATETIME NOT NULL,
-    target_world_name     TEXT,
-    target_instance_id    TEXT,
-    target_instance_type  TEXT,
-    target_owner          TEXT,
-    target_region         TEXT
-);
-```
-
-**設計判断**:
-
-- `notif_id UNIQUE`: VRChat 通知の一意 ID `not_xxx` を保持。再取り込み時の重複を `INSERT OR IGNORE` で吸収
-- `notif_type` を 5 種類に限定: パーサ側で `is_collectible_notification()` フィルタを通すため、それ以外（オンラインステータス変更など）は DB に入れない（ノイズ削減）
-- `target_*` 列が 5 つ: 招待通知に含まれる `worldId=wrld_xxx,worldName=...` 等のメタを正規化して保管。後で「誰からの招待を受けたか」「どのワールドへの招待か」を JOIN なしで検索可能
-- `created_at` (通知元時刻) と `received_at` (受信時刻) を**両方持つ**: 受信遅延の分析や、時系列ソートの基準として両方欲しいケースに対応
-
-### 3.5 screenshots
-
-```sql
-CREATE TABLE screenshots (
-    id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    visit_id          INTEGER REFERENCES visits(id),  -- nullable
-    file_path         TEXT NOT NULL,
-    resolution_width  INTEGER,
-    resolution_height INTEGER,
-    timestamp         DATETIME NOT NULL
-);
-```
-
-**設計判断**:
-
-- `visit_id` nullable: メニュー画面やワールド外で撮影するケース（VRChat の挙動上ある）に対応
-- `file_path` を保持: 後でアクセスしたいときにフルパスがないと開けないため
-- `resolution_*` を nullable: 古い VRC ログ形式では解像度情報がないケースに対応
-
-### 3.6 osc / subscription
-
-OSC と Subscription はそれぞれ独立した観点なので別テーブルに切り分け、肥大化する `sessions` への列追加を回避した。
-
-- `osc.event_type` は将来 `lost` 等を追加できるよう CHECK 拡張可能設計
-- `subscription.session_id UNIQUE`: VRChat+ 状態確認は 1 セッション 1 回のみ出力されるため 1:1
-
-### 3.7 apps
-
-```sql
-CREATE TABLE apps (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    name            TEXT NOT NULL,
-    description     TEXT NOT NULL DEFAULT '',
-    path            TEXT NOT NULL UNIQUE,         -- ← 重複登録防止
-    icon            BLOB,                          -- ← PNG をそのまま保管
-    registered_at   DATETIME DEFAULT (datetime('now', 'localtime'))
-);
-```
-
-**設計判断**:
-
-- VRChat ログとは独立した「ランチャー」機能用テーブル。DB を分けるか迷ったが**「ユーザー設定もアプリデータ」として 1 つの DB に集約**することでバックアップを簡素化
-- `path UNIQUE`: 同じ EXE を 2 回登録できないようにする UX 上の制約
-- `icon BLOB`: ファイルシステムにアイコンを散らさない設計判断。1 アイコン ~50KB × 数十登録なので肥大化リスクは低い
-- 旧スキーマでは `name UNIQUE` だったが、`path UNIQUE` に migration（`migrate_apps_unique_to_path`）して、**「別名で同じ EXE を登録できる」UX を実現**
+- `PRIMARY KEY (id)`
+- `UNIQUE (log_name)` — 再取り込み防止
 
 ---
 
-## 4. インデックス選定
+### visits
 
-```sql
-CREATE INDEX idx_visits_join_time      ON visits(join_time);
-CREATE INDEX idx_visits_session_id     ON visits(session_id);
-CREATE INDEX idx_with_users_visit_id   ON with_users(visit_id);
-CREATE INDEX idx_with_users_vrchat_id  ON with_users(vrchat_id);
-CREATE INDEX idx_notifications_type    ON notifications(notif_type);
-CREATE INDEX idx_notifications_received ON notifications(received_at);
-CREATE INDEX idx_screenshots_visit_id  ON screenshots(visit_id);
-CREATE INDEX idx_screenshots_timestamp ON screenshots(timestamp);
-CREATE INDEX idx_osc_session_id        ON osc(session_id);
-CREATE INDEX idx_osc_timestamp         ON osc(timestamp);
-```
+ワールドインスタンスへの 1 回の訪問。`Joining` 行で INSERT、`OnLeftRoom` または次の `Entering Room` で `leave_time` を UPDATE する。
 
-### 選定基準
+| Column | Type | Nullable | Default | Description |
+| ------ | ---- | -------- | ------- | ----------- |
+| `id` | INTEGER | NO | AUTOINCREMENT | プライマリキー |
+| `session_id` | INTEGER | NO | - | 親セッション (`sessions.id`) |
+| `world_name` | TEXT | NO | - | ワールド表示名 |
+| `instance_id` | TEXT | NO | - | インスタンス番号 |
+| `instance_type` | TEXT | YES | NULL | 公開区分 |
+| `region` | TEXT | YES | NULL | サーバリージョン (`jp`, `use`, `usw`, `eu` 等) |
+| `join_time` | DATETIME | NO | - | 入室時刻 |
+| `leave_time` | DATETIME | YES | NULL | 退室時刻 (滞在中は NULL) |
 
-| インデックス | クエリパターン |
-|---|---|
-| `idx_visits_join_time` | DB プレビューの `default_sort = ('join_time', 'DESC')` |
-| `idx_visits_session_id` | `JOIN visits ON sessions.id = visits.session_id` (visit_summary ビュー) |
-| `idx_with_users_visit_id` | `with_users_detail` ビューの `JOIN visits ON v.id = wu.visit_id` |
-| `idx_with_users_vrchat_id` | `JOIN find_users ON fu.vrchat_id = wu.vrchat_id`（with_users_detail ビュー） |
-| `idx_notifications_type` | 「招待だけ」「boop だけ」のフィルタリング想定 |
-| `idx_notifications_received` | 時系列ソート（default_sort） |
-| `idx_screenshots_*` | DB プレビューのソート + 訪問との JOIN |
-| `idx_osc_*` | DB プレビューのソート + セッションとの JOIN |
+**Constraints**
 
-### 敢えて貼っていないインデックス
+- `PRIMARY KEY (id)`
+- `FOREIGN KEY (session_id) REFERENCES sessions(id)`
+- `CHECK (instance_type IN ('private','friends','hidden','public','group') OR instance_type IS NULL)`
 
-| 対象 | 理由 |
-|---|---|
-| `sessions(log_name)` | UNIQUE 制約で自動インデックス生成済 |
-| `notifications(notif_id)` | UNIQUE で自動生成 |
-| `apps(path)` | UNIQUE で自動生成 |
-| `find_users(vrchat_id)` | PK で自動生成 |
-| `visits(world_name)` | 部分一致検索のニーズが現状なし、将来要件が出たら追加 |
-| `visits(region)` | カーディナリティが低く（5-10 程度）インデックスの恩恵が小さい |
+**Indexes**
+
+- `idx_visits_join_time (join_time)` — DB プレビューのデフォルトソート
+- `idx_visits_session_id (session_id)` — `visit_summary` ビューの集計用
 
 ---
 
-## 5. ビュー設計
+### find_users
 
-### 5.1 visit_summary — 滞在時間と同席人数を即座に取得
+これまでに観測した VRChat ユーザーのカタログ。
+
+| Column | Type | Nullable | Default | Description |
+| ------ | ---- | -------- | ------- | ----------- |
+| `vrchat_id` | TEXT | NO | - | VRChat ID (`usr_xxx`) |
+| `account_name` | TEXT | NO | - | 最新観測の表示名 |
+
+**Constraints**
+
+- `PRIMARY KEY (vrchat_id)`
+
+**Notes**
+
+- INSERT 時は `ON CONFLICT(vrchat_id) DO UPDATE SET account_name = excluded.account_name` で表示名を最新化する。
+
+---
+
+### with_users
+
+訪問単位の同席ユーザー記録。
+
+| Column | Type | Nullable | Default | Description |
+| ------ | ---- | -------- | ------- | ----------- |
+| `id` | INTEGER | NO | AUTOINCREMENT | プライマリキー |
+| `visit_id` | INTEGER | NO | - | 訪問 (`visits.id`) |
+| `vrchat_id` | TEXT | NO | - | プレイヤー (`find_users.vrchat_id`) |
+| `is_self` | BOOLEAN | NO | 0 | 自分自身か |
+| `join_time` | DATETIME | NO | - | 観測開始時刻 |
+| `leave_time` | DATETIME | YES | NULL | 観測終了時刻 |
+
+**Constraints**
+
+- `PRIMARY KEY (id)`
+- `FOREIGN KEY (visit_id) REFERENCES visits(id)`
+- `FOREIGN KEY (vrchat_id) REFERENCES find_users(vrchat_id)`
+- `UNIQUE (visit_id, vrchat_id)` — 同訪問内の重複防止
+
+**Indexes**
+
+- `idx_with_users_visit_id (visit_id)`
+- `idx_with_users_vrchat_id (vrchat_id)`
+
+---
+
+### notifications
+
+VRChat の通知履歴。`is_collectible_notification()` でフィルタされた 5 種類のみを格納する。
+
+| Column | Type | Nullable | Default | Description |
+| ------ | ---- | -------- | ------- | ----------- |
+| `id` | INTEGER | NO | AUTOINCREMENT | プライマリキー |
+| `session_id` | INTEGER | NO | - | 受信セッション |
+| `notif_id` | TEXT | YES | NULL | VRChat 側の通知 ID (`not_xxx`) |
+| `notif_type` | TEXT | NO | - | 通知種別 |
+| `sender_user_id` | TEXT | YES | NULL | 送信者の VRChat ID |
+| `sender_name` | TEXT | YES | NULL | 送信者表示名 |
+| `message` | TEXT | YES | NULL | 通知本文 |
+| `created_at` | DATETIME | YES | NULL | 通知元での生成時刻 |
+| `received_at` | DATETIME | NO | - | アプリでの観測時刻 |
+| `target_world_name` | TEXT | YES | NULL | 招待先ワールド名 |
+| `target_instance_id` | TEXT | YES | NULL | 招待先インスタンス ID |
+| `target_instance_type` | TEXT | YES | NULL | 招待先公開区分 |
+| `target_owner` | TEXT | YES | NULL | 招待先インスタンスオーナー |
+| `target_region` | TEXT | YES | NULL | 招待先リージョン |
+
+**Constraints**
+
+- `PRIMARY KEY (id)`
+- `FOREIGN KEY (session_id) REFERENCES sessions(id)`
+- `UNIQUE (notif_id)`
+- `CHECK (notif_type IN ('boop','friendRequest','requestInvite','invite','group'))`
+
+**Indexes**
+
+- `idx_notifications_type (notif_type)`
+- `idx_notifications_received (received_at)`
+
+---
+
+### screenshots
+
+VRChat Camera による撮影イベント。
+
+| Column | Type | Nullable | Default | Description |
+| ------ | ---- | -------- | ------- | ----------- |
+| `id` | INTEGER | NO | AUTOINCREMENT | プライマリキー |
+| `visit_id` | INTEGER | YES | NULL | 撮影時の訪問 (ワールド外撮影時は NULL) |
+| `file_path` | TEXT | NO | - | 保存先フルパス |
+| `resolution_width` | INTEGER | YES | NULL | 解像度幅 (px) |
+| `resolution_height` | INTEGER | YES | NULL | 解像度高さ (px) |
+| `timestamp` | DATETIME | NO | - | 撮影時刻 |
+
+**Constraints**
+
+- `PRIMARY KEY (id)`
+- `FOREIGN KEY (visit_id) REFERENCES visits(id)`
+
+**Indexes**
+
+- `idx_screenshots_visit_id (visit_id)`
+- `idx_screenshots_timestamp (timestamp)`
+
+---
+
+### osc
+
+OSC サービス検出イベント。`Found new OSC Service: <name> at <ip>:<port>` 行から抽出する。
+
+| Column | Type | Nullable | Default | Description |
+| ------ | ---- | -------- | ------- | ----------- |
+| `id` | INTEGER | NO | AUTOINCREMENT | プライマリキー |
+| `session_id` | INTEGER | NO | - | 検出セッション |
+| `event_type` | TEXT | NO | - | イベント種別 |
+| `service_name` | TEXT | YES | NULL | サービス名 (例: `OyasumiVR`) |
+| `service_type` | TEXT | YES | NULL | OSC / OSCQuery 区別 (現状は NULL 固定) |
+| `ip_address` | TEXT | YES | NULL | 検出時の接続先 IP |
+| `port` | INTEGER | YES | NULL | ポート番号 |
+| `timestamp` | DATETIME | NO | - | 検出時刻 |
+
+**Constraints**
+
+- `PRIMARY KEY (id)`
+- `FOREIGN KEY (session_id) REFERENCES sessions(id)`
+- `CHECK (event_type IN ('found'))`
+
+**Indexes**
+
+- `idx_osc_session_id (session_id)`
+- `idx_osc_timestamp (timestamp)`
+
+---
+
+### subscription
+
+VRChat+ サブスクリプション状態。セッション開始時に 1 回出力される `Get VRChat Subscription Details!` 行から抽出する。
+
+| Column | Type | Nullable | Default | Description |
+| ------ | ---- | -------- | ------- | ----------- |
+| `id` | INTEGER | NO | AUTOINCREMENT | プライマリキー |
+| `session_id` | INTEGER | NO | - | 確認セッション |
+| `is_active` | BOOLEAN | NO | - | VRChat+ 有効フラグ |
+| `subscription_id` | TEXT | YES | NULL | VRChat 側の契約 ID |
+| `description` | TEXT | YES | NULL | サブスクリプション種別説明 |
+| `checked_at` | DATETIME | NO | - | 確認時刻 |
+
+**Constraints**
+
+- `PRIMARY KEY (id)`
+- `FOREIGN KEY (session_id) REFERENCES sessions(id)`
+- `UNIQUE (session_id)` — 1 セッション 1 レコード
+
+---
+
+### apps
+
+ランチャーに登録された外部 EXE のメタデータ。VRChat ログとは独立した管理データ。
+
+| Column | Type | Nullable | Default | Description |
+| ------ | ---- | -------- | ------- | ----------- |
+| `id` | INTEGER | NO | AUTOINCREMENT | プライマリキー |
+| `name` | TEXT | NO | - | 表示名 |
+| `description` | TEXT | NO | `''` | 説明文 |
+| `path` | TEXT | NO | - | EXE のフルパス |
+| `icon` | BLOB | YES | NULL | アイコン PNG バイナリ |
+| `registered_at` | DATETIME | YES | `datetime('now', 'localtime')` | 登録時刻 |
+
+**Constraints**
+
+- `PRIMARY KEY (id)`
+- `UNIQUE (path)` — 同一 EXE の重複登録防止
+
+---
+
+## Views
+
+### visit_summary
+
+各訪問の滞在秒数と他プレイヤー数を付与した派生ビュー。
 
 ```sql
 CREATE VIEW visit_summary AS
 SELECT
     v.id AS visit_id,
-    v.world_name, v.instance_id, v.instance_type, v.region,
-    v.join_time, v.leave_time,
+    v.world_name,
+    v.instance_id,
+    v.instance_type,
+    v.region,
+    v.join_time,
+    v.leave_time,
     CAST(
       (julianday(COALESCE(v.leave_time, datetime('now'))) - julianday(v.join_time)) * 86400
       AS INTEGER
     ) AS duration_sec,
-    (SELECT COUNT(*) FROM with_users wu
+    (SELECT COUNT(*)
+     FROM with_users wu
      WHERE wu.visit_id = v.id AND wu.is_self = 0) AS other_player_count
 FROM visits v
 ORDER BY v.join_time DESC;
 ```
 
-**設計判断**:
+| Column | Type | Description |
+| ------ | ---- | ----------- |
+| `visit_id` | INTEGER | `visits.id` |
+| `world_name` | TEXT | ワールド名 |
+| `instance_id` | TEXT | インスタンス ID |
+| `instance_type` | TEXT | 公開区分 |
+| `region` | TEXT | リージョン |
+| `join_time` | DATETIME | 入室時刻 |
+| `leave_time` | DATETIME | 退室時刻 |
+| `duration_sec` | INTEGER | 滞在秒数 (`leave_time` が NULL の場合は現在時刻まで) |
+| `other_player_count` | INTEGER | 自分を除いた同席プレイヤー数 |
 
-- フロントエンドで秒数計算を書くと**タイムゾーン処理のバグ**が混入しやすいため、DB 側で `julianday()` で算出
-- `COALESCE(v.leave_time, datetime('now'))`: 退室時刻が未確定（滞在中扱い）の visit は現在時刻までを滞在時間として算出
-- `other_player_count` は**サブクエリで集計**: 自分（is_self=1）を除いた純粋な同席数
-- `ORDER BY v.join_time DESC` をビュー内に埋め込み: 一覧画面が常に新しい順で表示される前提
+---
 
-### 5.2 with_users_detail — JOIN を隠蔽
+### with_users_detail
+
+`with_users` に `find_users` と `visits` を結合した詳細ビュー。
 
 ```sql
 CREATE VIEW with_users_detail AS
-SELECT wu.id, wu.visit_id, v.world_name,
-       wu.vrchat_id, fu.account_name AS user_name, wu.is_self,
-       wu.join_time, wu.leave_time
+SELECT
+    wu.id,
+    wu.visit_id,
+    v.world_name,
+    wu.vrchat_id,
+    fu.account_name AS user_name,
+    wu.is_self,
+    wu.join_time,
+    wu.leave_time
 FROM with_users wu
 JOIN find_users fu ON fu.vrchat_id = wu.vrchat_id
 JOIN visits v ON v.id = wu.visit_id;
 ```
 
-**設計判断**:
+| Column | Type | Description |
+| ------ | ---- | ----------- |
+| `id` | INTEGER | `with_users.id` |
+| `visit_id` | INTEGER | 訪問 ID |
+| `world_name` | TEXT | ワールド名 |
+| `vrchat_id` | TEXT | プレイヤー VRChat ID |
+| `user_name` | TEXT | プレイヤー表示名 |
+| `is_self` | BOOLEAN | 自分自身か |
+| `join_time` | DATETIME | 観測開始時刻 |
+| `leave_time` | DATETIME | 観測終了時刻 |
 
-- 「ユーザー名」「ワールド名」を 1 行で取得可能にし、フロントエンドが 3 テーブルを意識せずに使える
-- `JOIN`（INNER）にした理由: with_users が存在するなら必ず visits も find_users も存在する（外部キー保証）
+---
 
-### 5.3 screenshots_detail — LEFT JOIN で柔軟性確保
+### screenshots_detail
+
+`screenshots` に `visits` を LEFT JOIN した詳細ビュー（ワールド外撮影に対応するため LEFT JOIN）。
 
 ```sql
 CREATE VIEW screenshots_detail AS
-SELECT s.id, s.visit_id, v.world_name,
-       s.file_path, s.resolution_width, s.resolution_height, s.timestamp
+SELECT
+    s.id,
+    s.visit_id,
+    v.world_name,
+    s.file_path,
+    s.resolution_width,
+    s.resolution_height,
+    s.timestamp
 FROM screenshots s
 LEFT JOIN visits v ON v.id = s.visit_id;
 ```
 
-**設計判断**:
-
-- `LEFT JOIN`: `screenshots.visit_id` が NULL（ワールド外撮影）でも行を返す
-- `world_name` は NULL になり、UI 側で「撮影場所不明」と表示する想定
-
----
-
-## 6. トランザクション戦略
-
-### 二段構えのロールバック設計
-
-```
-外側 transaction (run_diff_import 全体)
- ├─ savepoint sp_1 → parse_and_import(log_1) → commit  ✅
- ├─ savepoint sp_2 → parse_and_import(log_2) → エラー  → rollback sp_2 のみ
- │                                                       ↓ log_err で警告ログに記録、処理続行
- ├─ savepoint sp_3 → parse_and_import(log_3) → ユーザーキャンセル
- │                                                       ↓ rollback sp_3 → rollback 外側 → return Err
- │                                                       ↓ DB は取り込み前と完全に同じ状態
- └─ ...
-commit 外側 → 全変更が一括で反映
-```
-
-**意図**:
-
-- **個別失敗は許容**: 1 ファイルの解析エラーで全体を巻き戻すと、99 件成功していても無駄になる
-- **キャンセルは全巻き戻し**: ユーザーが「やめる」と言ったら、半端な状態を残さない
-- **commit のタイミングが 1 度だけ**: 全アーカイブの取り込みが完了したタイミングで初めて DB に反映 → 取り込み途中で DB を覗いても古い状態しか見えない（読み取り側の混乱防止）
-
-### WAL モードの活用
-
-```rust
-conn.execute_batch("PRAGMA journal_mode = WAL;")?;
-conn.execute_batch("PRAGMA foreign_keys = ON;")?;
-```
-
-- **WAL モード**: 取り込み中（書き込み中）でもログビューア（読み取り）が並行動作可能
-- **foreign_keys = ON**: REFERENCES 制約の実行時チェックを有効化（デフォルトは OFF なので明示的に ON）
+| Column | Type | Description |
+| ------ | ---- | ----------- |
+| `id` | INTEGER | `screenshots.id` |
+| `visit_id` | INTEGER | 訪問 ID (NULL 可) |
+| `world_name` | TEXT | ワールド名 (ワールド外撮影は NULL) |
+| `file_path` | TEXT | 保存先フルパス |
+| `resolution_width` | INTEGER | 解像度幅 |
+| `resolution_height` | INTEGER | 解像度高さ |
+| `timestamp` | DATETIME | 撮影時刻 |
 
 ---
 
-## 7. マイグレーション戦略
+## Indexes
 
-`src-tauri/src/analyze/db.rs::init_main_db` がアプリ起動時に必ず実行される。
+UNIQUE 制約による自動生成インデックスを除く、明示的に作成されるインデックス一覧。
+
+| Index | Table | Columns | Purpose |
+| ----- | ----- | ------- | ------- |
+| `idx_visits_join_time` | `visits` | `join_time` | DB プレビューのデフォルトソート |
+| `idx_visits_session_id` | `visits` | `session_id` | `visit_summary` ビューの JOIN |
+| `idx_with_users_visit_id` | `with_users` | `visit_id` | `with_users_detail` ビューの JOIN |
+| `idx_with_users_vrchat_id` | `with_users` | `vrchat_id` | プレイヤー単位検索 |
+| `idx_notifications_type` | `notifications` | `notif_type` | 通知種別フィルタ |
+| `idx_notifications_received` | `notifications` | `received_at` | 時系列ソート |
+| `idx_screenshots_visit_id` | `screenshots` | `visit_id` | `screenshots_detail` ビューの JOIN |
+| `idx_screenshots_timestamp` | `screenshots` | `timestamp` | 時系列ソート |
+| `idx_osc_session_id` | `osc` | `session_id` | セッション JOIN |
+| `idx_osc_timestamp` | `osc` | `timestamp` | 時系列ソート |
+
+---
+
+## Initialization and PRAGMA
+
+`src-tauri/src/analyze/db.rs::init_main_db` がアプリ起動時と取り込み開始時に必ず実行される。
 
 ```rust
 pub fn init_main_db(conn: &Connection) -> Result<()> {
@@ -463,47 +551,107 @@ pub fn init_main_db(conn: &Connection) -> Result<()> {
     conn.execute_batch("PRAGMA foreign_keys = ON;")?;
     conn.execute_batch(MAIN_SCHEMA)?;          // CREATE TABLE IF NOT EXISTS
     conn.execute_batch(MAIN_VIEWS)?;           // CREATE VIEW IF NOT EXISTS
-    migrate_apps_unique_to_path(conn)?;        // 旧 name UNIQUE → 新 path UNIQUE
-    drop_legacy_apps_category(conn)?;          // 旧 category 列の削除
+    migrate_apps_unique_to_path(conn)?;
+    drop_legacy_apps_category(conn)?;
     Ok(())
 }
 ```
 
-### マイグレーションの判断ポリシー
+### Active PRAGMAs
 
-| 変更内容 | 対応 |
-|---|---|
-| 新規テーブル / 新規列追加 | `CREATE TABLE IF NOT EXISTS` のみで対応可能、追加コード不要 |
-| 既存列の削除 | `ALTER TABLE DROP COLUMN` を idempotent 関数化（`drop_legacy_apps_category`） |
-| UNIQUE 制約の変更 | テーブル再作成パターン（`migrate_apps_unique_to_path`） — `BEGIN; CREATE TABLE apps_new; INSERT; DROP; RENAME; COMMIT;` |
-| 互換性のない変更 | バージョン番号と共に専用 migration 関数を追加 |
-
-### 採用しなかった migration ツール
-
-`refinery` などのバージョン管理付き migration ツールは、現状 2 つのマイグレーションのみで導入コストが過大と判断。将来 10 件を超えたら採用検討。
-
-### マイグレーションの注意点
-
-`migrate_apps_unique_to_path` は `INSERT OR IGNORE INTO apps_new ... SELECT FROM apps;` を使うため、**旧スキーマで同一 path のレコードが複数あった場合（理論上ない）、サイレントにドロップされる**。これは旧スキーマでは `name UNIQUE` だったため path 重複は想定外で許容範囲。
+| PRAGMA | Value | Reason |
+| ------ | ----- | ------ |
+| `journal_mode` | `WAL` | 取り込み中（書き込み）と読み取り（ビューア・DB プレビュー）の並行動作 |
+| `foreign_keys` | `ON` | REFERENCES 制約の実行時チェック (デフォルト OFF) |
 
 ---
 
-## 8. 運用上のトレードオフ
+## Migrations
 
-| トレードオフ | 採用 | 不採用 | 採用理由 |
-|---|---|---|---|
-| 物理削除 vs 論理削除 | 物理削除 | `deleted_at` 列 | アンインストール時のデータ保護で十分。論理削除ロジックを書く価値より単純さを優先 |
-| 監査ログ | なし | `audit_log` テーブル | パーソナルツールで監査要件なし |
-| 全文検索 | LIKE 検索想定 | FTS5 仮想テーブル | 現状 UI に検索機能なし。将来追加時に FTS5 を検討 |
-| 暗号化 | なし | SQLCipher | ローカル DB かつ Windows ファイルシステムの権限で守られる前提 |
-| バイナリ保存 | BLOB (apps.icon) | 外部ファイル + パス参照 | アイコン数 ~数十、サイズ ~50KB × 数十 で BLOB の方が運用簡素 |
-| timezone | local 時刻 | UTC 統一 | ログ自体が local 時刻なので変換ロジックを増やさない判断 |
-| 自動 vacuum | OFF (デフォルト) | `PRAGMA auto_vacuum = FULL` | 削除頻度が低く、vacuum の I/O コストが書き込み性能を悪化させるため |
+スキーマ変更履歴と適用される migration 関数。
 
-### 既知の運用課題
+| Order | Function | Purpose |
+| ----- | -------- | ------- |
+| 1 | `MAIN_SCHEMA` execute | 全テーブルの `CREATE TABLE IF NOT EXISTS` |
+| 2 | `MAIN_VIEWS` execute | 全ビューの `CREATE VIEW IF NOT EXISTS` |
+| 3 | `migrate_apps_unique_to_path` | 旧スキーマで `apps.name UNIQUE` だった DB を `apps.path UNIQUE` に変更 |
+| 4 | `drop_legacy_apps_category` | 旧 `apps.category` 列が残っていれば DROP COLUMN |
 
-| 課題 | 影響 | 対応方針 |
-|---|---|---|
-| FOREIGN KEYS = ON で sessions を直接 DELETE するとエラー | 手動運用時のみ | 削除 UI を作る場合は子から順に削除する設計に |
-| WAL ファイル (`*.db-wal`) が肥大化する可能性 | 長期未起動後の初回コミット遅延 | アプリ終了時に自動 checkpoint、明示的な対処は不要 |
-| 同一 vrchat_id で表示名が頻繁に変わるユーザー | 最新値しか残らない | 履歴を残したい場合は `find_users_history` テーブルを追加 |
+### `migrate_apps_unique_to_path`
+
+旧スキーマでは `apps.name` が UNIQUE だったが、同一 EXE を別名で複数登録できるよう `apps.path` を UNIQUE に変更した。テーブル再作成パターンで移行する。
+
+```sql
+BEGIN;
+CREATE TABLE apps_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    path TEXT NOT NULL UNIQUE,
+    icon BLOB,
+    registered_at DATETIME DEFAULT (datetime('now', 'localtime'))
+);
+INSERT OR IGNORE INTO apps_new (id, name, description, path, icon, registered_at)
+    SELECT id, name, description, path, icon, registered_at FROM apps;
+DROP TABLE apps;
+ALTER TABLE apps_new RENAME TO apps;
+COMMIT;
+```
+
+> **注意**: `INSERT OR IGNORE` を使用しているため、旧 DB で `path` が重複していたレコード（理論上ない）はサイレントにドロップされる。
+
+### `drop_legacy_apps_category`
+
+旧スキーマの `apps.category` 列を削除する。`pragma_table_info` で列の存在を確認した上で `ALTER TABLE ... DROP COLUMN` を発行する。新規 DB では何も実行されない。
+
+### Migration Strategy
+
+現状はマイグレーションが 2 件のみのため `refinery` 等のバージョン管理ツールは導入していない。マイグレーションが 10 件を超える場合は導入を検討する。
+
+---
+
+## Backup and Restore
+
+### Backup
+
+`Data/db/` ディレクトリ全体をコピーすることでバックアップが可能。WAL モードのため、コピー時は以下の 3 ファイルを同時にコピーする必要がある。
+
+| File | Description |
+| ---- | ----------- |
+| `stellarecord.db` | メイン DB ファイル |
+| `stellarecord.db-wal` | Write-Ahead Log |
+| `stellarecord.db-shm` | 共有メモリインデックス |
+
+アプリ終了時に WAL は自動 checkpoint されるため、終了後であれば `stellarecord.db` のみのコピーでも一貫性が保たれる。
+
+### Restore
+
+別 PC への移行時は `Data/` ディレクトリ全体（`archive/` `db/` `logs/`）をコピーする。レジストリ設定はコピーされないため、容量上限などは再設定が必要。
+
+### External Tools
+
+DB ファイルは標準的な SQLite 3 形式のため、以下のツールで直接読み出し可能。
+
+- [`sqlite3`](https://sqlite.org/cli.html) CLI
+- [DB Browser for SQLite](https://sqlitebrowser.org/)
+- VSCode の SQLite 拡張機能
+
+---
+
+## Performance Notes
+
+### Write Performance
+
+- 取り込み処理は外側トランザクション内で全アーカイブをまとめて commit する。途中の `analyze-progress` イベントは未 commit 状態で送出される。
+- ファイル単位の savepoint で部分失敗を許容する設計のため、savepoint 開始/commit のオーバーヘッドが発生するが、典型的な 100 ファイル程度では実測 1 秒未満。
+
+### Read Performance
+
+- DB プレビューは `LIMIT 500 OFFSET ?` で 1 ページずつ取得する。OFFSET が大きくなるとスキャンコストが増えるが、UI 上のページ数は通常数百ページ以下のため問題にならない。
+- ビュー (`visit_summary`, `with_users_detail`) は実体化されておらず、毎回サブクエリ／JOIN が走る。レコード数が増えると遅くなる場合は `INDEXED VIEW` 相当のキャッシュテーブルを検討する。
+
+### Storage
+
+- DB ファイルサイズは 1 セッション約 10〜100 KB（訪問数・通知数による）。
+- 1000 セッション保管時の DB サイズはおおよそ 50〜200 MB の範囲。
+- VACUUM は自動実行しない (`auto_vacuum = NONE`)。長期運用で削除が発生した場合のみ手動 VACUUM を検討する。
