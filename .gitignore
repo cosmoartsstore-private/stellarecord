@@ -14,6 +14,9 @@ memory/
 # Design/planning tools (not part of the app)
 tools/
 
+# Internal investigation notes (not for public distribution)
+fix-task.md
+
 # Logs
 logs
 *.log
