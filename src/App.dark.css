@@ -3,9 +3,8 @@
 
   /* ── ベース背景 ──────────────────────────── */
   --bg-gradient: linear-gradient(180deg, #0f172a 0%, #111827 100%);
-  --bg-card: rgb(15 23 42 / 75%);
-  --bg-card-strong: rgb(20 30 56 / 90%);
-  --bg-card-soft: rgb(10 18 36 / 60%);
+  --bg-card: #131b2e;
+  --bg-card-soft: #0c1424;
 
   /* ── アクセント (base: 123 147 248) ─────────── */
   --accent: #7b93f8;
@@ -19,8 +18,6 @@
   --text-faint: #4e5670;
 
   /* ── セマンティック ───────────────────────────────── */
-  --success: #34d399;
-  --warning: #fbbf24;
   --danger: #ef4444;
 
   /* ── ボーダー ────────────────────────────────── */
@@ -30,7 +27,6 @@
   /* ── シャドウ ────────────────────────────────── */
   --shadow-sm: 0 1px 3px rgb(0 0 0 / 30%);
   --shadow-md: 0 10px 30px rgb(0 0 0 / 40%);
-  --shadow-lg: 0 18px 45px rgb(0 0 0 / 50%);
 
   /* ── ストレージ ────────────────────────────────── */
   --storage-track-bg: #1e293b;
@@ -42,32 +38,12 @@
   /* ── ボタン ────────────────────────────────── */
   --btn-primary-shadow: none;
   --btn-primary-hover-shadow: none;
-  --btn-danger-bg: #fef2f2;
-  --btn-danger-border: #fca5a5;
-  --btn-danger-hover-bg: #fee2e2;
-  --btn-danger-wipe-hover-shadow: 0 8px 20px rgb(239 68 68 / 35%);
-
-  /* ── 警告エリア ───────────────────────────── */
-  --warning-zone-bg: linear-gradient(135deg, #fef2f2, #fff7ed);
-  --warning-zone-border: #fca5a5;
-  --warning-zone-stripe: #fef2f2;
-  --danger-pulse-shadow: rgb(239 68 68 / 50%);
-  --danger-pulse-shadow-fade: rgb(239 68 68 / 0%);
-
-  /* ── 削除モーダル ───────────────────────────── */
-  --danger-modal-border: #fca5a5;
-  --danger-modal-bg: #fffafa;
-  --danger-modal-title: #b91c1c;
-  --danger-modal-body-bg: #fef2f2;
-  --danger-modal-body-border: #fecaca;
-  --danger-modal-body-text: #5c2626;
-
   /* ── ランチャー / DB ──────────────────────────── */
-  --launcher-card-bg: rgb(15 23 42 / 75%);
-  --db-sidebar-bg: rgb(15 23 42 / 75%);
-  --db-content-bg: rgb(15 23 42 / 75%);
-  --db-content-header-bg: rgb(10 18 36 / 50%);
-  --db-table-head-bg: rgb(15 23 42 / 90%);
+  --launcher-card-bg: #131b2e;
+  --db-sidebar-bg: #131b2e;
+  --db-content-bg: #131b2e;
+  --db-content-header-bg: #0c1424;
+  --db-table-head-bg: #0f172a;
   --db-table-head-border: #1e293b;
   --db-table-cell-border: #172033;
   --db-table-row-border: #172033;
@@ -76,7 +52,7 @@
   --db-scrollbar-track: rgb(30 41 59 / 60%);
 
   /* ── トースト ──────────────────────────────────── */
-  --toast-bg: rgb(15 23 42 / 92%);
+  --toast-bg: #111929;
   --toast-shadow: 0 8px 28px rgb(0 0 0 / 40%);
 
   /* ── モーダル ──────────────────────────────────── */
@@ -86,14 +62,12 @@
   --modal-border: #1e293b;
 
   /* ── アーカイブ ────────────────────────────────── */
-  --archive-file-bg: rgb(15 23 42 / 70%);
-  --archive-file-hover-bg: rgb(20 30 56 / 85%);
+  --archive-file-bg: #121a2c;
   --archive-file-selected-bg: rgb(123 147 248 / 12%);
   --file-checkbox-border: rgb(123 147 248 / 40%);
-  --file-list-bg: rgb(10 18 36 / 50%);
+  --file-list-bg: #0c1424;
   --file-scrollbar-thumb: rgb(123 147 248 / 45%);
   --file-item-border: #1e293b;
-  --file-item-selected-bg: rgb(123 147 248 / 12%);
 
   /* ── ターミナル ───────────────────────────────── */
   --terminal-bg: #070d1a;
@@ -115,11 +89,4 @@
   /* ── 共有 ─────────────────────────────────── */
   --sr-shared-body-background: var(--bg-gradient);
   --sr-shared-body-color: var(--text-main);
-  --sr-shared-warning-zone-before-background: repeating-linear-gradient(
-    -45deg,
-    transparent,
-    transparent 18px,
-    var(--warning-zone-stripe) 18px,
-    var(--warning-zone-stripe) 36px
-  );
 }

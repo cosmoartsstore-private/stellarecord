@@ -891,7 +891,7 @@ fn emit_log_viewer_chunks(
         );
     }
 
-    app.emit("log_viewer_done", &session_id).ok();
+    utils::emit_event_warn(&app, "log_viewer_done", session_id);
 }
 
 /// インポート可能なアーカイブ済み `.tar.zst` ファイルを一覧表示する。
@@ -1036,7 +1036,7 @@ fn spawn_compressed_log_stream(
         })();
         if let Err(err) = result {
             utils::log_warn(&format!("ログビューアストリーム失敗: {err}"));
-            app_fallback.emit("log_viewer_done", &sid_fallback).ok();
+            utils::emit_event_warn(&app_fallback, "log_viewer_done", sid_fallback);
         }
     });
 }
@@ -1065,7 +1065,7 @@ fn spawn_plain_log_stream(
         })();
         if let Err(err) = result {
             utils::log_warn(&format!("ログビューアストリーム失敗: {err}"));
-            app_fallback.emit("log_viewer_done", &sid_fallback).ok();
+            utils::emit_event_warn(&app_fallback, "log_viewer_done", sid_fallback);
         }
     });
 }

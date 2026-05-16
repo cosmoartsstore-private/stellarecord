@@ -105,17 +105,3 @@ button {
   }
 }
 
-/* ─── 削除パルスアニメーション（DangerModalから参照） ─── */
-
-@keyframes danger-pulse {
-  0%,
-  100% {
-    opacity: 1;
-    box-shadow: 0 0 0 0 var(--danger-pulse-shadow);
-  }
-
-  50% {
-    opacity: 0.85;
-    box-shadow: 0 0 0 6px var(--danger-pulse-shadow-fade);
-  }
-}

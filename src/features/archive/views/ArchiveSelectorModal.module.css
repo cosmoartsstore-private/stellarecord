@@ -48,7 +48,7 @@
 
 .count {
   padding: 4px 12px;
-  border-radius: 99px;
+  border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent);
   font-size: 0.82rem;
@@ -83,6 +83,7 @@
   cursor: pointer;
   text-align: left;
   user-select: none;
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
 .item:hover {
@@ -162,8 +163,9 @@
   display: flex;
   min-width: 0;
   flex: 1;
-  flex-direction: column;
-  gap: 0.22rem;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.6rem;
 }
 
 .name {
@@ -186,6 +188,8 @@
   color: var(--text-faint);
   font-size: 0.74rem;
   font-weight: 700;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .emptyState {

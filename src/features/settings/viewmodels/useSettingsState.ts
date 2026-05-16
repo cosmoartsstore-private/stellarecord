@@ -61,14 +61,14 @@ export function useSettingsState() {
 
   /** 自動起動のON/OFFを切り替えて即座に保存する（失敗時はロールバック） */
   const toggleStartup = useCallback(async () => {
-    const newValue = !isStartupEnabledDraft;
-    setIsStartupEnabledDraft(newValue);
+    const shouldEnable = !isStartupEnabledDraft;
+    setIsStartupEnabledDraft(shouldEnable);
     const parsed = Number(archiveLimitDraft);
     const limitMb = Number.isFinite(parsed) && parsed > 0 ? parsed : 300;
     try {
-      await saveManagementSettings(newValue, limitMb);
+      await saveManagementSettings(shouldEnable, limitMb);
     } catch (error) {
-      setIsStartupEnabledDraft(!newValue);
+      setIsStartupEnabledDraft(!shouldEnable);
       throw error;
     }
   }, [archiveLimitDraft, isStartupEnabledDraft, saveManagementSettings]);

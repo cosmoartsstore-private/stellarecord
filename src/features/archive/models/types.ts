@@ -46,8 +46,3 @@ export interface ArchiveFileItem {
   name: string;
   size_bytes: number;
 }
-
-/** アプリ起動時の自動取り込み結果サマリ */
-export interface StartupImportSummary {
-  total_count: number;
-}

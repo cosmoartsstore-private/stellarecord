@@ -100,27 +100,29 @@
 }
 
 .btnRefreshStorage {
-  background: none;
-  border: none;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   cursor: pointer;
-  padding: 4px;
+  padding: 0.35rem;
   display: flex;
   align-items: center;
   color: var(--text-dim);
   border-radius: 8px;
   transition:
     color 0.2s,
-    background 0.2s;
+    background 0.2s,
+    border-color 0.2s;
 }
 
 .btnRefreshStorage:hover {
   color: var(--accent);
   background: var(--accent-soft);
+  border-color: var(--accent);
 }
 
 .btnRefreshStorage :global(.icon-svg) {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   fill: currentcolor;
 }
 
@@ -222,6 +224,10 @@
   border: none;
   background: transparent;
   padding: 0;
+}
+
+.progressCancel:hover {
+  text-decoration: underline;
 }
 
 @media (width <= 1024px) {

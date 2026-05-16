@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { StellaIcon, stellaIconNames } from '../../../shared/components/Icons';
 import type { DeletableLogInfo } from '../models/types';
 import shared from '../../../shared/styles/shared.module.css';
 import styles from './PolarisCleanupModal.module.css';
@@ -22,7 +23,7 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
   // 一括削除が一般的なため、初期状態で全ファイルを選択
   const [selected, setSelected] = useState<Set<string>>(new Set(logs.map((l) => l.file_name)));
 
-  const allSelected = selected.size === logs.length;
+  const isAllSelected = selected.size === logs.length;
 
   const toggle = (fileName: string) => {
     setSelected((prev) => {
@@ -37,7 +38,7 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
   };
 
   const toggleAll = () => {
-    setSelected(allSelected ? new Set() : new Set(logs.map((l) => l.file_name)));
+    setSelected(isAllSelected ? new Set() : new Set(logs.map((l) => l.file_name)));
   };
 
   const totalSize = logs
@@ -49,7 +50,9 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
       <button className={shared.modalBackdrop} onClick={onClose} />
       <div className={`${shared.modalContent} ${styles.content}`}>
         <div className={styles.header}>
-          <div className={styles.warningIcon}>⚠</div>
+          <div className={styles.warningIcon}>
+            <StellaIcon name={stellaIconNames.alert} />
+          </div>
           <div>
             <h3 className={styles.title}>元ログ削除</h3>
             <p className={styles.subtitle}>
@@ -66,7 +69,7 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
 
         <div className={styles.listHeader}>
           <button className={styles.toggleAllBtn} onClick={toggleAll}>
-            {allSelected ? 'すべて解除' : 'すべて選択'}
+            {isAllSelected ? 'すべて解除' : 'すべて選択'}
           </button>
           <span className={styles.listMeta}>
             {String(selected.size)} / {String(logs.length)} 件 選択中 —{' '}

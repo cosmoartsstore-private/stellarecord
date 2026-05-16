@@ -35,14 +35,11 @@ fn read_bool(key: &RegKey, name: &str, default: bool) -> bool {
         .unwrap_or(default)
 }
 
-/// `StellaRecord` から参照される Polaris 側のアーカイブ・スタートアップ設定。
+/// `StellaRecord` から参照される Polaris 側のアーカイブ設定。
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PolarisSetting {
     pub archive_path: String,
     pub capacity_threshold_bytes: u64,
-    pub enable_startup: bool,
-    pub migration_status: String,
-    pub migration_source_path: String,
 }
 
 const DEFAULT_CAPACITY: u64 = 314_572_800;
@@ -52,9 +49,6 @@ impl Default for PolarisSetting {
         Self {
             archive_path: String::new(),
             capacity_threshold_bytes: DEFAULT_CAPACITY,
-            enable_startup: true,
-            migration_status: "done".to_string(),
-            migration_source_path: String::new(),
         }
     }
 }
@@ -93,12 +87,6 @@ pub fn load_polaris_setting() -> PolarisSetting {
     PolarisSetting {
         archive_path: read_str(&key, "ArchivePath"),
         capacity_threshold_bytes: read_u64(&key, "CapacityThresholdBytes", DEFAULT_CAPACITY),
-        enable_startup: read_bool(&key, "EnableStartup", true),
-        migration_status: {
-            let v = read_str(&key, "MigrationStatus");
-            if v.is_empty() { "done".to_string() } else { v }
-        },
-        migration_source_path: read_str(&key, "MigrationSourcePath"),
     }
 }
 
@@ -109,12 +97,6 @@ pub fn save_polaris_setting(setting: &PolarisSetting) -> Result<(), String> {
         .map_err(|e| utils::command_err("ArchivePath の書き込みに失敗しました", e))?;
     key.set_value("CapacityThresholdBytes", &setting.capacity_threshold_bytes)
         .map_err(|e| utils::command_err("CapacityThresholdBytes の書き込みに失敗しました", e))?;
-    key.set_value("EnableStartup", &u32::from(setting.enable_startup))
-        .map_err(|e| utils::command_err("EnableStartup の書き込みに失敗しました", e))?;
-    key.set_value("MigrationStatus", &setting.migration_status)
-        .map_err(|e| utils::command_err("MigrationStatus の書き込みに失敗しました", e))?;
-    key.set_value("MigrationSourcePath", &setting.migration_source_path)
-        .map_err(|e| utils::command_err("MigrationSourcePath の書き込みに失敗しました", e))?;
     Ok(())
 }
 

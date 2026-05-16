@@ -33,7 +33,7 @@ import { CreditButton } from './CreditModal';
 /** ランチャーグリッドの表示モード */
 type LauncherViewMode = 'list' | 'card';
 
-const THEME_CYCLE: ThemeMode[] = ['light', 'dark', 'midnight'];
+const themeCycle: ThemeMode[] = ['light', 'dark', 'midnight'];
 
 function App() {
   const [themeMode, setThemeMode] = useState<ThemeMode>(readInitialTheme);
@@ -67,6 +67,7 @@ function App() {
     isDbLoading,
     currentPage,
     totalPages,
+    pageSize,
     loadTableData,
     goToPage,
     sortState,
@@ -166,9 +167,9 @@ function App() {
   /** 自動起動のON/OFFを切り替える */
   const handleToggleStartup = async () => {
     try {
-      const willEnable = !isStartupEnabledDraft;
+      const shouldEnable = !isStartupEnabledDraft;
       await toggleStartup();
-      addToast(willEnable ? '自動起動を有効にしました' : '自動起動を無効にしました');
+      addToast(shouldEnable ? '自動起動を有効にしました' : '自動起動を無効にしました');
     } catch (error) {
       addToast('設定保存に失敗しました: ' + String(error));
     }
@@ -201,8 +202,8 @@ function App() {
   const handleThemeToggle = () => {
     document.documentElement.classList.add('disable-transitions');
     setThemeMode((prev) => {
-      const idx = THEME_CYCLE.indexOf(prev);
-      return THEME_CYCLE[(idx + 1) % THEME_CYCLE.length] ?? 'light';
+      const idx = themeCycle.indexOf(prev);
+      return themeCycle[(idx + 1) % themeCycle.length] ?? 'light';
     });
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -284,6 +285,7 @@ function App() {
             isDbLoading={isDbLoading}
             currentPage={currentPage}
             totalPages={totalPages}
+            pageSize={pageSize}
             sortState={sortState}
             onSelectTable={(tableName) => { void loadTableData(tableName); }}
             onGoToPage={(page) => { void goToPage(page); }}

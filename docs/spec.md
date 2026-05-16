@@ -318,7 +318,7 @@ src-tauri/src/
 | Command | Args | Returns | Description |
 | ------- | ---- | ------- | ----------- |
 | `launch_enhanced_import` | `file_names: Vec<String>` | `String` | 選択アーカイブの取り込み開始 |
-| `launch_startup_archive_import` | - | `StartupImportSummary` | 起動時の差分取り込み |
+| `launch_startup_archive_import` | - | `()` | 起動時の差分取り込み（進捗はイベント経由） |
 | `cancel_analyze` | - | `()` | 実行中の取り込みを中断 |
 
 ### registry
@@ -343,7 +343,7 @@ src-tauri/src/
 
 | Type | Definition Location |
 | ---- | ------------------- |
-| `AnalyzePayload`, `DbTableSummary`, `DbColumnMeta`, `TableData`, `LogViewerMeta`, `LogViewerChunk`, `ArchiveFileItem`, `StartupImportSummary`, `DeletableLogInfo` | `src-tauri/src/models.rs` |
+| `AnalyzePayload`, `DbTableSummary`, `DbColumnMeta`, `TableData`, `LogViewerMeta`, `LogViewerChunk`, `ArchiveFileItem`, `DeletableLogInfo` | `src-tauri/src/models.rs` |
 | `ManagementSettings` | `src-tauri/src/commands/mod.rs` |
 | `PolarisSetting`, `StellaRecordSetting`, `AppCard`, `RegistryCatalog` | `src-tauri/src/config.rs` |
 

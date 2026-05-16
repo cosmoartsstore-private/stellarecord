@@ -8,7 +8,7 @@ export interface DbTableSummary {
 }
 
 /** プレビューカラムのUI表示名とヘルプテキスト */
-export interface DbColumnMeta {
+interface DbColumnMeta {
   name: string;
   label: string;
   description: string;

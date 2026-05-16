@@ -31,7 +31,6 @@ pub struct AnalyzeCancelStatus(pub Arc<AtomicBool>);
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_fs::init())
         .manage(AnalyzeCancelStatus(Arc::new(AtomicBool::new(false))))
         .invoke_handler(tauri::generate_handler![
             commands::archive::list_archive_files,
@@ -67,11 +66,6 @@ pub fn run() {
             }
 
             builder.build()?;
-
-            // 自アプリのランチャー登録は失敗してもアプリ起動を妨げない。
-            if let Err(err) = commands::registry::ensure_self_app_registered() {
-                utils::log_warn(&format!("自アプリのランチャー登録に失敗しました: {err}"));
-            }
 
             Ok(())
         })

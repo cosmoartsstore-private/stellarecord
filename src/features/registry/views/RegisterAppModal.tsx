@@ -24,8 +24,8 @@ export function RegisterAppModal({ onClose, onConfirm }: RegisterAppModalProps) 
       setPath(selected);
 
       // 既存の値が空、または前回の補完値そのままの場合のみ自動補完で上書きする。
-      const userEdited = name.length > 0 && name !== lastSuggestedNameRef.current;
-      if (userEdited) return;
+      const hasUserEdited = name.length > 0 && name !== lastSuggestedNameRef.current;
+      if (hasUserEdited) return;
 
       let suggested = '';
       try {

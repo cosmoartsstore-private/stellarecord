@@ -27,8 +27,8 @@ export function useDatabaseState(addToast: AddToast) {
   const [isDbLoading, setIsDbLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [sortState, setSortState] = useState<SortState | null>(null);
-  // バックエンド側の get_db_table_data と一致させる必要がある
-  const PAGE_SIZE = 500;
+  // バックエンド側 (src-tauri/src/commands/database.rs の PAGE_SIZE) と一致させる必要がある
+  const pageSize = 500;
 
   /** 指定テーブルの1ページ分を取得してプレビュー状態を更新する */
   const loadTableData = useCallback(
@@ -111,7 +111,7 @@ export function useDatabaseState(addToast: AddToast) {
     [addToast, currentTable, loadTableData],
   );
 
-  const totalPages = Math.ceil(tableData.total_rows / PAGE_SIZE) || 1;
+  const totalPages = Math.ceil(tableData.total_rows / pageSize) || 1;
 
   return {
     dbTables,
@@ -120,6 +120,7 @@ export function useDatabaseState(addToast: AddToast) {
     isDbLoading,
     currentPage,
     totalPages,
+    pageSize,
     sortState,
     loadTableData,
     goToPage,

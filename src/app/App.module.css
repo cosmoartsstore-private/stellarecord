@@ -130,7 +130,7 @@
 .navSettingsButton {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  color: var(--text-main);
+  color: var(--text-dim);
   width: 42px;
   height: 42px;
   border-radius: 14px;

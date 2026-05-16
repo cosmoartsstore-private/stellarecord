@@ -12,16 +12,21 @@
 
 .warningIcon {
   flex-shrink: 0;
-  width: 2.4rem;
-  height: 2.4rem;
+  width: 2.2rem;
+  height: 2.2rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--danger);
   border: 1px solid var(--danger);
   color: #fff;
-  font-size: 1.1rem;
+}
+
+.warningIcon :global(.icon-svg) {
+  width: 18px;
+  height: 18px;
+  fill: currentcolor;
 }
 
 .title {

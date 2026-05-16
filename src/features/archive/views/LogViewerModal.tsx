@@ -6,8 +6,8 @@ import type { ArchiveFileItem, LogViewerData } from '../models/types';
 import shared from '../../../shared/styles/shared.module.css';
 import styles from './LogViewerModal.module.css';
 
-const ZOOM_MIN = 0.5;
-const ZOOM_MAX = 2.5;
+const zoomMin = 0.5;
+const zoomMax = 2.5;
 
 /** フィルタチップ定義 — クリックで仮想リストを該当行に絞り込む */
 const CHIPS: { key: string; label: string; colorClass: string; matchKeys?: string[] }[] = [
@@ -19,7 +19,7 @@ const CHIPS: { key: string; label: string; colorClass: string; matchKeys?: strin
   { key: 'debug',        label: 'デバッグ', colorClass: styles.legendDebug },
 ];
 
-const CATEGORY_CLASS_MAP: Record<string, string> = {
+const categoryClassMap: Record<string, string> = {
   world: styles.categoryWorld,
   notification: styles.categoryNotification,
   'player-join': styles.categoryPlayerJoin,
@@ -28,23 +28,23 @@ const CATEGORY_CLASS_MAP: Record<string, string> = {
   'debug-system': styles.categoryDebugSystem,
 };
 
-const LEVEL_CLASS_MAP: Record<string, string> = {
+const levelClassMap: Record<string, string> = {
   error: styles.levelError,
   warning: styles.levelWarning,
   debug: styles.levelDebug,
   plain: styles.levelPlain,
   info: styles.levelInfo,
 };
-const ZOOM_STEP = 0.1;
-const BASE_LINE_HEIGHT = 22;
+const zoomStep = 0.1;
+const baseLineHeight = 22;
 
 /** バックエンドの数値レベルをCSSクラスキー文字列にマッピング */
-const LEVEL_KEYS = ['plain', 'info', 'warning', 'error', 'debug'] as const;
+const levelKeys = ['plain', 'info', 'warning', 'error', 'debug'] as const;
 /**
  * バックエンドの数値カテゴリを CSS クラスキー文字列にマッピング。
  * Rust 側 `encode_log_category_u8` の番号と必ず一致させること。
  */
-const CATEGORY_KEYS = [
+const categoryKeys = [
   'plain', 'world', 'notification',
   'player-join', 'player-ready', 'player-left',
   'debug-system',
@@ -112,8 +112,8 @@ export function LogViewerModal({
     if (!e.ctrlKey) return;
     e.preventDefault();
     setZoomLevel((prev) => {
-      const next = prev + (e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP);
-      return Math.round(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next)) * 100) / 100;
+      const next = prev + (e.deltaY < 0 ? zoomStep : -zoomStep);
+      return Math.round(Math.min(zoomMax, Math.max(zoomMin, next)) * 100) / 100;
     });
   }, []);
 
@@ -129,8 +129,8 @@ export function LogViewerModal({
     if (!activeMatchKeys) return null;
     const indices: number[] = [];
     for (let i = 0; i < logViewerData.raw_lines.length; i++) {
-      const levelKey = LEVEL_KEYS[logViewerData.levels[i] ?? 0] ?? 'plain';
-      const categoryKey = CATEGORY_KEYS[logViewerData.categories[i] ?? 0] ?? 'plain';
+      const levelKey = levelKeys[logViewerData.levels[i] ?? 0] ?? 'plain';
+      const categoryKey = categoryKeys[logViewerData.categories[i] ?? 0] ?? 'plain';
       if (activeMatchKeys.includes(levelKey) || activeMatchKeys.includes(categoryKey)) {
         indices.push(i);
       }
@@ -140,7 +140,7 @@ export function LogViewerModal({
 
   const displayCount = filteredIndices ? filteredIndices.length : logViewerData.raw_lines.length;
 
-  const estimatedLineHeight = Math.round(BASE_LINE_HEIGHT * zoomLevel);
+  const estimatedLineHeight = Math.round(baseLineHeight * zoomLevel);
 
   const virtualizer = useVirtualizer({
     count: displayCount,
@@ -160,14 +160,14 @@ export function LogViewerModal({
   /** カテゴリ/レベル色分けとキーワードハイライト付きで1行を描画する */
   const renderLine = (i: number, key: string | number, extraStyle?: React.CSSProperties) => {
     const rawLine = logViewerData.raw_lines[i] ?? '';
-    const levelKey = LEVEL_KEYS[logViewerData.levels[i] ?? 0] ?? 'plain';
-    const categoryKey = CATEGORY_KEYS[logViewerData.categories[i] ?? 0] ?? 'plain';
+    const levelKey = levelKeys[logViewerData.levels[i] ?? 0] ?? 'plain';
+    const categoryKey = categoryKeys[logViewerData.categories[i] ?? 0] ?? 'plain';
     const highlight = logViewerData.highlights[i] ?? null;
     return (
       <div
         key={key}
         style={{ ...extraStyle, fontSize: zoomFontSize }}
-        className={`${styles.line} ${CATEGORY_CLASS_MAP[categoryKey] ?? ''} ${LEVEL_CLASS_MAP[levelKey] ?? ''}`}
+        className={`${styles.line} ${categoryClassMap[categoryKey] ?? ''} ${levelClassMap[levelKey] ?? ''}`}
       >
         {renderHighlightedBody(rawLine, highlight, styles.highlight)}
       </div>
