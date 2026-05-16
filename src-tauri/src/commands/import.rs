@@ -11,7 +11,6 @@ use std::sync::atomic::Ordering;
 use tauri::{AppHandle, State};
 
 use crate::analyze;
-use crate::models::StartupImportSummary;
 use crate::utils;
 use crate::AnalyzeCancelStatus;
 
@@ -93,7 +92,7 @@ pub fn launch_enhanced_import(
 pub fn launch_startup_archive_import(
     app: AppHandle,
     cancel_status: State<'_, AnalyzeCancelStatus>,
-) -> Result<StartupImportSummary, String> {
+) -> Result<(), String> {
     let db_path = get_db_path()?;
     let source_dir = get_source_log_dir()?;
     let archive_store_dir = get_archive_store_dir()?;
@@ -161,7 +160,7 @@ pub fn launch_startup_archive_import(
         utils::emit_event_warn(&app, "analyze-finished", ());
     });
 
-    Ok(StartupImportSummary { total_count: 0 })
+    Ok(())
 }
 
 /// 実行中のインポートに次のキャンセルチェックポイントで停止するよう通知する。

@@ -37,7 +37,7 @@
 .nameToggle {
   padding: 0.35rem 0.6rem;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
   color: var(--text-dim);
   font-size: 0.68rem;
@@ -271,7 +271,8 @@
 }
 
 .sortableHeader:hover {
-  background: var(--accent-soft);
+  background: var(--db-table-head-bg);
+  filter: brightness(1.1);
 }
 
 .sortableHeader:hover .sortArrow {

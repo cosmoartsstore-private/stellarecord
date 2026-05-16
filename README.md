@@ -288,6 +288,8 @@ cargo clippy --workspace --all-targets    # Rust clippy（unwrap/expect/panic = 
 
 主要な依存関係：[Tauri](https://tauri.app/), [React](https://react.dev/), [Vite](https://vitejs.dev/), [TanStack Virtual](https://tanstack.com/virtual), [rusqlite](https://github.com/rusqlite/rusqlite), [zstd](https://github.com/gyscos/zstd-rs), [tar-rs](https://github.com/alexcrichton/tar-rs), [windows-rs](https://github.com/microsoft/windows-rs)
 
+SVG アイコン：[Material Design Icons (Pictogrammers)](https://pictogrammers.com/library/mdi/) — Apache License 2.0
+
 ---
 
 ## License

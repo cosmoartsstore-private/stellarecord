@@ -43,10 +43,10 @@ function CreditModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className={shared.modalOverlay} onClick={onClose}>
+    <div className={shared.modalOverlay}>
+      <button className={shared.modalBackdrop} onClick={onClose} />
       <div
         className={`${shared.modalContent} ${styles.modal}`}
-        onClick={(e) => { e.stopPropagation(); }}
       >
         <div className={styles.banner}>
           <div className={styles.bannerGlow} />
@@ -81,18 +81,6 @@ function CreditModal({ onClose }: { onClose: () => void }) {
             ))}
           </div>
 
-          <div className={styles.divider} />
-
-          <div className={styles.attribution}>
-            <p className={styles.attributionTitle}>使用素材</p>
-            <p className={styles.attributionItem}>
-              SVG Icons —{' '}
-              <button className={styles.attributionLink} onClick={() => { handleLink('https://pictogrammers.com/library/mdi/'); }}>
-                Material Design Icons (Pictogrammers)
-              </button>
-              {' '}/ Apache License 2.0
-            </p>
-          </div>
         </div>
       </div>
     </div>

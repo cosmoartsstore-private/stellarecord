@@ -67,12 +67,6 @@ pub struct ArchiveFileItem {
     pub size_bytes: u64,
 }
 
-/// 起動時アーカイブ取り込みフローの結果概要。
-#[derive(Debug, Clone, Serialize)]
-pub struct StartupImportSummary {
-    pub total_count: usize,
-}
-
 /// .tar.zst アーカイブ済みで安全に削除可能なソースログファイル。
 #[derive(Debug, Clone, Serialize)]
 pub struct DeletableLogInfo {

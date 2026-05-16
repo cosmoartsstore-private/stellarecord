@@ -12,6 +12,7 @@ interface DatabaseSectionProps {
   isDbLoading: boolean;
   currentPage: number;
   totalPages: number;
+  pageSize: number;
   sortState: SortState | null;
   onSelectTable: (tableName: string) => void;
   onGoToPage: (page: number) => void;
@@ -26,18 +27,18 @@ export function DatabaseSection({
   isDbLoading,
   currentPage,
   totalPages,
+  pageSize,
   sortState,
   onSelectTable,
   onGoToPage,
   onToggleSort,
 }: DatabaseSectionProps) {
-  const [showPhysicalNames, setShowPhysicalNames] = useState(false);
+  const [isPhysicalNames, setIsPhysicalNames] = useState(false);
 
   const selectedTableSummary = dbTables.find((table) => table.name === currentTable) ?? null;
 
-  const PAGE_SIZE = 500;
-  const rangeStart = tableData.total_rows > 0 ? currentPage * PAGE_SIZE + 1 : 0;
-  const rangeEnd = Math.min((currentPage + 1) * PAGE_SIZE, tableData.total_rows);
+  const rangeStart = tableData.total_rows > 0 ? currentPage * pageSize + 1 : 0;
+  const rangeEnd = Math.min((currentPage + 1) * pageSize, tableData.total_rows);
 
   const tables = dbTables.filter((t) => !t.is_view);
   const views = dbTables.filter((t) => t.is_view);
@@ -53,7 +54,7 @@ export function DatabaseSection({
 
       >
         <span className={styles.tableItemLabel}>
-          {showPhysicalNames ? table.name : table.label}
+          {isPhysicalNames ? table.name : table.label}
         </span>
       </button>
     );
@@ -72,9 +73,9 @@ export function DatabaseSection({
             <button
               type="button"
               className={styles.nameToggle}
-              onClick={() => { setShowPhysicalNames((prev) => !prev); }}
+              onClick={() => { setIsPhysicalNames((prev) => !prev); }}
             >
-              {showPhysicalNames ? 'Physical' : 'Logical'}
+              {isPhysicalNames ? 'Physical' : 'Logical'}
             </button>
           </div>
           {dbTables.length === 0 && (

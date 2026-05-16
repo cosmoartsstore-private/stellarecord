@@ -18,18 +18,14 @@ interface StellaIconDefinition {
 /** コンパイル時に安全なアイコン名定数 — 文字列リテラルの代わりにこちらを使用する */
 export const stellaIconNames = {
   alert: 'alert',
-  arrowBack: 'arrowBack',
   bell: 'bell',
   chartBar: 'chartBar',
-  database: 'database',
   eclipse: 'eclipse',
   folder: 'folder',
-  gear: 'gear',
   moon: 'moon',
   refresh: 'refresh',
   rocket: 'rocket',
   sparkle: 'sparkle',
-  starShooting: 'starShooting',
   sun: 'sun',
   tableGrid: 'tableGrid',
   list: 'list',
@@ -41,12 +37,12 @@ export const stellaIconNames = {
 } as const;
 
 /** stellaIconNames マップから導出される有効なアイコン名のユニオン型 */
-export type StellaIconName = (typeof stellaIconNames)[keyof typeof stellaIconNames];
+type StellaIconName = (typeof stellaIconNames)[keyof typeof stellaIconNames];
 
 /** アイコンサイズ用の共有CSSクラスプリセット */
 const stellaIconClassNames = {
   base: 'icon-svg',
-  small: 'icon-svg icon-svg-small',
+  small: 'icon-svg',
 } as const;
 
 /** 名前をキーとするアイコン定義の完全レジストリ */
@@ -60,18 +56,6 @@ const stellaIconMap: Record<StellaIconName, StellaIconDefinition> = {
   },
   chartBar: {
     path: 'M22,21H2V3H4V19H6V10H10V19H12V6H16V19H18V14H22V21Z',
-  },
-  arrowBack: {
-    viewBox: '0 0 24 24',
-    className: stellaIconClassNames.small,
-    style: { width: '16px', height: '16px', fill: 'currentColor' },
-    path: 'M20,11V13H8L13.5,18.5L12.08,19.92L4.16,12L12.08,4.08L13.5,5.5L8,11H20Z',
-  },
-  database: {
-    viewBox: '0 0 24 24',
-    className: stellaIconClassNames.small,
-    style: { width: '14px', height: '14px', fill: 'currentColor' },
-    path: 'M12,3C7.58,3 4,4.79 4,7C4,9.21 7.58,11 12,11C16.42,11 20,9.21 20,7C20,4.79 16.42,3 12,3M4,9V12C4,14.21 7.58,16 12,16C16.42,16 20,14.21 20,12V9C20,11.21 16.42,13 12,13C7.58,13 4,11.21 4,9M4,14V17C4,19.21 7.58,21 12,21C16.42,21 20,19.21 20,17V14C20,16.21 16.42,18 12,18C7.58,18 4,16.21 4,14Z',
   },
   eclipse: {
     path: 'M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4M12,6A6,6 0 0,0 6,12A6,6 0 0,0 12,18A6,6 0 0,0 18,12A6,6 0 0,0 12,6Z',
@@ -91,17 +75,11 @@ const stellaIconMap: Record<StellaIconName, StellaIconDefinition> = {
   tableGrid: {
     path: 'M5,4H19A2,2 0 0,1 21,6V18A2,2 0 0,1 19,20H5A2,2 0 0,0 3,18V6A2,2 0 0,0 5,4M5,8V12H11V8H5M13,8V12H19V8H13M5,14V18H11V14H5M13,14V18H19V14H13Z',
   },
-  gear: {
-    path: 'M12,8.8A3.2,3.2 0 0,1 15.2,12A3.2,3.2 0 0,1 12,15.2A3.2,3.2 0 0,1 8.8,12A3.2,3.2 0 0,1 12,8.8M19.43,12.98C19.47,12.66 19.5,12.34 19.5,12C19.5,11.66 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.97 19.04,5.05L16.56,6.05C16.04,5.66 15.5,5.34 14.87,5.1L14.5,2.46C14.47,2.22 14.26,2 14,2H10C9.74,2 9.53,2.22 9.5,2.46L9.13,5.1C8.5,5.34 7.96,5.67 7.44,6.05L4.96,5.05C4.73,4.97 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.66 4.57,13L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.96,18.95L7.44,17.95C7.96,18.34 8.5,18.66 9.13,18.9L9.5,21.54C9.53,21.78 9.74,22 10,22H14C14.26,22 14.47,21.78 14.5,21.54L14.87,18.9C15.5,18.66 16.04,18.34 16.56,17.95L19.04,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,13C19.47,12.66 19.43,13.34 19.43,12.98Z',
-  },
   refresh: {
     path: 'M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z',
   },
   sparkle: {
     path: 'M12,2L14.47,7.29L20.24,8.13L16.06,12.2L17.05,17.94L12,15.29L6.95,17.94L7.94,12.2L3.76,8.13L9.53,7.29L12,2Z',
-  },
-  starShooting: {
-    path: 'm18.09 11.77l1.47 6.33L14 14.74L8.44 18.1l1.46-6.33L5 7.5l6.47-.54L14 1l2.53 5.96L23 7.5zM2 12.43c.19 0 .38-.06.55-.17l3.2-2.11l-1.57-1.36l-2.73 1.8c-.461.3-.589.91-.29 1.41c.2.27.52.43.84.43m-.84 9.12c.2.29.52.45.84.45c.19 0 .38-.05.55-.16l4.11-2.71l.34-1.37l.31-1.45l-5.86 3.85c-.461.31-.589.93-.29 1.39m.29-6.17a1 1 0 0 0-.29 1.38c.2.3.52.45.84.45c.19 0 .38-.05.55-.16l5.42-3.55l.27-1.19l-.92-.81z',
   },
   list: {
     path: 'M4 5a1 1 0 0 0 0 2h1a1 1 0 0 0 0-2H4zm5 0a1 1 0 0 0 0 2h11a1 1 0 0 0 0-2H9zM4 11a1 1 0 1 0 0 2h1a1 1 0 1 0 0-2H4zm5 0a1 1 0 1 0 0 2h11a1 1 0 1 0 0-2H9zM4 17a1 1 0 1 0 0 2h1a1 1 0 1 0 0-2H4zm5 0a1 1 0 1 0 0 2h11a1 1 0 1 0 0-2H9z',

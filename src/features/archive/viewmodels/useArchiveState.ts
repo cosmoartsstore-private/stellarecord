@@ -109,9 +109,7 @@ export function useArchiveState() {
     const unlistenChunk = await listen<LogViewerChunk>('log_viewer_chunk', (e) => {
       if (e.payload.session_id !== sessionId) return;
       pendingChunksRef.current.push(e.payload);
-      if (!flushTimerRef.current) {
-        flushTimerRef.current = setTimeout(flushChunks, 100);
-      }
+      flushTimerRef.current ??= setTimeout(flushChunks, 100);
     });
 
     const unlistenDone = await listen<string>('log_viewer_done', (e) => {
@@ -197,7 +195,7 @@ export function useArchiveState() {
 
   /** アプリ起動時の一回限りの自動取り込みを実行する */
   const runStartupImport = useCallback(async () => {
-    return await launchStartupArchiveImport();
+    await launchStartupArchiveImport();
   }, []);
 
   // アンマウント時にイベントリスナーとフラッシュタイマーをクリーンアップ

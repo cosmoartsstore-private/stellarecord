@@ -6,13 +6,13 @@
  */
 
 /** Date.getDay() に対応する日本語曜日ラベル（0=日曜） */
-const DAY_NAMES = ['日', '月', '火', '水', '木', '金', '土'] as const;
+const dayNames = ['日', '月', '火', '水', '木', '金', '土'] as const;
 
 export function parseArchiveDate(fileName: string): string | null {
   const m = /(\d{4})-(\d{2})-(\d{2})[_T](\d{2})-(\d{2})-(\d{2})/.exec(fileName);
   if (!m) return null;
   const date = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  const dow = DAY_NAMES[date.getDay()];
+  const dow = dayNames[date.getDay()];
   return `${m[1]}/${m[2]}/${m[3]} (${dow}) ${m[4]}:${m[5]}`;
 }
 

@@ -6,7 +6,7 @@
  * log_viewer_chunk / log_viewer_done イベントを非同期に発行する
  */
 import { invoke } from '@tauri-apps/api/core';
-import type { LogViewerMeta, StartupImportSummary } from '../models/types';
+import type { LogViewerMeta } from '../models/types';
 
 /** アーカイブディレクトリ内の .tar.zst ファイル一覧を取得する */
 export const loadArchiveFiles = () => invoke<{ name: string; size_bytes: number }[]>('list_archive_files');
@@ -32,6 +32,6 @@ export const startExternalLogViewerStream = (
     sessionId,
   });
 
-/** 起動時の一回限りのアーカイブ取り込みを実行し、件数サマリを返す */
+/** 起動時の一回限りのアーカイブ取り込みを実行する（バックグラウンドでイベント経由に進捗を流す） */
 export const launchStartupArchiveImport = () =>
-  invoke<StartupImportSummary>('launch_startup_archive_import');
+  invoke('launch_startup_archive_import');
