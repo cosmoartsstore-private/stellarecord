@@ -67,7 +67,7 @@ pub fn command_remove_err<E: std::fmt::Display>(path: &std::path::Path, err: E) 
     command_err(&format!("削除できませんでした [{}]", path.display()), err)
 }
 
-/// レジストリからインストール済みの CosmoArtsStore アプリのディレクトリを解決する。
+/// レジストリからインストール済みの `CosmoArtsStore` アプリのディレクトリを解決する。
 ///
 /// インストール先は Windows レジストリ
 /// (`HKCU\Software\CosmoArtsStore\<component>`) に格納される。
@@ -148,10 +148,6 @@ pub fn get_polaris_install_dir() -> Option<PathBuf> {
     get_component_install_dir("Polaris")
 }
 
-/// ユーザープロファイル配下の `VRChat` ログディレクトリを解決する。
-///
-/// `StellaRecord` は `VRChat` の正規パスからソースログを直接読み取るため、
-/// Polaris がオリジナルの可変コピーを別途保持する必要はない。
 /// `StellaRecord` の運用ログファイルに1行追記する。
 ///
 /// # 引数
@@ -186,7 +182,7 @@ fn append_log(level: &str, msg: &str) -> io::Result<()> {
 /// * `msg` - ログメッセージ本文。
 fn log_msg(level: &str, msg: &str) {
     if let Err(err) = append_log(level, msg) {
-        // Intentional: ファイルロガー自体が壊れたときだけ、stderr を最後の退避先として使う。
+        // 意図的: ファイルロガー自体が壊れたときだけ、stderr を最後の退避先として使う。
         eprintln!("[{level}] {msg} (ログ退避にも失敗: {err})");
     }
 }

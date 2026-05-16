@@ -31,7 +31,7 @@ body {
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
+  text-rendering: optimizelegibility;
   user-select: none;
 }
 
@@ -52,6 +52,8 @@ textarea {
 .disable-transitions *,
 .disable-transitions *::before,
 .disable-transitions *::after {
+  /* テーマ切替時のチラつき防止のため、子孫を含む全要素のトランジションを強制的に無効化する。 */
+  /* stylelint-disable-next-line declaration-no-important */
   transition: none !important;
 }
 

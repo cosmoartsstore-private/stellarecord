@@ -1,9 +1,9 @@
-//! StellaRecord Tauri バックエンド。
+//! `StellaRecord` Tauri バックエンド。
 //!
-//! VRChat ログデータを管理する Tauri v2 デスクトップアプリの Rust 側。
+//! `VRChat` ログデータを管理する Tauri v2 デスクトップアプリの Rust 側。
 //! 以下のモジュールを提供する:
 //!
-//! - **analyze** -- VRChat ログ解析と SQLite 取り込みパイプライン。
+//! - **analyze** -- `VRChat` ログ解析と `SQLite` 取り込みパイプライン。
 //! - **commands** -- React フロントエンドから呼び出される Tauri IPC コマンドハンドラ。
 //! - **config** -- レジストリベースの設定読み書き。
 //! - **models** -- バックエンドとフロントエンド間でやり取りする共有データ構造体。

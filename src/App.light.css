@@ -3,7 +3,7 @@
 
   /* ── ベース背景 ──────────────────────────── */
   --bg-gradient: linear-gradient(180deg, #fbfcfe 0%, #f3f6fb 100%);
-  --bg-card: #ffffff;
+  --bg-card: #fff;
   --bg-card-soft: #f7f9fd;
 
   /* ── アクセント (base: 79 110 245) ─────────── */
@@ -40,11 +40,11 @@
   --btn-primary-hover-shadow: none;
 
   /* ── ランチャー / DB ──────────────────────────── */
-  --launcher-card-bg: #ffffff;
-  --db-sidebar-bg: #ffffff;
-  --db-content-bg: #ffffff;
+  --launcher-card-bg: #fff;
+  --db-sidebar-bg: #fff;
+  --db-content-bg: #fff;
   --db-content-header-bg: var(--bg-card-soft);
-  --db-table-head-bg: #ffffff;
+  --db-table-head-bg: #fff;
   --db-table-head-border: #eef2f7;
   --db-table-cell-border: #f3f4f6;
   --db-table-row-border: #eef2f7;
@@ -53,17 +53,17 @@
   --db-scrollbar-track: rgb(241 245 249 / 80%);
 
   /* ── トースト ──────────────────────────────────── */
-  --toast-bg: #ffffff;
+  --toast-bg: #fff;
   --toast-shadow: 0 8px 28px rgb(0 0 0 / 12%);
 
   /* ── モーダル ──────────────────────────────────── */
   --modal-overlay-bg: rgb(15 23 42 / 38%);
-  --modal-bg: #ffffff;
+  --modal-bg: #fff;
   --modal-shadow: 0 24px 60px rgb(15 23 42 / 16%);
   --modal-border: #e5e7eb;
 
   /* ── アーカイブ ────────────────────────────────── */
-  --archive-file-bg: #ffffff;
+  --archive-file-bg: #fff;
   --archive-file-selected-bg: rgb(79 110 245 / 6%);
   --file-checkbox-border: rgb(79 110 245 / 30%);
   --file-list-bg: #f7f9fd;
@@ -83,7 +83,7 @@
   --terminal-debug: #94a3b8;
   --terminal-debug-system: #7b93f8;
   --terminal-highlight-bg: rgb(79 110 245 / 20%);
-  --terminal-highlight-text: #ffffff;
+  --terminal-highlight-text: #fff;
   --terminal-highlight-border: rgb(123 147 248 / 20%);
   --terminal-scrollbar-thumb: rgb(148 163 184 / 55%);
 

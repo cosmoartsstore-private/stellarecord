@@ -70,7 +70,7 @@ pub fn ensure_single_instance() {
 
 /// Windows でコンソールウィンドウを表示せずに外部プロセスを起動する。
 ///
-/// # エラー
+/// # Errors
 /// 対象の実行ファイルを起動できない場合にエラーを返す。
 pub fn launch_external_process(path: &str) -> Result<(), String> {
     let mut cmd = Command::new(path);
@@ -86,7 +86,7 @@ pub fn launch_external_process(path: &str) -> Result<(), String> {
 
 /// Windows スタートアップ一覧への登録・解除を行う。
 ///
-/// # エラー
+/// # Errors
 /// スタートアップのレジストリキーを更新できない場合にエラーを返す。
 pub fn set_startup_enabled(value_name: &str, enabled: bool) -> Result<(), String> {
     let run_key = RegKey::predef(HKEY_CURRENT_USER)
@@ -119,10 +119,11 @@ pub fn extract_exe_icon_png(exe_path: &Path) -> Option<Vec<u8>> {
     extract_icon_jumbo(exe_path).or_else(|| extract_icon_legacy(exe_path))
 }
 
-/// SHGetImageList(SHIL_JUMBO) 経由で 256×256 アイコンを取得する。
+/// `SHGetImageList(SHIL_JUMBO)` 経由で 256×256 アイコンを取得する。
 fn extract_icon_jumbo(exe_path: &Path) -> Option<Vec<u8>> {
     use std::os::windows::ffi::OsStrExt;
 
+    use windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES;
     use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
     use windows::Win32::UI::Controls::IImageList;
     use windows::Win32::UI::Shell::{SHGetFileInfoW, SHGetImageList, SHFILEINFOW, SHGFI_SYSICONINDEX};
@@ -137,13 +138,14 @@ fn extract_icon_jumbo(exe_path: &Path) -> Option<Vec<u8>> {
     let com_ok = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }.is_ok();
 
     let result = (|| -> Option<Vec<u8>> {
+        const SHIL_JUMBO: i32 = 4;
         let mut file_info = SHFILEINFOW::default();
         #[allow(clippy::cast_possible_truncation)]
         let ret = unsafe {
             SHGetFileInfoW(
                 windows::core::PCWSTR(wide_path.as_ptr()),
-                Default::default(),
-                Some(&mut file_info),
+                FILE_FLAGS_AND_ATTRIBUTES::default(),
+                Some(&raw mut file_info),
                 std::mem::size_of::<SHFILEINFOW>() as u32,
                 SHGFI_SYSICONINDEX,
             )
@@ -152,7 +154,6 @@ fn extract_icon_jumbo(exe_path: &Path) -> Option<Vec<u8>> {
             return None;
         }
 
-        const SHIL_JUMBO: i32 = 4;
         let image_list: IImageList = unsafe { SHGetImageList(SHIL_JUMBO) }.ok()?;
 
         let hicon: HICON = unsafe { image_list.GetIcon(file_info.iIcon, 1) }.ok()?;
@@ -169,7 +170,7 @@ fn extract_icon_jumbo(exe_path: &Path) -> Option<Vec<u8>> {
     result
 }
 
-/// ExtractIconExW による 32×32 フォールバック。
+/// `ExtractIconExW` による 32×32 フォールバック。
 fn extract_icon_legacy(exe_path: &Path) -> Option<Vec<u8>> {
     use std::os::windows::ffi::OsStrExt;
 
@@ -247,7 +248,7 @@ fn hicon_to_png(hicon: windows::Win32::UI::WindowsAndMessaging::HICON) -> Option
     let mut info_header = BITMAPINFOHEADER {
         biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
         biWidth: width,
-        biHeight: -height, // top-down
+        biHeight: -height, // 負値で top-down (上から下へ並ぶ DIB)
         biPlanes: 1,
         biBitCount: 32,
         biCompression: BI_RGB.0,
@@ -287,7 +288,7 @@ fn hicon_to_png(hicon: windows::Win32::UI::WindowsAndMessaging::HICON) -> Option
     Some(buf.into_inner())
 }
 
-/// exe の Windows VersionInfo から表示名を抽出する。
+/// exe の Windows `VersionInfo` から表示名を抽出する。
 ///
 /// `FileDescription` を優先し、空または取得できない場合は `ProductName` にフォールバックし、
 /// それも取得できない場合は拡張子を除いたファイル名を返す。完全に解決できない場合は `None`。
@@ -407,6 +408,9 @@ pub fn read_exe_display_name(exe_path: &Path) -> Option<String> {
 }
 
 /// ネイティブファイルダイアログで exe ファイルを選択する。
+///
+/// # Errors
+/// COM 初期化やダイアログ生成に失敗した場合にエラーを返す。
 pub fn pick_exe_file_dialog() -> Result<Option<String>, String> {
     use std::os::windows::ffi::OsStringExt;
 
@@ -475,6 +479,9 @@ pub fn pick_exe_file_dialog() -> Result<Option<String>, String> {
 }
 
 /// ネイティブファイル選択ダイアログでログファイルを複数選択する。
+///
+/// # Errors
+/// COM 初期化やダイアログ生成に失敗した場合にエラーを返す。
 pub fn pick_log_files_dialog() -> Result<Vec<String>, String> {
     #[cfg(windows)]
     {

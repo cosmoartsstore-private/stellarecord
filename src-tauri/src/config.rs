@@ -10,10 +10,12 @@ use crate::utils;
 const STELLA_RECORD_KEY: &str = "Software\\CosmoArtsStore\\StellaRecord";
 const POLARIS_KEY: &str = "Software\\CosmoArtsStore\\Polaris";
 
+/// HKCU 配下のキーを開く。存在しない場合は `None` を返す。
 fn open_key(path: &str) -> Option<RegKey> {
     RegKey::predef(HKEY_CURRENT_USER).open_subkey(path).ok()
 }
 
+/// HKCU 配下にキーを作成し、失敗時はコマンドエラー文字列に整形して返す。
 fn create_key(path: &str) -> Result<RegKey, String> {
     RegKey::predef(HKEY_CURRENT_USER)
         .create_subkey(path)
@@ -21,14 +23,17 @@ fn create_key(path: &str) -> Result<RegKey, String> {
         .map_err(|err| utils::command_err(&format!("レジストリキーを作成できませんでした [{path}]"), err))
 }
 
+/// レジストリから文字列値を読み取る。失敗時は空文字列を返す。
 fn read_str(key: &RegKey, name: &str) -> String {
     key.get_value::<String, _>(name).unwrap_or_default()
 }
 
+/// レジストリから u64 値を読み取る。失敗時は `default` を返す。
 fn read_u64(key: &RegKey, name: &str, default: u64) -> u64 {
     key.get_value::<u64, _>(name).unwrap_or(default)
 }
 
+/// レジストリの u32 値（0/1）を bool として読み取る。失敗時は `default` を返す。
 fn read_bool(key: &RegKey, name: &str, default: bool) -> bool {
     key.get_value::<u32, _>(name)
         .map(|v| v != 0)
@@ -91,6 +96,9 @@ pub fn load_polaris_setting() -> PolarisSetting {
 }
 
 /// Polaris 設定をレジストリに保存する。
+///
+/// # Errors
+/// レジストリキーへの書き込みに失敗した場合にエラーを返す。
 pub fn save_polaris_setting(setting: &PolarisSetting) -> Result<(), String> {
     let key = create_key(POLARIS_KEY)?;
     key.set_value("ArchivePath", &setting.archive_path)
@@ -100,7 +108,7 @@ pub fn save_polaris_setting(setting: &PolarisSetting) -> Result<(), String> {
     Ok(())
 }
 
-/// レジストリから StellaRecord 設定を読み込む。キーが存在しない場合はデフォルト値を返す。
+/// レジストリから `StellaRecord` 設定を読み込む。キーが存在しない場合はデフォルト値を返す。
 pub fn load_stellarecord_setting() -> StellaRecordSetting {
     let Some(key) = open_key(STELLA_RECORD_KEY) else {
         return StellaRecordSetting::default();
@@ -114,7 +122,10 @@ pub fn load_stellarecord_setting() -> StellaRecordSetting {
     }
 }
 
-/// StellaRecord 設定をレジストリに保存する。
+/// `StellaRecord` 設定をレジストリに保存する。
+///
+/// # Errors
+/// レジストリキーへの書き込みに失敗した場合にエラーを返す。
 pub fn save_stellarecord_setting(setting: &StellaRecordSetting) -> Result<(), String> {
     let key = create_key(STELLA_RECORD_KEY)?;
     key.set_value("ArchivePath", &setting.archive_path)

@@ -182,7 +182,6 @@ src-tauri/src/
 
 - 起動時に `read_registry_catalog` で `apps` テーブルを読み込み一覧表示する
 - アイコンは Base64 PNG として DB に保管されており、`<img src="data:image/png;base64,...">` でレンダリングする
-- `ensure_self_app_registered` がアプリ起動時に StellaRecord 本体を `apps` テーブルに upsert する（path 一致で更新）
 - 表示モード（リスト／カード）は React state で管理（永続化なし）
 
 #### Commands Used
@@ -291,7 +290,7 @@ src-tauri/src/
 
 ## IPC Reference
 
-`src-tauri/src/lib.rs` の `tauri::generate_handler!` で登録された 22 コマンド。
+`src-tauri/src/lib.rs` の `tauri::generate_handler!` で登録された 21 コマンド。
 
 ### archive
 

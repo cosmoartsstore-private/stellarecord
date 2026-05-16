@@ -1,7 +1,7 @@
-//! VRChat ログ解析パイプライン。
+//! `VRChat` ログ解析パイプライン。
 //!
 //! アーカイブコマンドで生成された `.tar.zst` 圧縮ログを読み取り、VRChat ログの
-//! 内容を行単位で解析し、正規化データをメイン SQLite データベース
+//! 内容を行単位で解析し、正規化データをメイン `SQLite` データベース
 //! (`stellarecord.db`) に書き込む。
 //!
 //! ファイル単位の savepoint を持つトランザクション内で書き込むため、
@@ -36,13 +36,13 @@ fn analyze_err<E: std::fmt::Display>(context: &str, err: E) -> String {
 
 /// 解析エラーをパーサーコードパス用の `rusqlite::Error` に変換する。
 ///
-/// パーサーは INSERT とパースが交互に行われるため主に SQLite 結果を返す。
-/// SQL 以外のエラーは SQLite 形式のエラーにラップする。
+/// パーサーは INSERT とパースが交互に行われるため主に `SQLite` 結果を返す。
+/// SQL 以外のエラーは `SQLite` 形式のエラーにラップする。
 fn analyze_sqlite_err<E: std::fmt::Display>(context: &str, err: E) -> rusqlite::Error {
     rusqlite::Error::InvalidParameterName(analyze_err(context, err))
 }
 
-/// 正規の SQLite 形式キャンセルエラーを生成する。
+/// 正規の `SQLite` 形式キャンセルエラーを生成する。
 ///
 /// 専用メッセージを返すことで外層がユーザーキャンセルとパースエラーを
 /// 区別し、インポート全体を確実にロールバックできる。
@@ -192,7 +192,7 @@ fn insert_osc_event(
 }
 
 
-/// VRChat+ サブスクリプション状態のスナップショットをメインデータベースに挿入する。
+/// `VRChat`+ サブスクリプション状態のスナップショットをメインデータベースに挿入する。
 ///
 /// セッションごとにスナップショットは1件のみのため `INSERT OR IGNORE` を使用。
 fn insert_subscription_status(
@@ -212,9 +212,85 @@ fn insert_subscription_status(
     Ok(())
 }
 
+/// 通知行 (1 行または複数行集約後の文字列) を `notifications` テーブルに保存する。
+///
+/// `Received Notification: <... message: "..." >` のうち、収集対象タイプ
+/// (`is_collectible_notification` 参照) のみ INSERT する。`worldId`/`worldName`
+/// のペイロードがある場合はターゲット情報も併せて保存する。
+fn persist_notification(
+    main_tx: &Connection,
+    session_id: i64,
+    ts_str: &str,
+    notification_text: &str,
+) -> Result<()> {
+    let Some(caps) = RE_NOTIFICATION.captures(notification_text) else {
+        return Ok(());
+    };
+    let Some(type_match) = caps.get(3) else {
+        return Ok(());
+    };
+    let notif_type = type_match.as_str().trim().to_string();
+    if !is_collectible_notification(&notif_type) {
+        return Ok(());
+    }
+
+    let sender_name = caps
+        .get(1)
+        .map(|m| m.as_str())
+        .filter(|s| !s.is_empty())
+        .map(String::from);
+    let sender_user_id = caps
+        .get(2)
+        .map(|m| m.as_str())
+        .filter(|s| !s.is_empty())
+        .map(String::from);
+    let notif_id = caps.get(4).map(|m| m.as_str().to_string());
+    let Some(created_match) = caps.get(5) else {
+        return Ok(());
+    };
+    let created_at_raw = created_match.as_str().trim();
+    let message = caps.get(6).map(|m| m.as_str().to_string());
+    let created_at = NaiveDateTime::parse_from_str(created_at_raw, "%m/%d/%Y %H:%M:%S UTC")
+        .ok()
+        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string());
+
+    let location = RE_NOTIFICATION_WORLD_ID
+        .captures(notification_text)
+        .and_then(|captures| captures.get(1))
+        .map(|m| parse_location(m.as_str()))
+        .unwrap_or_default();
+    let target_world_name = RE_NOTIFICATION_WORLD_NAME
+        .captures(notification_text)
+        .and_then(|captures| captures.get(1))
+        .map(|m| m.as_str().to_string());
+
+    main_tx.execute(
+        "INSERT OR IGNORE INTO notifications
+         (session_id, notif_id, notif_type, sender_user_id, sender_name, message, created_at, received_at,
+          target_world_name, target_instance_id, target_instance_type, target_owner, target_region)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+        params![
+            session_id,
+            notif_id,
+            notif_type,
+            sender_user_id,
+            sender_name,
+            message,
+            created_at,
+            ts_str,
+            target_world_name.as_deref(),
+            location.instance_id.as_deref(),
+            location.access_type.as_deref(),
+            location.instance_owner.as_deref(),
+            location.region.as_deref()
+        ],
+    )?;
+    Ok(())
+}
+
 /// 管理された `Data` ディレクトリ内のログを差分インポートする。
 ///
-/// # エラー
+/// # Errors
 /// データベースを開けない、または初期化できない場合にエラーを返す。
 #[allow(clippy::too_many_lines)]
 pub fn run_diff_import<F>(
@@ -257,9 +333,8 @@ where
             return Err(err);
         }
 
-        let filename = match source_name_for_archive(log_path) {
-            Some(v) => v,
-            None => continue,
+        let Some(filename) = source_name_for_archive(log_path) else {
+            continue;
         };
 
         let already_processed: bool = main_tx
@@ -329,7 +404,7 @@ where
 ///
 /// `.tar.zst` が推奨アーカイブ形式: Zstandard は高速展開を提供し、tar は
 /// ログを単一ファイルにまとめてディレクトリ管理を簡素化する。
-/// 非圧縮 VRChat ログの手動インポート用にプレーンテキストのフォールバックもある。
+/// 非圧縮 `VRChat` ログの手動インポート用にプレーンテキストのフォールバックもある。
 fn parse_and_import<F>(
     main_conn: &Connection,
     log_path: &Path,
@@ -423,6 +498,10 @@ where
     let mut current_ts: Option<NaiveDateTime> = None;
     let mut current_visit_id: Option<i64> = None;
     let mut pending_room_name: Option<String> = None;
+    // `Received Notification: <... message: "..." >` が改行を含むケース用の蓄積バッファ。
+    // 開始行で `">` で閉じていない場合のみ Some になり、`">` を含む行で確定する。
+    // EOF 時に未閉鎖のまま残った内容は破棄する。
+    let mut pending_notification: Option<String> = None;
 
     main_tx.execute(
         "INSERT OR IGNORE INTO sessions (start_time, end_time, account_id, account_name, log_name)
@@ -450,6 +529,22 @@ where
             progress_callback(format!("パース中... {line_count} 行"), String::new());
         }
 
+        // --- 複数行通知の継続行 ---
+        // バッファ蓄積中は他のパース処理を一切走らせない (本文中に偶発的に他パターン文字列が
+        // 含まれてもイベント誤検出しないため)。`">` で閉じた時点で確定処理に回す。
+        if let Some(buf) = pending_notification.as_mut() {
+            buf.push('\n');
+            buf.push_str(&line);
+            if line.trim_end().ends_with("\">") {
+                let merged = pending_notification.take().unwrap_or_default();
+                let ts_str_for_notif = current_ts
+                    .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
+                    .unwrap_or_default();
+                persist_notification(main_tx, session_id, &ts_str_for_notif, &merged)?;
+            }
+            continue;
+        }
+
         // --- タイムスタンプ抽出 ---
         if let Some(caps) = RE_TIME.captures(&line) {
             let Some(match_ts) = caps.get(1) else {
@@ -464,7 +559,7 @@ where
                 }
                 end_time = Some(formatted);
             } else {
-                crate::utils::log_warn(&format!("timestamp parse skipped [{filename}]: {ts_str}"));
+                crate::utils::log_warn(&format!("タイムスタンプのパースをスキップしました [{filename}]: {ts_str}"));
             }
         }
         let ts_str = current_ts
@@ -503,16 +598,11 @@ where
 
         if let Some(caps) = RE_JOINING.captures(&line) {
             if let Some(room_name) = pending_room_name.as_ref() {
-                let instance_id = caps
-                    .get(2)
-                    .map(|m| m.as_str().to_string())
-                    .unwrap_or_default();
-                let Some(access_match) = caps.get(3) else {
+                let Some(location_match) = caps.get(1) else {
                     continue;
                 };
-                let access_raw = access_match.as_str().trim().to_string();
-                let region = caps.get(4).map(|m| m.as_str().to_string());
-                let (instance_type, _owner) = parse_access_type(&access_raw);
+                let location = parse_location(location_match.as_str());
+                let instance_id = location.instance_id.clone().unwrap_or_default();
 
                 main_tx.execute(
                     "INSERT INTO visits
@@ -522,8 +612,8 @@ where
                         session_id,
                         room_name,
                         instance_id,
-                        instance_type,
-                        region,
+                        location.access_type,
+                        location.region,
                         ts_str
                     ],
                 )?;
@@ -655,66 +745,15 @@ where
 
 
         // --- 通知（招待、フレンドリクエスト、boop、グループ） ---
-        if let Some(caps) = RE_NOTIFICATION.captures(&line) {
-            let Some(type_match) = caps.get(3) else {
-                continue;
-            };
-            let notif_type = type_match.as_str().trim().to_string();
-            if !is_collectible_notification(&notif_type) {
-                continue;
+        // 1行で完結する通知 (行末が `">`) はその場で確定処理する。
+        // 行末が `">` で閉じていない場合は複数行通知 (例: 改行を含むグループ告知本文) の
+        // 開始行と見なし、`pending_notification` に積んで継続行をループ先頭で集約する。
+        if line.contains("Received Notification: <") {
+            if line.trim_end().ends_with("\">") {
+                persist_notification(main_tx, session_id, &ts_str, &line)?;
+            } else {
+                pending_notification = Some(line.clone());
             }
-
-            let sender_name = caps
-                .get(1)
-                .map(|m| m.as_str())
-                .filter(|s| !s.is_empty())
-                .map(String::from);
-            let sender_user_id = caps
-                .get(2)
-                .map(|m| m.as_str())
-                .filter(|s| !s.is_empty())
-                .map(String::from);
-            let notif_id = caps.get(4).map(|m| m.as_str().to_string());
-            let Some(created_match) = caps.get(5) else {
-                continue;
-            };
-            let created_at_raw = created_match.as_str().trim();
-            let message = caps.get(6).map(|m| m.as_str().to_string());
-            let created_at = NaiveDateTime::parse_from_str(created_at_raw, "%m/%d/%Y %H:%M:%S UTC")
-                .ok()
-                .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string());
-
-            let location = RE_NOTIFICATION_WORLD_ID
-                .captures(&line)
-                .and_then(|captures| captures.get(1))
-                .map(|m| parse_location(m.as_str()))
-                .unwrap_or_default();
-            let target_world_name = RE_NOTIFICATION_WORLD_NAME
-                .captures(&line)
-                .and_then(|captures| captures.get(1))
-                .map(|m| m.as_str().to_string());
-
-            main_tx.execute(
-                "INSERT OR IGNORE INTO notifications
-                 (session_id, notif_id, notif_type, sender_user_id, sender_name, message, created_at, received_at,
-                  target_world_name, target_instance_id, target_instance_type, target_owner, target_region)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
-                params![
-                    session_id,
-                    notif_id,
-                    notif_type,
-                    sender_user_id,
-                    sender_name,
-                    message,
-                    created_at,
-                    ts_str,
-                    target_world_name.as_deref(),
-                    location.instance_id.as_deref(),
-                    location.access_type.as_deref(),
-                    location.instance_owner.as_deref(),
-                    location.region.as_deref()
-                ],
-            )?;
             continue;
         }
 
@@ -738,7 +777,6 @@ where
                 desc_opt,
                 &ts_str,
             )?;
-            continue;
         }
     }
 
@@ -774,14 +812,12 @@ where
     Ok(())
 }
 
-/// 特定のアーカイブまたはテキストログをメインデータベースにインポートする。
-///
-/// 選択された複数のログをメインデータベースにインポートする。
+/// 選択された複数のアーカイブまたはテキストログをメインデータベースにインポートする。
 ///
 /// 各ファイルを savepoint でラップし、不正なログをスキップ可能にしつつ
 /// キャンセル要求時にはコミット前にバッチ全体をロールバックする。
 ///
-/// # エラー
+/// # Errors
 /// DB セットアップ失敗、バッチ全体のロールバック必要、またはコミット前の
 /// キャンセル要求時にエラーを返す。
 pub fn run_enhanced_import_batch<F>(

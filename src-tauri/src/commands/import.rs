@@ -23,7 +23,7 @@ use super::{emit_analyze_progress, get_archive_store_dir, get_db_path, get_sourc
 /// リストを受け取る。各ファイルを事前検証後、ワーカースレッドに引き渡し
 /// アーカイブ処理ごとに `analyze-progress` イベントを送出する。
 ///
-/// # エラー
+/// # Errors
 /// 選択されたアーカイブが存在しない、または必要なパスを解決できない場合にエラーを返す。
 #[allow(clippy::needless_pass_by_value)]
 #[tauri::command]
@@ -82,11 +82,11 @@ pub fn launch_enhanced_import(
 }
 /// 起動時インポートを実行: ソースログを同期し、全アーカイブを差分インポートする。
 ///
-/// StellaRecord 起動時に自動呼び出しされる。スプラッシュ画面に件数を表示できるよう
+/// `StellaRecord` 起動時に自動呼び出しされる。スプラッシュ画面に件数を表示できるよう
 /// 概要を即座に返し、実際のインポートはバックグラウンドで実行する。
 /// 未処理ログも既存アーカイブもない場合は完全にスキップする。
 ///
-/// # エラー
+/// # Errors
 /// データベースまたはアーカイブのパスを解決できない場合にエラーを返す。
 #[tauri::command]
 pub fn launch_startup_archive_import(
@@ -109,7 +109,7 @@ pub fn launch_startup_archive_import(
         let has_archives = archive_store_dir.is_dir()
             && fs::read_dir(&archive_store_dir)
                 .map(|d| {
-                    d.filter_map(|e| e.ok())
+                    d.filter_map(std::result::Result::ok)
                         .any(|e| e.file_name().to_string_lossy().ends_with(".tar.zst"))
                 })
                 .unwrap_or(false);

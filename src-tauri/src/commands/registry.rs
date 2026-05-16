@@ -1,3 +1,5 @@
+//! 外部アプリのランチャー登録・解除と、exe ファイル選択・表示名抽出に関するコマンド群。
+
 use std::path::Path;
 
 use rusqlite::params;
@@ -8,7 +10,7 @@ use super::get_db_path;
 
 /// 登録済み外部アプリを起動する。
 ///
-/// # エラー
+/// # Errors
 /// 対象の実行ファイルを起動できない場合にエラーを返す。
 #[tauri::command]
 pub fn launch_external_app(app_path: &str) -> Result<(), String> {
@@ -21,7 +23,7 @@ pub fn pick_exe_file() -> Result<Option<String>, String> {
     platform::pick_exe_file_dialog()
 }
 
-/// exe の VersionInfo から表示名を取得して返す。
+/// exe の `VersionInfo` から表示名を取得して返す。
 ///
 /// `FileDescription` → `ProductName` → 拡張子なしファイル名の優先で解決する。
 #[tauri::command]

@@ -38,5 +38,5 @@ regex = { workspace = true }
 base64 = "0.22"
 tar = "0.4"
 zstd = "0.13"
-winreg = "0.52"
+winreg = { workspace = true }
 opener = { workspace = true }

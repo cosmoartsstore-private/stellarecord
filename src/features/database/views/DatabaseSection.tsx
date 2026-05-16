@@ -43,6 +43,7 @@ export function DatabaseSection({
   const tables = dbTables.filter((t) => !t.is_view);
   const views = dbTables.filter((t) => t.is_view);
 
+  /** サイドバーに表示する 1 テーブル分のボタンを描画する。 */
   const renderSidebarItem = (table: DbTableSummary) => {
     const isActive = currentTable === table.name;
     return (

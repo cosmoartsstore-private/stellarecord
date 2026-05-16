@@ -1,4 +1,4 @@
-//! VRChat ログ行解析用のコンパイル済み正規表現パターンとヘルパー。
+//! `VRChat` ログ行解析用のコンパイル済み正規表現パターンとヘルパー。
 //!
 //! 全パターンは `LazyLock` で一度だけコンパイルし、全インポート呼び出しで再利用する。
 //! ハードコードされた不正パターンは即座にプロセスを中断する。
@@ -48,13 +48,12 @@ pub static RE_ENTERING: LazyLock<Regex> =
 
 /// ワールド参加行にマッチする。
 /// 例: `[Behaviour] Joining wrld_xxx:74156~private(usr_xxx)~region(jp)`
-/// キャプチャ1は `world_id`、2は `instance_number`、3は `access_raw`、4は `region`。
-pub static RE_JOINING: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"\[Behaviour\] Joining (wrld_[^:]+)(?::(\d+))?~?((?:private|friends|hidden|public|group)[^~]*)(?:~region\(([^)]+)\))?",
-        "RE_JOINING",
-    )
-});
+/// キャプチャ1は `wrld_<id>:<instance>~<segments...>` のロケーション全体。
+/// 詳細フィールド分解は [`parse_location`] で行う。
+/// group インスタンスのように `~groupAccessType(...)~region(...)` と
+/// `region` 直前に別セグメントが挟まる形にも対応する。
+pub static RE_JOINING: LazyLock<Regex> =
+    LazyLock::new(|| compile_regex(r"\[Behaviour\] Joining (wrld_\S+)", "RE_JOINING"));
 
 /// 退室マーカーにマッチする。
 pub static RE_LEFT_ROOM: LazyLock<Regex> =
@@ -90,9 +89,10 @@ pub static RE_IS_LOCAL: LazyLock<Regex> = LazyLock::new(|| {
 /// 例: `Received Notification: <Notification from username:Name, sender user id:usr_xxx ...>`
 /// キャプチャ1は `sender_username`、2は `sender_user_id`、3は `notif_type`、4は `notif_id`、
 /// 5は `created_at`、6はメッセージ本文。
+/// `id` プレフィックスは通知種別で異なり、通常通知は `not_`、フレンドリクエストは `frq_`。
 pub static RE_NOTIFICATION: LazyLock<Regex> = LazyLock::new(|| {
     compile_regex(
-        r#"Received Notification: <Notification from username:([^,]*), sender user id:([^ ]*) to [^ ]+ of type: ([^,]+), id: (not_[a-f0-9\-]+), created at: ([^,]+),[^>]*message: "([^"]*)"\s*>"#,
+        r#"Received Notification: <Notification from username:([^,]*), sender user id:([^ ]*) to [^ ]+ of type: ([^,]+), id: ((?:not|frq)_[a-f0-9\-]+), created at: ([^,]+),[^>]*message: "([^"]*)"\s*>"#,
         "RE_NOTIFICATION",
     )
 });
@@ -113,7 +113,7 @@ pub static RE_PLAYER_JOIN_COMPLETE: LazyLock<Regex> = LazyLock::new(|| {
     )
 });
 
-/// セッション開始時に出力される VRChat+ サブスクリプション状態行にマッチする。
+/// セッション開始時に出力される `VRChat`+ サブスクリプション状態行にマッチする。
 pub static RE_SUBSCRIPTION_STATUS: LazyLock<Regex> = LazyLock::new(|| {
     compile_regex(
         r"Get VRChat Subscription Details! Subscription Id:([^ ]*) active:(True|False) desc:(.*)",
