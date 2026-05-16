@@ -241,6 +241,20 @@ erDiagram
 - `idx_visits_join_time (join_time)` — DB プレビューのデフォルトソート
 - `idx_visits_session_id (session_id)` — `visit_summary` ビューの集計用
 
+**`instance_type` の値**
+
+VRChat ログの生ラベルをそのまま格納する（ログ忠実保存方針、表示マッピングは消費側 UI の責務）。
+
+| 格納値 | VRChat UI 上の表示 |
+| ------ | ------------------ |
+| `public` | Public |
+| `friends` | Friends |
+| `hidden` | **Friends+** (フレンドのフレンドも参加可) |
+| `private` | Invite / Invite+ |
+| `group` | Group |
+
+同テーブル `notifications.target_instance_type` も同じ値域・同じ生ラベル方針。
+
 ---
 
 ### find_users
