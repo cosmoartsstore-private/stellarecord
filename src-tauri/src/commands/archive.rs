@@ -1,7 +1,7 @@
 //! アーカイブ圧縮、同期計画、ログビューアストリーミング、ファイル管理。
 //!
 //! `.tar.zst` のライフサイクルを管理する: Polaris ソースディレクトリからの
-//! VRChat 生ログ圧縮、アーカイブの新規作成・安全な置き換え判断、
+//! `VRChat` 生ログ圧縮、アーカイブの新規作成・安全な置き換え判断、
 //! ログビューア UI へのアーカイブ内容ストリーミング、アーカイブ済みソースログの
 //! クリーンアップ操作（一覧表示/削除）。
 
@@ -669,8 +669,8 @@ fn resolve_db_keyword_marker<'a>(
 
 /// 複数行にまたがる DB 関連ブロックを継続中であることを表す。
 ///
-/// VRChat ログでは大半の行が独立したタイムスタンプを持つが、一部のレコードは
-/// 複数行に渡る (UserInfo デバッグブロックや、稀に改行を含む通知ペイロード)。
+/// `VRChat` ログでは大半の行が独立したタイムスタンプを持つが、一部のレコードは
+/// 複数行に渡る (`UserInfo` デバッグブロックや、稀に改行を含む通知ペイロード)。
 /// 範囲全体に同じカテゴリを付与してフィルタチップで一括選択できるようにする。
 #[derive(Clone, Copy)]
 enum RangeBlockKind {
@@ -691,7 +691,7 @@ struct RangeBlock {
 }
 
 /// Notification 範囲ブロックを継続できる最大行数。
-/// 通常の VRChat 通知は数行〜十数行に収まるため、これを超えるケースは
+/// 通常の `VRChat` 通知は数行〜十数行に収まるため、これを超えるケースは
 /// 終端 `>` が失われた破損ログとみなして範囲を強制終了する。
 const NOTIFICATION_BLOCK_MAX_LINES: usize = 200;
 /// `[UserInfoLogger]` 系デバッグブロックを継続できる最大行数。
@@ -729,6 +729,7 @@ fn detect_range_block_start(line: &str) -> Option<RangeBlock> {
 /// 正規表現のみで検出される断片はハイライトしない。複数行にわたる DB
 /// レコード（UserInfo ブロック、複数行通知、動画ロードシーケンス）は
 /// 範囲全体に同一カテゴリを付与し、フィルタチップで一括選択できるようにする。
+#[allow(clippy::too_many_lines)]
 fn emit_log_viewer_chunks(
     reader: impl BufRead,
     session_id: String,
@@ -756,11 +757,11 @@ fn emit_log_viewer_chunks(
             "log_viewer_chunk",
             &LogViewerChunk {
                 session_id: sid.to_string(),
-                timestamps: ts.drain(..).collect(),
-                levels: lv.drain(..).collect(),
-                categories: cat.drain(..).collect(),
-                raw_lines: rl.drain(..).collect(),
-                highlights: hl.drain(..).collect(),
+                timestamps: std::mem::take(ts),
+                levels: std::mem::take(lv),
+                categories: std::mem::take(cat),
+                raw_lines: std::mem::take(rl),
+                highlights: std::mem::take(hl),
             },
         )
         .is_ok()
@@ -864,8 +865,8 @@ fn emit_log_viewer_chunks(
         raw_lines.push(line);
         highlights.push(highlight_text);
 
-        if raw_lines.len() >= CHUNK_SIZE {
-            if !flush(
+        if raw_lines.len() >= CHUNK_SIZE
+            && !flush(
                 &mut timestamps,
                 &mut levels,
                 &mut categories,
@@ -873,9 +874,9 @@ fn emit_log_viewer_chunks(
                 &mut highlights,
                 &session_id,
                 &app,
-            ) {
-                return;
-            }
+            )
+        {
+            return;
         }
     }
 
@@ -896,7 +897,7 @@ fn emit_log_viewer_chunks(
 
 /// インポート可能なアーカイブ済み `.tar.zst` ファイルを一覧表示する。
 ///
-/// # エラー
+/// # Errors
 /// アーカイブディレクトリを読み取れない場合にエラーを返す。
 #[tauri::command]
 pub fn list_archive_files() -> Result<Vec<ArchiveFileItem>, String> {
@@ -1075,7 +1076,7 @@ fn spawn_plain_log_stream(
 /// メタデータを即座に返し、バックグラウンドスレッドから `log_viewer_chunk` /
 /// `log_viewer_done` イベントを送出して UI が行を漸進的に描画できるようにする。
 ///
-/// # エラー
+/// # Errors
 /// アーカイブファイルが見つからない、またはデコードできない場合にエラーを返す。
 #[tauri::command]
 pub fn read_archive_log_viewer(
@@ -1110,7 +1111,7 @@ pub fn read_archive_log_viewer(
 
 /// 現在のアーカイブディレクトリサイズと設定済み上限値を算出する。
 ///
-/// # エラー
+/// # Errors
 /// アーカイブディレクトリパスを解決またはスキャンできない場合にエラーを返す。
 #[tauri::command]
 pub fn get_storage_status() -> Result<(u64, u64), String> {
@@ -1128,7 +1129,7 @@ pub fn get_storage_status() -> Result<(u64, u64), String> {
 
 /// 指定されたフォルダパスを OS シェルで開く。
 ///
-/// # エラー
+/// # Errors
 /// フォルダを開けない場合にエラーを返す。
 #[tauri::command]
 pub fn open_folder(path: &str) -> Result<(), String> {
@@ -1137,7 +1138,7 @@ pub fn open_folder(path: &str) -> Result<(), String> {
 
 /// `.tar.zst` アーカイブが確認済みで安全に削除可能なソースログファイルを一覧表示する。
 ///
-/// # エラー
+/// # Errors
 /// ソースログディレクトリまたはアーカイブディレクトリを読み取れない場合にエラーを返す。
 #[tauri::command]
 pub fn get_deletable_source_logs() -> Result<Vec<DeletableLogInfo>, String> {
@@ -1172,7 +1173,7 @@ pub fn get_deletable_source_logs() -> Result<Vec<DeletableLogInfo>, String> {
 
 /// 外部フォルダのファイル名がログビューア対応フォーマットに合致するか判定する。
 ///
-/// VRChat の `output_log_*` 命名を満たし、生ログ `.txt` または `StellaRecord` の
+/// `VRChat` の `output_log_*` 命名を満たし、生ログ `.txt` または `StellaRecord` の
 /// `.tar.zst` アーカイブ拡張子を持つ場合のみ受け入れる。
 fn matches_external_log_format(name: &str) -> bool {
     if !name.starts_with("output_log_") {
@@ -1198,7 +1199,7 @@ pub fn pick_log_files() -> Result<Vec<String>, String> {
 /// `*.tar.zst` を直接読み込む。`.txt` はそのまま、`.tar.zst` は zstd を解凍して
 /// 内部の最初のエントリを使用する。
 ///
-/// # エラー
+/// # Errors
 /// ファイルパスが不正、ファイルが見つからない、または開けない場合にエラーを返す。
 #[tauri::command]
 pub fn read_external_log_viewer(
@@ -1256,7 +1257,7 @@ pub fn read_external_log_viewer(
 
 /// 各ファイルの `.tar.zst` アーカイブ存在を確認した上で指定ソースログを削除する。
 ///
-/// # エラー
+/// # Errors
 /// ファイル名が不正、アーカイブが存在しない、または削除に失敗した場合にエラーを返す。
 #[tauri::command]
 pub fn delete_source_logs(file_names: Vec<String>) -> Result<usize, String> {

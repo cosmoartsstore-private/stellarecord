@@ -25,7 +25,7 @@ pub fn get_management_settings() -> ManagementSettings {
 
 /// スタートアップとアーカイブ容量の管理設定を永続化する。
 ///
-/// # エラー
+/// # Errors
 /// 設定ファイルまたはスタートアップ登録を更新できない場合にエラーを返す。
 #[tauri::command]
 pub fn save_management_settings(
@@ -52,7 +52,7 @@ pub fn save_management_settings(
 /// 外部アプリランチャーグリッドを構成するレジストリカタログを返す。
 ///
 /// ユーザーが登録したアプリ（名前、パス、アイコン）を一覧にし、
-/// StellaRecord サイドバーからのクイック起動を提供する。
+/// `StellaRecord` サイドバーからのクイック起動を提供する。
 #[tauri::command]
 pub fn read_registry_catalog() -> RegistryCatalog {
     config::load_registry_catalog()

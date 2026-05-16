@@ -12,13 +12,13 @@ export function useRegistryState() {
   const [registryApps, setRegistryApps] = useState<RegistryCatalog>(emptyRegistryCatalog);
   const [isReloading, setIsReloading] = useState(false);
 
-  /** カタログを静かに取得する（次回ポーリングで回復可能なためエラーは無視） */
+  /** カタログを静かに取得する（次回の再読込で回復可能なためエラーは無視） */
   const loadRegistryState = useCallback(async () => {
     try {
       const registry = await loadRegistryCatalog();
       setRegistryApps(registry);
     } catch {
-      // 次回のポーリングで回復可能
+      // 次回の再読込で回復可能
     }
   }, []);
 

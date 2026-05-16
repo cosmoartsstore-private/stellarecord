@@ -25,6 +25,7 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
 
   const isAllSelected = selected.size === logs.length;
 
+  /** 指定ファイル名の選択状態を1件分だけトグルする。 */
   const toggle = (fileName: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -37,6 +38,7 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
     });
   };
 
+  /** 全件選択と全件解除を切り替える。 */
   const toggleAll = () => {
     setSelected(isAllSelected ? new Set() : new Set(logs.map((l) => l.file_name)));
   };

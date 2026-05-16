@@ -38,6 +38,7 @@
   /* ── ボタン ────────────────────────────────── */
   --btn-primary-shadow: none;
   --btn-primary-hover-shadow: none;
+
   /* ── ランチャー / DB ──────────────────────────── */
   --launcher-card-bg: #131b2e;
   --db-sidebar-bg: #131b2e;
@@ -82,7 +83,7 @@
   --terminal-debug: #4e5670;
   --terminal-debug-system: #7b93f8;
   --terminal-highlight-bg: rgb(123 147 248 / 22%);
-  --terminal-highlight-text: #ffffff;
+  --terminal-highlight-text: #fff;
   --terminal-highlight-border: rgb(160 180 252 / 20%);
   --terminal-scrollbar-thumb: rgb(123 147 248 / 45%);
 

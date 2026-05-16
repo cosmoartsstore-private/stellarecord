@@ -60,7 +60,7 @@ fn emit_analyze_progress(app: &AppHandle, status: String, progress: String, is_r
 /// # 戻り値
 /// `StellaRecord` 設定からのデータディレクトリパス。
 ///
-/// # エラー
+/// # Errors
 /// 設定が未定義でアーカイブ操作を続行できない場合にエラーを返す。
 fn get_data_dir() -> Result<PathBuf, String> {
     let setting = config::load_stellarecord_setting();

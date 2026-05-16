@@ -1,15 +1,15 @@
-//! メインデータベースの SQLite スキーマ定義と初期化。
+//! メインデータベースの `SQLite` スキーマ定義と初期化。
 //!
 //! メインデータベースは WAL ジャーナルモードと外部キーによる参照整合性を使用する。
 
 use rusqlite::{Connection, Result};
 
-/// メイン StellaRecord データベースの DDL。
+/// メイン `StellaRecord` データベースの DDL。
 ///
-/// VRChat セッション構造を表現する: セッションがワールド訪問を所有し、
+/// `VRChat` セッション構造を表現する: セッションがワールド訪問を所有し、
 /// ワールド訪問がプレイヤー同席と動画再生を所有し、セッションが通知や
 /// セッション単位のイベントストリームを所有する。`apps` テーブルは
-/// VRChat とは無関係で、STELLA エコシステム内の外部アプリがランチャー UI に
+/// `VRChat` とは無関係で、STELLA エコシステム内の外部アプリがランチャー UI に
 /// 自己登録するエントリを格納する。
 pub const MAIN_SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS sessions (
@@ -168,8 +168,8 @@ LEFT JOIN visits v ON v.id = s.visit_id;
 
 /// メイン `StellaRecord` スキーマと必要なビューを初期化する。
 ///
-/// # エラー
-/// SQLite プラグマ、スキーマ、またはビューの適用に失敗した場合にエラーを返す。
+/// # Errors
+/// `SQLite` プラグマ、スキーマ、またはビューの適用に失敗した場合にエラーを返す。
 pub fn init_main_db(conn: &Connection) -> Result<()> {
     conn.execute_batch("PRAGMA journal_mode = WAL;")?;
     conn.execute_batch("PRAGMA foreign_keys = ON;")?;

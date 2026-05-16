@@ -1,7 +1,7 @@
 //! フロントエンドプレビューパネル用の読み取り専用データベーステーブルブラウザ。
 //!
 //! このモジュールの定数（`TABLE_COMMENTS`、テーブルごとのカラム配列）は生の
-//! SQLite スキーマ名を日本語の表示ラベルにマッピングし、TypeScript に
+//! `SQLite` スキーマ名を日本語の表示ラベルにマッピングし、TypeScript に
 //! 表示文字列をハードコードせずにフレンドリーなテーブルブラウザを描画可能にする。
 
 use std::path::Path;
@@ -176,7 +176,7 @@ const TABLE_COMMENTS: &[TableComment] = &[
 /// # 戻り値
 /// ASCII 英数字と `_` のみを含む場合は元のテーブル名。
 ///
-/// # エラー
+/// # Errors
 /// それ以外の文字が含まれる場合にエラーを返し、プレビュークエリの悪用を防ぐ。
 fn sanitize_table_name(table_name: &str) -> Result<&str, String> {
     if !table_name.is_empty()
@@ -240,7 +240,7 @@ fn list_visible_objects(path: &Path) -> Result<Vec<String>, String> {
         .collect())
 }
 
-/// 開かれた SQLite 接続内に指定名のテーブルまたはビューが存在するか確認する。
+/// 開かれた `SQLite` 接続内に指定名のテーブルまたはビューが存在するか確認する。
 fn object_exists(conn: &rusqlite::Connection, name: &str) -> Result<bool, String> {
     let exists = conn
         .query_row(
@@ -273,8 +273,8 @@ fn open_preview_database(table_name: &str) -> Result<(rusqlite::Connection, Stri
 
 /// 読み取り専用プレビュー可能な DB テーブルを一覧取得する。
 ///
-/// # エラー
-/// メインまたは拡張データベースを列挙できない場合にエラーを返す。
+/// # Errors
+/// データベースを列挙できない場合にエラーを返す。
 #[tauri::command]
 pub fn get_db_tables() -> Result<Vec<DbTableSummary>, String> {
     let db_path = get_db_path()?;
@@ -312,7 +312,7 @@ const PAGE_SIZE: u32 = 500;
 /// `TABLE_COMMENTS` の `default_sort` にフォールバックする。1ページあたり
 /// 最大 `PAGE_SIZE` 行を返す。
 ///
-/// # エラー
+/// # Errors
 /// テーブル名が不正、またはプレビュークエリに失敗した場合にエラーを返す。
 #[tauri::command]
 pub fn get_db_table_data(

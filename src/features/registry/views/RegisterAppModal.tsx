@@ -8,6 +8,7 @@ interface RegisterAppModalProps {
   onConfirm: (path: string, name: string, description: string) => void;
 }
 
+/** 外部アプリ（exe）の実行ファイルパス・表示名・説明を入力して登録するモーダル。 */
 export function RegisterAppModal({ onClose, onConfirm }: RegisterAppModalProps) {
   const [path, setPath] = useState('');
   const [name, setName] = useState('');
@@ -17,6 +18,7 @@ export function RegisterAppModal({ onClose, onConfirm }: RegisterAppModalProps) 
   // 次の exe 選択時に上書きしてよいかどうかを判定できる。
   const lastSuggestedNameRef = useRef('');
 
+  /** exe ファイルを選択し、名前未入力なら表示名を自動補完するハンドラ。 */
   const handlePickFile = async () => {
     try {
       const selected = await pickExeFile();

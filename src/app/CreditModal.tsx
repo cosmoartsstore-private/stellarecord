@@ -13,6 +13,7 @@ const LINKS = [
   { label: 'BOOTH', icon: stellaIconNames.rocket, url: 'https://cosmo-arts-store.booth.pm/' },
 ] as const;
 
+/** クレジットモーダルを開閉するヘッダー右側のフローティングボタン。 */
 export function CreditButton() {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -31,6 +32,7 @@ export function CreditButton() {
   );
 }
 
+/** 制作者情報・アプリバージョン・外部リンクを表示するクレジットモーダル本体。 */
 function CreditModal({ onClose }: { onClose: () => void }) {
   const [version, setVersion] = useState('');
 
@@ -38,6 +40,7 @@ function CreditModal({ onClose }: { onClose: () => void }) {
     void getVersion().then(setVersion);
   }, []);
 
+  /** 指定 URL を OS の既定ブラウザで開く。 */
   const handleLink = (url: string) => {
     void open(url);
   };
