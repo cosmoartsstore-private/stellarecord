@@ -39,7 +39,7 @@
 | Foreign Keys | Enforced (`PRAGMA foreign_keys = ON`) |
 | Tables | 9 |
 | Views | 3 |
-| Indexes | 8 (UNIQUE 制約による自動生成を除く) |
+| Indexes | 10 (UNIQUE 制約による自動生成を除く) |
 | Schema Definition | `src-tauri/src/analyze/db.rs` |
 
 データベースは VRChat ログから抽出した正規化データを保管するメインドメインのテーブル群と、ランチャー機能で使用する `apps` テーブルで構成される。

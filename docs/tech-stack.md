@@ -48,7 +48,6 @@
 | Application Framework | [tauri](https://crates.io/crates/tauri) | 2.2.4 | Apache-2.0 / MIT |
 | Tauri Build | [tauri-build](https://crates.io/crates/tauri-build) | 2.0.5 | Apache-2.0 / MIT |
 | Tauri Shell Plugin | [tauri-plugin-shell](https://crates.io/crates/tauri-plugin-shell) | 2.3.5 | Apache-2.0 / MIT |
-| Tauri FS Plugin | [tauri-plugin-fs](https://crates.io/crates/tauri-plugin-fs) | 2.2.0 | Apache-2.0 / MIT |
 | Database | [rusqlite](https://crates.io/crates/rusqlite) (`bundled` feature) | 0.38 | MIT |
 | Date/Time | [chrono](https://crates.io/crates/chrono) | 0.4 | Apache-2.0 / MIT |
 | Regex | [regex](https://crates.io/crates/regex) | 1.x | Apache-2.0 / MIT |
@@ -162,7 +161,7 @@ React 標準の Hooks（`useState`, `useReducer`, `useCallback`, `useRef`, `useE
 
 **Rationale**
 
-- アプリ規模が小さい（コンポーネント約 40 個）ため、グローバル状態管理ライブラリは過剰
+- アプリ規模が小さい（`.tsx` コンポーネント十数個）ため、グローバル状態管理ライブラリは過剰
 - MVVM 風の `viewmodels/use*State.ts` カスタムフックパターンで状態を集約しており、Redux 等の追加抽象化を入れると複雑性が増すだけ
 - 依存ライブラリゼロでバンドルサイズを最小化できる
 - React 19 の最新機能（`flushSync`, `useTransition`）を直接活用できる
@@ -273,7 +272,7 @@ VRChat ログ（数十 MB × 数百ファイル）を構造化保管し、横断
 
 **Rationale**
 
-- SQL の表現力で 9 テーブル + 3 ビュー + 8 インデックスの関係を自然に表現できる
+- SQL の表現力で 9 テーブル + 3 ビュー + 10 インデックスの関係を自然に表現できる
 - `bundled` feature により OS の SQLite ライブラリに依存しない（環境差を排除）
 - WAL モードで取り込み中（書き込み）と閲覧（読み取り）の並行動作が可能
 - DB プレビュー機能で `SELECT * FROM <table>` をそのまま UI に表示できる
@@ -347,7 +346,7 @@ VRChat ログは非構造化テキスト。10 種類のイベント（Joining, O
 
 **Decision**
 
-`LazyLock<Regex>` で 23 個の正規表現を一度だけコンパイルし、行単位ループ内のステートマシン（5 つの `Option` 変数）で時系列依存を解決する。
+`LazyLock<Regex>` で 16 個の正規表現を一度だけコンパイルし、行単位ループ内のステートマシン（複数の `Option` 変数）で時系列依存を解決する。
 
 **Rationale**
 
@@ -411,7 +410,7 @@ print_stdout = "warn"
 
 **Consequences**
 
-- (+) Rust コード 4,825 行で `unwrap()` ゼロ、`expect()` ゼロ
+- (+) Rust コード約 4,700 行で `unwrap()` ゼロ、`expect()` ゼロ
 - (+) エラーは全て `Result` で UI まで伝播し、トースト通知される
 - (−) `parser.rs::compile_regex` のみ `#[allow(clippy::panic)]` を明示（固定パターン破損の早期検知のため意図的）
 - (−) プロトタイピング時は一時的に lint を緩める運用が必要
@@ -517,5 +516,5 @@ Tauri Bundler の NSIS ターゲットを採用し、`installer.nsi` / `hooks.ns
 | Sentry / Telemetry | ローカル完結ポリシーに反する |
 | tracing / log crate | 月次ファイル append で十分 |
 | i18next | 日本語固定、要件発生時に導入 |
-| Storybook | コンポーネント数 40 程度で過剰 |
+| Storybook | コンポーネント数十個規模で過剰 |
 | GraphQL | フロント↔バック間は Tauri invoke で完結 |
