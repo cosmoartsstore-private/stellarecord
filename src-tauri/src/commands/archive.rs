@@ -1445,4 +1445,230 @@ mod tests {
         let plan = build_archive_sync_plan(&src, &archive_dir).unwrap();
         assert!(plan.is_none(), "shorter source should be skipped for safety");
     }
+
+    // ── encode_log_level_u8 / encode_log_category_u8 (純粋: フロントエンド定数と同期) ──
+
+    #[test]
+    fn encode_level_mapping() {
+        assert_eq!(encode_log_level_u8("info"), 1);
+        assert_eq!(encode_log_level_u8("warning"), 2);
+        assert_eq!(encode_log_level_u8("error"), 3);
+        assert_eq!(encode_log_level_u8("debug"), 4);
+        assert_eq!(encode_log_level_u8("plain"), 0);
+        assert_eq!(encode_log_level_u8("unknown"), 0);
+    }
+
+    #[test]
+    fn encode_category_mapping() {
+        assert_eq!(encode_log_category_u8("world"), 1);
+        assert_eq!(encode_log_category_u8("notification"), 2);
+        assert_eq!(encode_log_category_u8("player_join"), 3);
+        assert_eq!(encode_log_category_u8("player_ready"), 4);
+        assert_eq!(encode_log_category_u8("player_left"), 5);
+        assert_eq!(encode_log_category_u8("debug-system"), 6);
+        assert_eq!(encode_log_category_u8("plain"), 0);
+    }
+
+    // ── detect_range_block_start (純粋: 複数行ブロック検出) ──
+
+    #[test]
+    fn detect_range_block_debug_system() {
+        let block = detect_range_block_start("2025.04.30 [UserInfoLogger] Environment Info:").unwrap();
+        assert!(matches!(block.kind, RangeBlockKind::DebugSystem));
+        assert_eq!(block.category, "debug-system");
+    }
+
+    #[test]
+    fn detect_range_block_multiline_notification() {
+        // 終端 '>' を含まない通知行は複数行ブロック開始
+        let block = detect_range_block_start("Received Notification: <Notification from x").unwrap();
+        assert!(matches!(block.kind, RangeBlockKind::Notification));
+    }
+
+    #[test]
+    fn detect_range_block_single_line_notification_is_none() {
+        // '>' を含む（単一行で閉じる）通知はブロック開始ではない
+        assert!(detect_range_block_start("Received Notification: <Notification ...>").is_none());
+    }
+
+    #[test]
+    fn detect_range_block_plain_is_none() {
+        assert!(detect_range_block_start("2025.04.30 20:00:00 Log - normal").is_none());
+    }
+
+    // ── resolve_db_keyword_marker (純粋: 行内マーカー検索) ──
+
+    #[test]
+    fn keyword_marker_finds_substring() {
+        let markers = vec![
+            DbKeywordMarker { category: "world".to_string(), text: "Cozy Lounge".to_string() },
+            DbKeywordMarker { category: "player_join".to_string(), text: "StarGazer".to_string() },
+        ];
+        let found = resolve_db_keyword_marker("Entering Room: Cozy Lounge", &markers).unwrap();
+        assert_eq!(found.category, "world");
+        assert!(resolve_db_keyword_marker("no match here", &markers).is_none());
+    }
+
+    // ── resolve_db_category (純粋: タイムスタンプ + 行内容でカテゴリ決定) ──
+
+    #[test]
+    fn resolve_category_prefers_matching_kind() {
+        let mut db = std::collections::HashMap::new();
+        db.insert("2025.04.30 20:15:35".to_string(), vec!["player_join".to_string()]);
+
+        let line = "[Behaviour] OnPlayerJoined StarGazer (usr_def456)";
+        let category = resolve_db_category(line, "2025.04.30 20:15:35", &db);
+        assert_eq!(category.as_deref(), Some("player_join"));
+    }
+
+    #[test]
+    fn resolve_category_none_when_timestamp_absent() {
+        let db = std::collections::HashMap::new();
+        assert!(resolve_db_category("anything", "2025.01.01 00:00:00", &db).is_none());
+    }
+
+    #[test]
+    fn resolve_category_falls_back_to_first() {
+        let mut db = std::collections::HashMap::new();
+        db.insert("2025.04.30 20:15:30".to_string(), vec!["world".to_string()]);
+        // 行が特定カテゴリにマッチしなくても、タイムスタンプ登録があれば先頭を返す
+        let category = resolve_db_category("unrelated line", "2025.04.30 20:15:30", &db);
+        assert_eq!(category.as_deref(), Some("world"));
+    }
+
+    // ── collect_directory_size (一時ディレクトリ: 再帰サイズ集計) ──
+
+    #[test]
+    fn directory_size_sums_recursively() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("a.txt"), b"12345").unwrap(); // 5 bytes
+        let sub = dir.path().join("sub");
+        fs::create_dir(&sub).unwrap();
+        fs::write(sub.join("b.txt"), b"678").unwrap(); // 3 bytes
+
+        let total = collect_directory_size(dir.path()).unwrap();
+        assert_eq!(total, 8);
+    }
+
+    #[test]
+    fn directory_size_single_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("only.bin");
+        fs::write(&file, vec![0u8; 100]).unwrap();
+        assert_eq!(collect_directory_size(&file).unwrap(), 100);
+    }
+
+    // ── replace_file_atomically (一時ディレクトリ: 原子的置き換え) ──
+
+    #[test]
+    fn replace_file_swaps_content_and_cleans_backup() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("archive.tar.zst");
+        let temp = dir.path().join("archive.tmp");
+        fs::write(&target, b"old content").unwrap();
+        fs::write(&temp, b"new content").unwrap();
+
+        replace_file_atomically(&temp, &target).unwrap();
+
+        assert_eq!(fs::read(&target).unwrap(), b"new content");
+        assert!(!temp.exists(), "一時ファイルは消費されている");
+        assert!(!target.with_extension("bak").exists(), "バックアップは削除されている");
+    }
+
+    // ── read_archive_source_name (実圧縮ファイル: tar ヘッダー読み取り) ──
+
+    #[test]
+    fn read_source_name_from_archive() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("output_log_2025-04-30.txt");
+        let archive = dir.path().join("output_log_2025-04-30.txt.tar.zst");
+        fs::write(&src, "log content").unwrap();
+        compress_single_file(&src, &archive).unwrap();
+
+        let name = read_archive_source_name(&archive).unwrap();
+        assert_eq!(name, "output_log_2025-04-30.txt");
+    }
+
+    // ── collect_pending_archive_sync_plans / sync_source_logs_into_archive_store ──
+
+    #[test]
+    fn pending_plans_for_new_logs() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source");
+        let archive = dir.path().join("archive");
+        fs::create_dir_all(&source).unwrap();
+        fs::create_dir_all(&archive).unwrap();
+        fs::write(source.join("output_log_2025-04-30.txt"), "a").unwrap();
+        fs::write(source.join("output_log_2025-05-01.txt"), "b").unwrap();
+
+        let plans = collect_pending_archive_sync_plans(&source, &archive).unwrap();
+        assert_eq!(plans.len(), 2, "未アーカイブのログ2件が計画される");
+    }
+
+    #[test]
+    fn sync_creates_archives_and_counts() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source");
+        let archive = dir.path().join("archive");
+        fs::create_dir_all(&source).unwrap();
+        fs::write(source.join("output_log_2025-04-30.txt"), "content A").unwrap();
+
+        let count = sync_source_logs_into_archive_store(&source, &archive).unwrap();
+        assert_eq!(count, 1);
+        assert!(archive.join("output_log_2025-04-30.txt.tar.zst").exists());
+
+        // 2回目は既にアーカイブ済みなのでスキップ（0件）
+        let count2 = sync_source_logs_into_archive_store(&source, &archive).unwrap();
+        assert_eq!(count2, 0);
+    }
+
+    // ── collect_db_log_categories / collect_db_keyword_markers (インメモリ DB) ──
+
+    fn seed_viewer_db() -> rusqlite::Connection {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        analyze::init_main_db(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO sessions (id, log_name, start_time) VALUES (1, 'log.txt', '2025-04-30');
+             INSERT INTO visits (id, session_id, world_name, instance_id, instance_type, join_time, leave_time)
+                VALUES (1, 1, 'Cozy Lounge', 'inst1', 'public', '2025.04.30 20:15:30', '2025.04.30 20:20:10');
+             INSERT INTO find_users (vrchat_id, account_name) VALUES ('usr_a', 'StarGazer');
+             INSERT INTO with_users (visit_id, vrchat_id, is_self, join_time, leave_time)
+                VALUES (1, 'usr_a', 0, '2025.04.30 20:15:35', '2025.04.30 20:18:45');",
+        )
+        .unwrap();
+        conn
+    }
+
+    #[test]
+    fn db_log_categories_collects_timestamps() {
+        let conn = seed_viewer_db();
+        let cats = collect_db_log_categories(&conn, "log.txt").unwrap();
+
+        // visit join/leave → world、player join/leave → player_*
+        assert!(cats.get("2025.04.30 20:15:30").unwrap().contains(&"world".to_string()));
+        assert!(cats.get("2025.04.30 20:20:10").unwrap().contains(&"world".to_string()));
+        assert!(cats.get("2025.04.30 20:15:35").unwrap().contains(&"player_join".to_string()));
+        assert!(cats.get("2025.04.30 20:18:45").unwrap().contains(&"player_left".to_string()));
+    }
+
+    #[test]
+    fn db_keyword_markers_sorted_longest_first() {
+        let conn = seed_viewer_db();
+        let markers = collect_db_keyword_markers(&conn, "log.txt").unwrap();
+
+        // ワールド名とユーザー名が収集される
+        assert!(markers.iter().any(|m| m.text == "Cozy Lounge" && m.category == "world"));
+        assert!(markers.iter().any(|m| m.text == "StarGazer"));
+        // 最長優先ソート: 先頭は後続以上の長さ
+        for pair in markers.windows(2) {
+            assert!(pair[0].text.len() >= pair[1].text.len());
+        }
+    }
+
+    #[test]
+    fn db_keyword_markers_empty_for_unknown_session() {
+        let conn = seed_viewer_db();
+        let markers = collect_db_keyword_markers(&conn, "nonexistent.txt").unwrap();
+        assert!(markers.is_empty());
+    }
 }

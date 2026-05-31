@@ -12,13 +12,23 @@ use super::{ManagementSettings, ONE_MB_BYTES, STELLA_RECORD_RUN_VALUE};
 /// 設定ダイアログの両セクションを表示できるようにする。
 #[tauri::command]
 pub fn get_management_settings() -> ManagementSettings {
-    let stella_setting = config::load_stellarecord_setting();
-    let polaris_setting = config::load_polaris_setting();
+    build_management_settings(
+        &config::load_stellarecord_setting(),
+        &config::load_polaris_setting(),
+    )
+}
 
+/// `StellaRecord` と Polaris の設定を UI 向けペイロードへ統合する。
+///
+/// 設定値を引数で受け取ることで、レジストリ参照を経由せず統合・MB 丸めロジックを検証できる。
+fn build_management_settings(
+    stella: &config::StellaRecordSetting,
+    polaris: &config::PolarisSetting,
+) -> ManagementSettings {
     ManagementSettings {
-        startup_enabled: stella_setting.enable_startup,
-        startup_preference_set: stella_setting.startup_preference_set,
-        archive_limit_mb: bytes_to_archive_limit_mb(polaris_setting.capacity_threshold_bytes),
+        startup_enabled: stella.enable_startup,
+        startup_preference_set: stella.startup_preference_set,
+        archive_limit_mb: bytes_to_archive_limit_mb(polaris.capacity_threshold_bytes),
     }
 }
 
@@ -106,5 +116,37 @@ mod tests {
         for mb in [1u64, 300, 2048, 10_485_760] {
             assert_eq!(bytes_to_archive_limit_mb(archive_limit_mb_to_bytes(mb)), mb);
         }
+    }
+
+    // ── build_management_settings (設定統合ロジック) ──
+
+    #[test]
+    fn build_management_merges_both_sources() {
+        let stella = config::StellaRecordSetting {
+            enable_startup: true,
+            startup_preference_set: true,
+            ..Default::default()
+        };
+        let polaris = config::PolarisSetting {
+            capacity_threshold_bytes: 300 * ONE_MB_BYTES,
+            ..Default::default()
+        };
+
+        let merged = build_management_settings(&stella, &polaris);
+        assert!(merged.startup_enabled);
+        assert!(merged.startup_preference_set);
+        assert_eq!(merged.archive_limit_mb, 300);
+    }
+
+    #[test]
+    fn build_management_defaults() {
+        let merged = build_management_settings(
+            &config::StellaRecordSetting::default(),
+            &config::PolarisSetting::default(),
+        );
+        assert!(!merged.startup_enabled);
+        assert!(!merged.startup_preference_set);
+        // デフォルト容量 (300 MB) が MB に丸められる
+        assert_eq!(merged.archive_limit_mb, 300);
     }
 }
