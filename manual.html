@@ -3,398 +3,1138 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>STELLA RECORD ガイド</title>
+<title>STELLA RECORD — 操作体験サンプル</title>
 <link href="https://fonts.googleapis.com/css2?family=M+PLUS+1:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+/* ════════════════════════════════════════════════════════════════
+   STELLA RECORD — 操作体験サンプル（単一HTML / ハードコードデータ）
+   実アプリのUI・スタイル・操作性を忠実に再現したデモです。
+   ※「VRChat」以外のキーワードはすべて匿名のサンプル値です。
+   ════════════════════════════════════════════════════════════════ */
+
 :root{
-  --sans:'M PLUS 1','Hiragino Sans','Yu Gothic UI',sans-serif;
-  --mono:'JetBrains Mono','Consolas',monospace;
-  --bg-g:linear-gradient(180deg,#fbfcfe,#f3f6fb);
-  --card:#fff;--card-s:#f7f9fd;
-  --accent:#4f6ef5;--accent-l:#7b93f8;
-  --accent-g:linear-gradient(135deg,#4f6ef5,#6d88ff);
-  --accent-s:rgb(79 110 245/8%);
-  --txt:#1f2937;--dim:#6b7280;--faint:#94a3b8;
-  --bdr:#e5e7eb;--bdr-a:rgb(79 110 245/28%);
-  --danger:#ef4444;
-  --ss:0 1px 3px rgb(15 23 42/7%);--sm:0 10px 30px rgb(15 23 42/8%);
-  --feat-bdr:rgb(79 110 245/12%);
-  --stor-track:#e2e8f0;
-  --modal-ov:rgb(15 23 42/38%);--modal-sh:0 24px 60px rgb(15 23 42/16%);
-  --file-bg:#f7f9fd;--file-bdr:#e5e7eb;
-  --term-bg:#0f172a;--term-bdr:rgb(148 163 184/18%);--term-body:#f8fafc;
-  --cr:28px;--br:14px;
+  --font-sans:'M PLUS 1','Hiragino Sans','Yu Gothic UI',sans-serif;
+  --font-mono:'JetBrains Mono','Consolas',monospace;
+  --font-log:'Cascadia Mono','Consolas','SF Mono',monospace;
+  --nav-height:64px;
+  --content-max:1280px;
+  --content-pad:2.5rem;
+  --card-pad:2rem;
+  --card-radius:28px;
+  --gap-base:1.25rem;
+  --gap-lg:2rem;
 }
+
+/* ── テーマ: ライト ── */
+.light-theme{
+  color-scheme:light;
+  --bg-gradient:linear-gradient(180deg,#fbfcfe 0%,#f3f6fb 100%);
+  --bg-card:#fff;--bg-card-soft:#f7f9fd;
+  --accent:#4f6ef5;--accent-light:#7b93f8;
+  --accent-gradient:linear-gradient(135deg,#4f6ef5 0%,#6d88ff 100%);
+  --accent-soft:rgb(79 110 245/8%);
+  --text-main:#1f2937;--text-dim:#6b7280;--text-faint:#94a3b8;
+  --danger:#ef4444;
+  --border:#e5e7eb;--border-strong:rgb(79 110 245/28%);
+  --shadow-sm:0 1px 3px rgb(15 23 42/7%);--shadow-md:0 10px 30px rgb(15 23 42/8%);
+  --storage-track-bg:#e2e8f0;--warning-gradient:linear-gradient(135deg,#f59e0b 0%,#ef4444 100%);
+  --feature-icon-border:rgb(79 110 245/12%);
+  --launcher-card-bg:#fff;
+  --db-sidebar-bg:#fff;--db-content-bg:#fff;--db-content-header-bg:#f7f9fd;
+  --db-table-head-bg:#fff;--db-table-head-border:#eef2f7;--db-table-cell-border:#f3f4f6;--db-table-row-border:#eef2f7;--db-table-row-hover-bg:#f8faff;
+  --db-scrollbar-thumb:rgb(148 163 184/45%);--db-scrollbar-track:rgb(241 245 249/80%);
+  --toast-bg:#fff;--toast-shadow:0 8px 28px rgb(0 0 0/12%);
+  --modal-overlay-bg:rgb(15 23 42/38%);--modal-bg:#fff;--modal-shadow:0 24px 60px rgb(15 23 42/16%);--modal-border:#e5e7eb;
+  --archive-file-bg:#fff;--archive-file-selected-bg:rgb(79 110 245/6%);--file-checkbox-border:rgb(79 110 245/30%);--file-list-bg:#f7f9fd;--file-scrollbar-thumb:rgb(79 110 245/50%);--file-item-border:#e5e7eb;
+  --terminal-bg:#0f172a;--terminal-border:rgb(148 163 184/18%);--terminal-body:#f8fafc;
+  --terminal-world:#60a5fa;--terminal-notification:#facc15;--terminal-player-join:#4ade80;--terminal-player-left:#f87171;--terminal-warning:#fb923c;--terminal-error:#ef4444;--terminal-debug:#94a3b8;--terminal-debug-system:#7b93f8;
+  --terminal-highlight-bg:rgb(79 110 245/20%);--terminal-highlight-text:#fff;--terminal-highlight-border:rgb(123 147 248/20%);--terminal-scrollbar-thumb:rgb(148 163 184/55%);
+}
+/* ── テーマ: ダーク ── */
+.dark-theme{
+  color-scheme:dark;
+  --bg-gradient:linear-gradient(180deg,#0f172a 0%,#111827 100%);
+  --bg-card:#131b2e;--bg-card-soft:#0c1424;
+  --accent:#7b93f8;--accent-light:#a0b4fc;
+  --accent-gradient:linear-gradient(135deg,#4f6ef5 0%,#8098ff 100%);
+  --accent-soft:rgb(123 147 248/14%);
+  --text-main:#c8d0e7;--text-dim:#7a8499;--text-faint:#4e5670;
+  --danger:#ef4444;
+  --border:#1e293b;--border-strong:rgb(123 147 248/40%);
+  --shadow-sm:0 1px 3px rgb(0 0 0/30%);--shadow-md:0 10px 30px rgb(0 0 0/40%);
+  --storage-track-bg:#1e293b;--warning-gradient:linear-gradient(135deg,#f59e0b 0%,#fb7185 100%);
+  --feature-icon-border:rgb(123 147 248/16%);
+  --launcher-card-bg:#131b2e;
+  --db-sidebar-bg:#131b2e;--db-content-bg:#131b2e;--db-content-header-bg:#0c1424;
+  --db-table-head-bg:#0f172a;--db-table-head-border:#1e293b;--db-table-cell-border:#172033;--db-table-row-border:#172033;--db-table-row-hover-bg:rgb(123 147 248/8%);
+  --db-scrollbar-thumb:rgb(148 163 184/40%);--db-scrollbar-track:rgb(30 41 59/60%);
+  --toast-bg:#111929;--toast-shadow:0 8px 28px rgb(0 0 0/40%);
+  --modal-overlay-bg:rgb(0 0 0/55%);--modal-bg:#0f172a;--modal-shadow:0 24px 60px rgb(0 0 0/50%);--modal-border:#1e293b;
+  --archive-file-bg:#121a2c;--archive-file-selected-bg:rgb(123 147 248/12%);--file-checkbox-border:rgb(123 147 248/40%);--file-list-bg:#0c1424;--file-scrollbar-thumb:rgb(123 147 248/45%);--file-item-border:#1e293b;
+  --terminal-bg:#070d1a;--terminal-border:#1e293b;--terminal-body:#c8d0e7;
+  --terminal-world:#60a5fa;--terminal-notification:#facc15;--terminal-player-join:#4ade80;--terminal-player-left:#f87171;--terminal-warning:#fb923c;--terminal-error:#ef4444;--terminal-debug:#4e5670;--terminal-debug-system:#7b93f8;
+  --terminal-highlight-bg:rgb(123 147 248/22%);--terminal-highlight-text:#fff;--terminal-highlight-border:rgb(160 180 252/20%);--terminal-scrollbar-thumb:rgb(123 147 248/45%);
+}
+/* ── テーマ: ミッドナイト ── */
+.midnight-theme{
+  color-scheme:dark;
+  --bg-gradient:linear-gradient(180deg,#09090b 0%,#0a0a0c 100%);
+  --bg-card:#141416;--bg-card-soft:#0e0e10;
+  --accent:#7b93f8;--accent-light:#a0b4fc;
+  --accent-gradient:linear-gradient(135deg,#4f6ef5 0%,#8098ff 100%);
+  --accent-soft:rgb(123 147 248/14%);
+  --text-main:#e4e4e7;--text-dim:#71717a;--text-faint:#3f3f46;
+  --danger:#ef4444;
+  --border:#27272a;--border-strong:rgb(123 147 248/35%);
+  --shadow-sm:0 1px 3px rgb(0 0 0/50%);--shadow-md:0 10px 30px rgb(0 0 0/60%);
+  --storage-track-bg:#27272a;--warning-gradient:linear-gradient(135deg,#f59e0b 0%,#fb7185 100%);
+  --feature-icon-border:rgb(123 147 248/16%);
+  --launcher-card-bg:#141416;
+  --db-sidebar-bg:#141416;--db-content-bg:#141416;--db-content-header-bg:#0e0e10;
+  --db-table-head-bg:#121214;--db-table-head-border:#27272a;--db-table-cell-border:#1c1c1e;--db-table-row-border:#1c1c1e;--db-table-row-hover-bg:rgb(123 147 248/8%);
+  --db-scrollbar-thumb:rgb(161 161 170/35%);--db-scrollbar-track:rgb(39 39 42/50%);
+  --toast-bg:#131315;--toast-shadow:0 8px 28px rgb(0 0 0/60%);
+  --modal-overlay-bg:rgb(0 0 0/65%);--modal-bg:#121214;--modal-shadow:0 24px 60px rgb(0 0 0/65%);--modal-border:#27272a;
+  --archive-file-bg:#131315;--archive-file-selected-bg:rgb(123 147 248/12%);--file-checkbox-border:rgb(123 147 248/40%);--file-list-bg:#0e0e10;--file-scrollbar-thumb:rgb(123 147 248/45%);--file-item-border:#27272a;
+  --terminal-bg:#050505;--terminal-border:#27272a;--terminal-body:#d4d4d8;
+  --terminal-world:#60a5fa;--terminal-notification:#facc15;--terminal-player-join:#4ade80;--terminal-player-left:#f87171;--terminal-warning:#fb923c;--terminal-error:#ef4444;--terminal-debug:#3f3f46;--terminal-debug-system:#a0b4fc;
+  --terminal-highlight-bg:rgb(123 147 248/20%);--terminal-highlight-text:#fff;--terminal-highlight-border:rgb(160 180 252/18%);--terminal-scrollbar-thumb:rgb(123 147 248/45%);
+}
+
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden}
-body{font-family:var(--sans);color:var(--txt);-webkit-font-smoothing:antialiased}
-button{font-family:var(--sans);cursor:pointer}
+body{font-family:var(--font-sans);background:var(--bg-gradient);color:var(--text-main);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;user-select:none}
+input{user-select:text}
+button{font-family:var(--font-sans);cursor:pointer;transition:transform .25s cubic-bezier(.34,1.56,.64,1),box-shadow .25s ease,opacity .2s}
+.icon-svg{width:28px;height:28px;fill:currentColor}
+.disable-transitions,.disable-transitions *{transition:none!important}
 
-.app{display:flex;flex-direction:column;height:100vh;background:var(--bg-g)}
+.app{position:relative;display:flex;flex-direction:column;height:100vh;overflow:hidden;background:var(--bg-gradient);color:var(--text-main)}
 
-/* NAV */
-.nav{display:flex;align-items:center;padding:1rem 2.5rem .25rem;position:relative;z-index:100;flex-shrink:0}
-.nav-brand{display:flex;align-items:center;transform:translateX(-12px)}
-.nav-logo{font-size:1.05rem;font-weight:800;letter-spacing:-.02em;background:var(--accent-g);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;display:flex;align-items:center;gap:2px}
-.nav-logo .s{font-size:.6rem;opacity:.7}
-.pnav{position:absolute;left:50%;transform:translateX(-50%);display:flex;background:var(--card);border:1px solid var(--bdr);border-radius:999px;padding:4px;gap:2px;box-shadow:var(--ss)}
-.pb{display:flex;align-items:center;gap:5px;padding:7px 16px;border-radius:999px;border:none;background:transparent;color:var(--dim);font-size:.82rem;font-weight:700;white-space:nowrap;transition:background .18s,box-shadow .18s}
+/* ── NAV ── */
+.nav{position:absolute;top:0;left:0;right:0;height:auto;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:1rem var(--content-pad) .25rem;z-index:100;background:transparent}
+.nav-brand{display:inline-flex;align-items:center;justify-self:start}
+.nav-logo{transform:translateX(-12px);font-size:1.15rem;font-weight:800;letter-spacing:-.02em;background:var(--accent-gradient);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;display:inline-flex;align-items:center;gap:2px}
+.nav-logo .s{font-size:.7rem;opacity:.75;-webkit-text-fill-color:initial;color:var(--accent)}
+.pnav{justify-self:center;display:flex;background:var(--bg-card);border:1px solid var(--border);border-radius:999px;padding:4px;gap:2px;box-shadow:var(--shadow-sm)}
+.pb{display:flex;align-items:center;gap:5px;padding:7px 16px;border-radius:999px;border:none;background:transparent;color:var(--text-dim);font-size:.82rem;font-weight:700;white-space:nowrap;transition:background .18s,box-shadow .18s}
 .pb svg{width:16px;height:16px;fill:currentColor}
-.pb:hover{color:var(--txt);background:var(--accent-s)}
-.pb.on{background:var(--accent-g);color:#fff;box-shadow:var(--ss)}.pb.on:hover{color:#fff}
-.nav-r{margin-left:auto}
-.nav-set{width:42px;height:42px;border-radius:14px;border:1px solid var(--bdr);background:var(--card);box-shadow:var(--ss);display:flex;align-items:center;justify-content:center;color:var(--txt);transition:transform .25s cubic-bezier(.34,1.56,.64,1),box-shadow .25s}
-.nav-set:hover{box-shadow:var(--sm);transform:translateY(-1px)}
+.pb:hover{color:var(--text-main);background:var(--accent-soft)}
+.pb.on{background:var(--accent-gradient);color:#fff;box-shadow:var(--shadow-sm)}
+.nav-set{justify-self:end;width:42px;height:42px;border-radius:14px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-dim);display:inline-flex;align-items:center;justify-content:center;box-shadow:var(--shadow-sm);transition:transform .25s cubic-bezier(.34,1.56,.64,1),box-shadow .25s}
+.nav-set:hover{box-shadow:var(--shadow-md);transform:translateY(-1px)}
 .nav-set svg{width:20px;height:20px;fill:currentColor}
 
-/* CONTENT */
-.content{flex:1;overflow-y:auto;display:flex;justify-content:center;padding:1rem 2.5rem 2.5rem}
+/* ── CONTENT ── */
+.content{flex:1;padding:var(--content-pad);padding-top:calc(var(--nav-height) + .5rem);overflow-y:auto;display:flex;justify-content:center;min-height:0}
+.view{width:100%;max-width:var(--content-max);margin:0 auto;animation:view-fade-in .5s cubic-bezier(.22,1,.36,1)}
+@keyframes view-fade-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.sec{display:none}.sec.on{display:block}
 
-/* SECTIONS */
-.sec{display:none;width:100%;max-width:1280px}.sec.on{display:block}
+/* ── CARD / HEADER ── */
+.cd{background:var(--bg-card);border-radius:var(--card-radius);padding:var(--card-pad);box-shadow:var(--shadow-md);border:1px solid var(--border);margin-bottom:var(--gap-lg)}
+.shd{margin-bottom:1.5rem}
+.shd h2{font-size:clamp(1.5rem,2.8vw,2rem);font-weight:800;letter-spacing:-.05em}
+.shd p{color:var(--text-dim);font-size:.9rem;margin-top:.3rem}
 
-/* CARD */
-.cd{background:var(--card);border-radius:var(--cr);padding:2rem;box-shadow:var(--sm);border:1px solid var(--bdr);margin-bottom:2rem}
-/* BTN */
-.bt{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;padding:.7rem 1.5rem;border-radius:var(--br);font-size:.88rem;font-weight:800;letter-spacing:.02em;border:1px solid var(--bdr);background:var(--card);color:var(--txt);box-shadow:var(--ss);white-space:nowrap;transition:transform .25s cubic-bezier(.34,1.56,.64,1),box-shadow .25s}
-.bt:hover{box-shadow:var(--sm);transform:translateY(-1px)}.bt:active{transform:translateY(0)}
+/* ── BUTTONS ── */
+.bt{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;padding:.7rem 1.5rem;border-radius:14px;font-size:.88rem;font-weight:800;letter-spacing:.02em;border:1px solid var(--border);background:var(--bg-card);color:var(--text-main);box-shadow:var(--shadow-sm);white-space:nowrap;transition:transform .25s cubic-bezier(.34,1.56,.64,1),box-shadow .25s ease,border-color .2s}
+.bt:hover:not(:disabled){box-shadow:var(--shadow-md);transform:translateY(-1px)}
+.bt:active:not(:disabled){transform:translateY(0)}
+.bt:disabled{opacity:.5;cursor:not-allowed}
 .bt svg{width:16px;height:16px;fill:currentColor}
-.bt.pr{background:var(--accent-g);color:#fff;border-color:transparent}.bt.pr:hover{filter:brightness(1.05);transform:translateY(-2px)}
-.bt.dg{background:var(--danger);color:#fff;border-color:var(--danger)}.bt.dg:hover{filter:brightness(1.1)}
-/* HEADER */
-.shd{margin-bottom:1.5rem}.shd h2{font-size:clamp(1.5rem,2.8vw,2rem);font-weight:800;letter-spacing:-.05em}
-.shd-row{display:flex;align-items:center;justify-content:space-between}
-.shd-acts{display:flex;align-items:center;gap:.5rem}
-.smt{font-size:.78rem;font-weight:700;color:var(--dim);letter-spacing:.04em;margin-bottom:.5rem}
+.bt.pr{background:var(--accent-gradient);color:#fff;border-color:transparent;box-shadow:none}
+.bt.pr:hover:not(:disabled){filter:brightness(1.05);transform:translateY(-2px)}
+.bt.dg{background:var(--danger);color:#fff;border-color:var(--danger)}
+.bt.dg:hover:not(:disabled){filter:brightness(1.1);transform:translateY(-1px)}
+.bt.wipe{font-weight:900}
 
-/* LAUNCHER */
-.vw-sw{display:flex;border:1px solid var(--bdr);border-radius:10px;overflow:hidden}
-.vw-sw button{width:34px;height:32px;border:none;background:var(--card);color:var(--dim);display:flex;align-items:center;justify-content:center}
+/* ── LAUNCHER ── */
+.reg-hd{display:flex;align-items:center;justify-content:space-between;gap:1rem}
+.reg-acts{display:flex;align-items:center;gap:.6rem}
+.reg-acts>button{padding:.55rem 1.1rem;font-size:.82rem;white-space:nowrap;box-shadow:none}
+.vw-sw{display:flex;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.vw-sw button{width:34px;height:32px;border:none;background:var(--bg-card);color:var(--text-dim);display:inline-flex;align-items:center;justify-content:center;padding:0;transition:background .15s,color .15s}
+.vw-sw button:hover{background:var(--accent-soft);color:var(--text-main)}
 .vw-sw button.on{background:var(--accent);color:#fff}
 .vw-sw svg{width:16px;height:16px;fill:currentColor}
-.l-list{display:flex;flex-direction:column;gap:.5rem}
-.l-row{display:flex;align-items:center;gap:1rem;padding:1.1rem 1.2rem;border-radius:20px;border:1px solid var(--bdr);background:var(--card);box-shadow:var(--ss);transition:transform .15s,border-color .15s,box-shadow .15s}
-.l-row:hover{transform:translateY(-1px);border-color:var(--bdr-a);box-shadow:var(--sm)}
-.l-ico{width:62px;height:62px;border-radius:18px;background:var(--accent-s);border:1px solid var(--feat-bdr);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.l-ico svg{width:28px;height:28px;fill:var(--accent)}
-.l-info{flex:1;min-width:0}.l-info h4{font-size:.88rem;font-weight:700;margin-bottom:.1rem}.l-info p{font-size:.78rem;color:var(--dim)}
-.l-acts{display:flex;align-items:center;gap:.4rem;flex-shrink:0}
-.del{width:40px;height:40px;border-radius:12px;border:1px solid var(--bdr);background:var(--card);display:flex;align-items:center;justify-content:center;color:var(--dim);transition:background .15s,color .15s}
+.reload-ic{display:inline-flex;transition:transform .2s}
+.reload-ic.spin{animation:reload-spin .6s ease-in-out}
+@keyframes reload-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+.l-list{display:flex;flex-direction:column;gap:.9rem}
+.l-row{display:flex;align-items:center;justify-content:space-between;gap:1.25rem;padding:1.1rem 1.2rem;border-radius:20px;border:1px solid var(--border);background:var(--launcher-card-bg);box-shadow:var(--shadow-sm)}
+.l-main{display:flex;align-items:center;gap:1rem;min-width:0}
+.l-ico{width:62px;height:62px;border-radius:18px;background:var(--accent-soft);border:1px solid var(--feature-icon-border);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden}
+.l-ico svg{width:30px;height:30px;fill:var(--accent)}
+.l-copy{min-width:0}
+.l-copy h4{font-size:1rem}
+.l-copy p{margin-top:.35rem;color:var(--text-dim);line-height:1.55;font-size:.85rem}
+.l-acts{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap}
+.del{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:40px;height:40px;border-radius:12px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-dim);transition:background .15s,color .15s,border-color .15s}
 .del:hover{background:var(--danger);color:#fff;border-color:var(--danger)}
-.del svg{width:18px;height:18px;fill:currentColor}
+.del svg{width:16px;height:16px;fill:currentColor}
+.l-empty{padding:1.25rem 1.4rem;border:1px dashed var(--border);border-radius:18px;color:var(--text-dim);background:var(--bg-card-soft)}
+.l-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem}
+.l-card{display:flex;flex-direction:column;gap:1rem;padding:1.35rem;border-radius:24px;background:var(--launcher-card-bg);border:1px solid var(--border);box-shadow:var(--shadow-sm)}
+.l-card-ico{width:88px;height:88px;border-radius:24px;background:var(--accent-soft);border:1px solid var(--feature-icon-border);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.l-card-ico svg{width:40px;height:40px;fill:var(--accent)}
+.l-card h4{font-size:1rem}
+.l-card p{margin-top:.35rem;color:var(--text-dim);line-height:1.55;font-size:.85rem}
+.l-card-acts{display:flex;align-items:center;gap:.4rem;flex-wrap:nowrap}
+.l-card-acts>button{padding:.55rem .7rem;font-size:.78rem;border-radius:10px;white-space:nowrap}
+.l-card-acts .pr{flex:1;min-width:0}
 
-/* ANALYZE */
-.hero-t{font-size:clamp(2.2rem,4vw,3.4rem);font-weight:800;letter-spacing:-.05em;margin-bottom:1.5rem}
-.stor-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem}
-.stor-lbl{font-size:.82rem;font-weight:700;color:var(--dim);display:flex;align-items:center;gap:.5rem}
-.stor-lbl button{background:none;border:none;color:var(--dim);display:flex;padding:2px}
-.stor-lbl svg{width:16px;height:16px;fill:currentColor}
-.stor-val{font-size:.82rem;font-weight:700;font-family:var(--mono)}
-.stor-track{height:10px;background:var(--stor-track);border-radius:5px;overflow:hidden;margin-bottom:1rem}
-.stor-fill{height:100%;border-radius:5px;background:var(--accent-g);width:12.5%}
-.set-row{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding-top:.75rem;border-top:1px solid rgba(0,0,0,.04)}
-.set-lbl{font-size:.76rem;font-weight:700;color:var(--dim)}
-.set-inp{width:100px;padding:.4rem .6rem;border-radius:10px;border:1px solid var(--bdr);background:var(--card);color:var(--txt);font-family:var(--mono);font-size:.82rem;font-weight:700;text-align:right}
-.set-unit{font-size:.76rem;color:var(--dim);font-weight:700}
-.auto-btn{height:34px;padding:0 .85rem;border-radius:8px;border:1px solid var(--bdr);background:var(--card-s);font-size:.8rem;font-weight:700;color:var(--dim);display:flex;align-items:center;gap:.3rem}
+/* ── ANALYZE ── */
+.hero-t{font-size:clamp(2.2rem,4vw,3.4rem);font-weight:800;letter-spacing:-.05em;margin-bottom:1.4rem;padding:.35rem 0 .2rem}
+.home-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1.5rem}
+.smt{font-weight:800;font-size:1.05rem}
+.an-actrow{display:flex;flex-wrap:wrap;align-items:center;gap:.75rem}
+.set-row{display:flex;align-items:center;gap:.5rem}
+.set-lbl{font-size:.8rem;font-weight:700;color:var(--text-dim);white-space:nowrap}
+.set-inp{width:100px;padding:.4rem .6rem;border-radius:10px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-main);font-family:var(--font-mono);font-size:.82rem;font-weight:700;text-align:right}
+.set-inp:focus{outline:none;border-color:var(--accent)}
+.set-unit{font-size:.8rem;color:var(--text-dim);font-weight:700}
+.auto-btn{display:flex;align-items:center;gap:.4rem;height:34px;padding:0 .85rem;border-radius:8px;border:1px solid var(--border);background:var(--bg-card-soft);color:var(--text-dim);font-size:.8rem;font-weight:700;white-space:nowrap;transition:background .2s,border-color .2s,color .2s}
 .auto-btn svg{width:16px;height:16px;fill:currentColor}
-.sync-g{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem}
-.sync-cd{padding:1.25rem;background:var(--card-s);border-radius:16px;border:1px solid var(--bdr)}
-.sync-cd h4{font-size:.88rem;font-weight:700;margin-bottom:.25rem}
-.sync-cd p{font-size:.78rem;color:var(--dim);margin-bottom:.75rem}
-.blk-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem}
+.auto-btn:hover{border-color:var(--border-strong)}
+.auto-btn.on{background:var(--accent-gradient);border-color:transparent;color:#fff}
+.stor-card{margin-top:1.25rem;padding:1.1rem 1.25rem;border-radius:20px;border:1px solid var(--border);background:var(--bg-card-soft);box-shadow:var(--shadow-sm)}
+.stor-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem}
+.stor-title{font-size:1.05rem;font-weight:800;display:flex;align-items:center;gap:.6rem}
+.stor-refresh{background:var(--bg-card);border:1px solid var(--border);padding:.35rem;display:flex;align-items:center;color:var(--text-dim);border-radius:8px;transition:color .2s,background .2s,border-color .2s}
+.stor-refresh:hover{color:var(--accent);background:var(--accent-soft);border-color:var(--accent)}
+.stor-refresh svg{width:16px;height:16px;fill:currentColor}
+.stor-stats{font-size:.9rem;font-weight:700;color:var(--text-dim)}
+.stor-track{height:10px;background:var(--storage-track-bg);border-radius:5px;overflow:hidden}
+.stor-fill{height:100%;background:var(--accent-gradient);border-radius:5px;transition:width .6s cubic-bezier(.23,1,.32,1)}
+.stor-fill.warn{background:var(--warning-gradient)}
+.an-block-hd{display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem}
+.an-block-hd>div{flex:1}
+.sync-g{display:grid;grid-template-columns:repeat(2,1fr);gap:1.25rem}
+.sync-cd{padding:1.25rem;background:var(--bg-card-soft);border-radius:16px;border:1px solid var(--border);display:flex;flex-direction:column}
+.sync-cd h4{font-size:.9rem;font-weight:700;margin-bottom:.5rem}
+.sync-cd p{color:var(--text-dim);font-size:.8rem;line-height:1.5;flex:1;margin-bottom:1rem}
+.prog{margin-top:2rem;display:none}
+.prog.on{display:block}
+.prog-info{display:flex;justify-content:space-between;font-size:.8rem;font-weight:700;color:var(--text-dim);margin-bottom:.5rem}
+.prog-track{height:8px;background:var(--storage-track-bg);border-radius:4px;overflow:hidden}
+.prog-fill{height:100%;background:var(--accent-gradient);transition:width .3s;width:0}
+.prog-status{display:flex;justify-content:space-between;margin-top:1rem}
+.prog-status p{color:var(--text-dim);font-size:.85rem}
+.prog-cancel{color:var(--danger);font-size:.8rem;font-weight:700;border:none;background:transparent;padding:0}
+.prog-cancel:hover{text-decoration:underline}
 
-/* DATABASE */
-.db-ly{display:flex;gap:2rem}
-.db-sb{width:220px;min-width:220px;padding:1rem;border-radius:var(--cr);background:var(--card);border:1px solid var(--bdr);box-shadow:var(--ss)}
-.db-sb-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem;padding:0 .5rem}
-.db-sb-lbl{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--dim)}
-.db-sb-tog{font-size:.72rem;font-weight:700;color:var(--accent);background:none;border:none}
-.db-ls button{display:block;width:100%;padding:.65rem .9rem;border:none;border-radius:10px;background:transparent;color:var(--dim);font-size:.83rem;font-weight:600;text-align:left;margin-bottom:1px}
-.db-ls button.on{background:var(--accent-g);color:#fff}
-.db-ls button:hover:not(.on){background:var(--accent-s)}
-.db-dv{font-size:.72rem;font-weight:700;color:var(--faint);padding:.5rem .9rem .2rem;letter-spacing:.1em;text-transform:uppercase}
-.db-ct{flex:1;border-radius:var(--cr);background:var(--card);border:1px solid var(--bdr);box-shadow:var(--ss);overflow:hidden;display:flex;flex-direction:column}
-.db-ct-hd{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.1rem;background:var(--card-s);border-bottom:1px solid var(--bdr)}
-.db-ct-hd h3{font-size:.88rem;font-weight:700}
-.db-ct-hd .meta{font-size:.72rem;color:var(--dim);font-family:var(--mono)}
-.db-pg{display:flex;align-items:center;gap:.4rem}
-.db-pg button{padding:.45rem .7rem;border-radius:10px;border:1px solid var(--bdr);background:var(--card);color:var(--dim);font-size:.72rem;font-weight:700}
-.db-pg span{font-size:.72rem;color:var(--dim);font-family:var(--mono)}
-.db-tbl{width:100%;border-collapse:collapse;font-size:.8rem}
-.db-tbl th{padding:.8rem 1.1rem;text-align:left;font-weight:700;font-size:.82rem;color:var(--dim);background:var(--card-s);border-bottom:1px solid var(--bdr);border-right:1px solid #eef2f7;position:sticky;top:0;cursor:pointer}
-.db-tbl td{padding:.75rem 1.1rem;border-bottom:1px solid #f3f4f6;border-right:1px solid #f3f4f6}
-.db-tbl tr:hover td{background:#f8faff}
-.db-tbl .nl{color:var(--faint);font-style:italic}
-.db-tbl .sort{color:var(--accent);margin-left:.3rem}
+/* ── DATABASE ── */
+.db-ly{display:grid;grid-template-columns:220px 1fr;gap:var(--gap-lg);height:calc(100vh - var(--nav-height) - 2 * var(--content-pad) - 105px);min-height:400px}
+.db-sb{padding:1rem;overflow-y:auto;border-radius:var(--card-radius);background:var(--db-sidebar-bg);border:1px solid var(--border);box-shadow:var(--shadow-sm)}
+.db-sb-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem}
+.db-sb-lbl{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text-dim)}
+.db-name-tog{padding:.35rem .6rem;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text-dim);font-size:.68rem;font-weight:700;line-height:1;white-space:nowrap;transition:background .15s,color .15s}
+.db-name-tog:hover{background:var(--accent-soft);color:var(--text-main)}
+.db-ls{display:flex;flex-direction:column;gap:.55rem}
+.db-item{width:100%;padding:.65rem .9rem;border:1px solid transparent;border-radius:10px;background:transparent;color:var(--text-main);text-align:left;font-size:.84rem;font-weight:800;transition:background .2s}
+.db-item:hover:not(.on){background:var(--accent-soft)}
+.db-item.on{background:var(--accent-gradient);color:#fff}
+.db-dv{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);padding:.6rem 0 .2rem;border-top:1px solid var(--border);margin-top:.3rem}
+.db-ct{display:flex;flex-direction:column;overflow:hidden;border-radius:var(--card-radius);background:var(--db-content-bg);border:1px solid var(--border);box-shadow:var(--shadow-sm)}
+.db-ct-hd{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:.6rem;flex-shrink:0;padding:.9rem 1.4rem;border-bottom:1px solid var(--border);background:var(--db-content-header-bg)}
+.db-heading{display:flex;flex-direction:column;gap:.35rem;min-width:0}
+.db-heading h3{font-size:1.2rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.db-desc{font-size:.78rem;color:var(--text-dim)}
+.db-meta{font-size:.75rem;color:var(--text-dim)}
+.db-pg{display:flex;align-items:center;gap:.4rem;flex-shrink:0}
+.db-pg>button{padding:.45rem .7rem;min-width:2rem;border-radius:10px}
+.db-pg-info{font-size:.82rem;font-weight:700;color:var(--text-dim);min-width:4rem;text-align:center;white-space:nowrap}
+.db-wrap{flex:1;overflow:auto;min-height:0}
+.db-tbl{min-width:max-content;border-collapse:collapse;text-align:left;font-size:.8rem}
+.db-tbl th{position:sticky;top:0;z-index:10;padding:.8rem 1.1rem;background:var(--db-table-head-bg);color:var(--text-main);font-weight:700;font-size:.82rem;border-right:1px solid var(--db-table-head-border);border-bottom:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none}
+.db-tbl th:hover{filter:brightness(1.1)}
+.col-lbl{display:flex;align-items:center;gap:.4rem;font-weight:800}
+.sort-ar{font-size:.6rem;opacity:.15;color:var(--text-dim);transition:opacity .15s}
+.db-tbl th:hover .sort-ar{opacity:.5}
+.sort-ar.on{opacity:1;color:var(--accent)}
+.db-tbl td{padding:.75rem 1.1rem;color:var(--text-main);white-space:nowrap;border-right:1px solid var(--db-table-cell-border);vertical-align:top;user-select:text}
+.db-tbl tbody tr{border-bottom:1px solid var(--db-table-row-border);transition:background .15s}
+.db-tbl tbody tr:hover{background:var(--db-table-row-hover-bg)}
+.db-tbl td.mono{font-family:var(--font-mono);font-size:.72rem}
+.db-tbl td.nl{color:var(--text-faint);font-style:italic}
 
-/* MODAL */
-.modal{position:fixed;inset:0;background:var(--modal-ov);display:flex;align-items:center;justify-content:center;z-index:1000;padding:1.5rem;opacity:0;pointer-events:none;transition:opacity .25s}
-.modal.on{opacity:1;pointer-events:auto}
-.modal-box{background:var(--card);border-radius:var(--cr);border:1px solid var(--bdr);box-shadow:var(--modal-sh);width:min(1600px,calc(100vw - 3rem));height:min(calc(100vh - 3rem),1080px);overflow:hidden;transform:scale(.88) translateY(20px);transition:transform .35s cubic-bezier(.34,1.56,.64,1);display:flex;flex-direction:column}
-.modal.on .modal-box{transform:scale(1) translateY(0)}
+/* ── MODAL base ── */
+.modal-ov{position:fixed;inset:0;background:var(--modal-overlay-bg);display:none;align-items:center;justify-content:center;z-index:1000;padding:2rem}
+.modal-ov.on{display:flex;animation:ov-in .25s ease-out}
+@keyframes ov-in{from{opacity:0}to{opacity:1}}
+.modal-bx{background:var(--modal-bg);border-radius:28px;padding:2rem;width:100%;max-width:540px;box-shadow:var(--modal-shadow);border:1px solid var(--modal-border);position:relative;animation:bx-in .35s cubic-bezier(.34,1.56,.64,1)}
+@keyframes bx-in{from{opacity:0;transform:scale(.88) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}
+.modal-bx h3{font-size:1.25rem;font-weight:800;letter-spacing:-.02em;margin-bottom:.4rem}
+.modal-bx>p{font-size:.85rem;color:var(--text-dim);line-height:1.5;margin-bottom:1.25rem}
+.modal-acts{display:flex;justify-content:flex-end;gap:.75rem;margin-top:.25rem}
+.modal-acts .bt{min-width:110px}
+.modal-bd{position:absolute;inset:0;border:none;background:transparent;cursor:default}
 
-/* LOG VIEWER */
-.lv{display:flex;flex:1;min-height:0}
-.lv-sb{width:260px;min-width:260px;border-right:1px solid var(--bdr);background:var(--card-s);border-radius:var(--cr) 0 0 var(--cr);display:flex;flex-direction:column;padding:.75rem}
-.lv-sb-hd{display:flex;justify-content:space-between;align-items:center;padding:.35rem .6rem;margin-bottom:.5rem}
-.lv-sb-hd span{font-size:.82rem;font-weight:700}.lv-sb-hd small{font-size:.72rem;color:var(--dim);font-weight:700}
-.lv-fb{width:100%;padding:.5rem .7rem;border-radius:10px;border:1px solid var(--bdr);background:var(--card);font-size:.78rem;font-weight:600;margin-bottom:.5rem;text-align:center}
-.lv-fb:hover{border-color:var(--bdr-a)}
-.lv-fl{flex:1;overflow-y:auto;border:1px solid var(--bdr);border-radius:14px;background:var(--file-bg);padding:.5rem}
-.lv-fi{display:block;width:100%;padding:.5rem .7rem;border:none;border-radius:10px;background:transparent;color:var(--dim);font-size:.82rem;font-weight:600;text-align:left;margin-bottom:2px;font-variant-numeric:tabular-nums}
-.lv-fi.on{background:var(--accent-g);color:#fff}
-.lv-fi:hover:not(.on){background:var(--accent-s)}
-.lv-fi small{display:block;font-size:.7rem;font-weight:500;margin-top:1px;opacity:.7;font-family:var(--mono)}
-.lv-mn{flex:1;display:flex;flex-direction:column;min-width:0}
-.lv-mn-hd{display:flex;align-items:center;justify-content:space-between;padding:.65rem 1rem;border-bottom:1px solid var(--bdr)}
-.lv-mn-hd h3{font-size:.88rem;font-weight:700}
-.lv-mn-hd small{font-size:.74rem;color:var(--dim);margin-left:.5rem}
-.lv-lc{padding:4px 12px;border-radius:999px;background:var(--accent-s);color:var(--accent);font-size:.78rem;font-weight:700}
-.lgd{display:flex;gap:.3rem;padding:.5rem 1rem;border-bottom:1px solid var(--bdr);flex-wrap:wrap}
-.lg{padding:.3rem .7rem;border-radius:999px;border:1px solid var(--term-bdr);font-size:.75rem;font-weight:800;letter-spacing:.03em;background:transparent}
-.lg-w{color:#3b82f6}.lg-n{color:#ca8a04}.lg-p{color:#16a34a}.lg-wa{color:#ea580c}.lg-e{color:#dc2626}.lg-d{color:#64748b}
-.term{flex:1;background:var(--term-bg);margin:.6rem;border-radius:16px;border:1px solid var(--term-bdr);padding:.9rem 1rem;overflow-y:auto;font-family:'Cascadia Mono',var(--mono);font-size:.78rem;line-height:1.6;color:var(--term-body)}
-.tl{white-space:pre}
-.tl-w{color:#60a5fa}.tl-n{color:#facc15}.tl-pj{color:#4ade80}.tl-pl{color:#f87171}.tl-wa{color:#fb923c}.tl-e{color:#ef4444}.tl-db{color:#94a3b8}
-.tl mark{background:rgb(79 110 245/20%);color:#fff;padding:.08rem .28rem;border-radius:.35rem;box-shadow:inset 0 0 0 1px rgb(123 147 248/20%)}
-.modal-acts{display:flex;justify-content:flex-end;padding:.75rem 1rem;border-top:1px solid var(--bdr)}
+/* ── REGISTER FORM ── */
+.rf{display:flex;flex-direction:column;gap:1rem;margin-bottom:1.25rem}
+.ff{display:flex;flex-direction:column;gap:.35rem;font-size:.85rem;font-weight:600;color:var(--text-dim)}
+.fi{padding:.6rem .8rem;border-radius:10px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-main);font-size:.88rem;font-family:var(--font-sans)}
+.fi:focus{outline:none;border-color:var(--accent)}
+.fpr{display:flex;gap:.5rem}
+.fpr .fi{flex:1;min-width:0}
 
-/* CREDIT */
-.cred{position:fixed;bottom:14px;left:14px;width:36px;height:36px;border-radius:50%;border:1px solid var(--bdr);background:var(--card);box-shadow:var(--ss);display:flex;align-items:center;justify-content:center;opacity:.5;z-index:50}
-.cred svg{width:18px;height:18px;fill:var(--dim)}
+/* ── ARCHIVE SELECTOR / CLEANUP shared list ── */
+.modal-ov.full{align-items:center}
+.as-bx{display:flex;flex-direction:column;gap:0;width:min(1040px,100%);max-width:1040px;max-height:min(84vh,920px);padding:1.5rem 1.75rem}
+.as-hd{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;margin-bottom:1.25rem}
+.as-hd h3{font-size:1.25rem;font-weight:800;margin-bottom:.25rem}
+.as-hd p{font-size:.82rem;color:var(--text-dim)}
+.as-meta{display:flex;align-items:center;gap:.75rem;flex-shrink:0}
+.as-count{padding:4px 12px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:.82rem;font-weight:700}
+.fl-list{display:flex;flex-direction:column;gap:.75rem;flex:1;overflow:hidden auto;max-height:min(58vh,640px);margin-bottom:1.25rem;padding:.75rem;border:1px solid var(--border);border-radius:18px;background:var(--file-list-bg)}
+.fl-item{display:flex;width:100%;align-items:flex-start;gap:.75rem;padding:1rem 1.1rem;border:1px solid var(--file-item-border);border-radius:16px;background:var(--archive-file-bg);box-shadow:var(--shadow-sm);text-align:left;transition:transform .15s,border-color .15s,box-shadow .15s}
+.fl-item:hover{transform:translateY(-1px);border-color:var(--border-strong);box-shadow:var(--shadow-md)}
+.fl-item.on{border-color:var(--border-strong);background:var(--archive-file-selected-bg);transform:translateY(-1px)}
+.cb{display:flex;width:22px;height:22px;flex-shrink:0;align-items:center;justify-content:center;border:2px solid var(--file-checkbox-border);border-radius:7px;background:transparent;transition:background .2s,border-color .2s,transform .2s}
+.cb:hover{border-color:var(--accent)}
+.cb.on{border-color:transparent;background:var(--accent-gradient);transform:scale(1.05)}
+.cb svg{width:12px;height:10px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:16;stroke-dashoffset:16;transition:stroke-dashoffset .25s ease}
+.cb.on svg{stroke-dashoffset:0}
+.fl-fico{display:flex;flex-shrink:0}
+.fl-fico svg{width:18px;height:18px;fill:var(--text-dim);transition:fill .15s}
+.fl-item.on .fl-fico svg{fill:var(--accent)}
+.fl-mb{display:flex;min-width:0;flex:1;align-items:baseline;gap:.6rem}
+.fl-name{color:var(--text-main);font-family:var(--font-mono);font-size:.82rem;font-weight:600;overflow-wrap:anywhere}
+.fl-item.on .fl-name{color:var(--accent)}
+.fl-size{color:var(--text-faint);font-size:.74rem;font-weight:700;flex-shrink:0;margin-left:auto}
+.fl-empty{padding:4rem;color:var(--text-dim);text-align:center}
 
-/* GUIDE */
-.guide{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);padding:.45rem 1.1rem;background:var(--accent-g);color:#fff;border-radius:999px;font-size:.72rem;font-weight:700;box-shadow:0 4px 16px rgba(79,110,245,.3);z-index:9000;pointer-events:none}
+/* ── CLEANUP modal ── */
+.cl-bx{max-width:580px}
+.cl-hd{display:flex;align-items:flex-start;gap:1rem;margin-bottom:1rem}
+.cl-warn{flex-shrink:0;width:2.2rem;height:2.2rem;display:flex;align-items:center;justify-content:center;border-radius:10px;background:var(--danger);color:#fff}
+.cl-warn svg{width:18px;height:18px;fill:currentColor}
+.cl-title{font-size:1.2rem;font-weight:800;letter-spacing:-.02em;margin-bottom:.2rem}
+.cl-sub{font-size:.82rem;color:var(--text-dim);line-height:1.5}
+.cl-danger{color:var(--danger);font-weight:700}
+.cl-notice{padding:.75rem 1rem;border-radius:12px;background:var(--accent-soft);border:1px solid var(--border);color:var(--text-dim);font-size:.8rem;line-height:1.55;margin-bottom:1.1rem}
+.cl-lhd{display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem}
+.cl-toggle{background:none;border:none;color:var(--accent);font-size:.8rem;font-weight:700;padding:0}
+.cl-toggle:hover{text-decoration:underline}
+.cl-lmeta{font-size:.78rem;color:var(--text-dim);font-weight:600}
+.cl-list{max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:.75rem;padding:.75rem;margin-bottom:1.25rem;border:1px solid var(--border);border-radius:18px;background:var(--file-list-bg)}
+.cl-row{display:flex;align-items:center;gap:.75rem;padding:1rem 1.1rem;border:1px solid var(--file-item-border);border-radius:16px;background:var(--archive-file-bg);box-shadow:var(--shadow-sm);transition:transform .15s,border-color .15s,box-shadow .15s}
+.cl-row:hover{transform:translateY(-1px);border-color:var(--border-strong);box-shadow:var(--shadow-md)}
+.cl-row.on{border-color:var(--border-strong);background:var(--archive-file-selected-bg);transform:translateY(-1px)}
+.cl-name{flex:1;font-size:.82rem;font-family:var(--font-mono);font-weight:600;color:var(--text-main);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cl-row.on .cl-name{color:var(--accent)}
+.cl-size{flex-shrink:0;font-size:.74rem;font-weight:700;color:var(--text-faint);font-family:var(--font-mono)}
 
-/* HOTSPOT */
-[data-t]{position:relative;cursor:help}
+/* ── LOG VIEWER ── */
+.lv-bx{display:flex;flex-direction:row;width:min(1600px,calc(100vw - 4rem));max-width:1600px;height:min(calc(100vh - 4rem),1080px);padding:0;gap:0;overflow:hidden}
+.lv-sb{width:260px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid var(--border);overflow:hidden;background:var(--bg-card-soft);border-radius:28px 0 0 28px}
+.lv-sb-hd{display:flex;align-items:center;justify-content:space-between;padding:1.25rem 1rem .9rem;border-bottom:1px solid var(--border);flex-shrink:0}
+.lv-sb-title{font-size:.72rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim)}
+.lv-sb-count{font-size:.72rem;font-weight:700;color:var(--text-faint)}
+.lv-fsw{display:flex;flex-direction:column;gap:.4rem;padding:.6rem .9rem .4rem;border-bottom:1px solid var(--border);flex-shrink:0}
+.lv-fb{font-size:.74rem;font-weight:700;padding:.4rem .7rem;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-main);transition:background .15s}
+.lv-fb:hover{background:var(--accent-soft)}
+.lv-list{flex:1;overflow-y:auto;padding:.5rem;margin:.5rem;display:flex;flex-direction:column;gap:0;border:1px solid var(--border);border-radius:14px;background:var(--file-list-bg)}
+.lv-item{display:flex;align-items:baseline;gap:.5rem;width:100%;flex-shrink:0;padding:.6rem .8rem;border-radius:8px;background:transparent;border:none;text-align:left;color:var(--text-main);transition:background .15s}
+.lv-item:hover:not(.on){background:var(--accent-soft)}
+.lv-item.on{background:var(--accent-gradient);color:#fff}
+.lv-date{font-size:.9rem;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.01em;color:inherit}
+.lv-size{font-size:.72rem;font-weight:500;font-variant-numeric:tabular-nums;color:var(--text-faint);flex-shrink:0;margin-left:auto}
+.lv-item.on .lv-size{color:rgb(255 255 255/60%)}
+.lv-mn{flex:1;display:flex;flex-direction:column;overflow:hidden;padding:1.25rem 1.5rem;gap:.6rem;min-width:0}
+.lv-mn-hd{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-shrink:0}
+.lv-title{font-size:1.1rem;font-weight:800;letter-spacing:-.02em}
+.lv-sub{font-size:.78rem;color:var(--text-dim);font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:.2rem}
+.lv-meta{flex-shrink:0;display:flex;align-items:center;gap:.4rem}
+.lv-lc{padding:4px 12px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:.78rem;font-weight:700;white-space:nowrap}
+.lv-zoom{padding:4px 10px;border-radius:999px;background:var(--bg-card-soft);border:1px solid var(--border);color:var(--text-dim);font-size:.72rem;font-weight:700;white-space:nowrap}
+.lgd{display:flex;flex-wrap:wrap;gap:.4rem;flex-shrink:0}
+.lg{padding:.3rem .7rem;border:1px solid var(--terminal-border);border-radius:999px;font-size:.75rem;font-weight:800;letter-spacing:.03em;background:transparent;transition:opacity .15s,box-shadow .15s,border-color .15s}
+.lg:hover{opacity:.75}
+.lg.on{border-color:currentColor;box-shadow:0 0 0 1px currentColor;opacity:1}
+.lg-w{color:var(--terminal-world)}.lg-n{color:var(--terminal-notification)}.lg-p{color:var(--terminal-player-join)}.lg-wa{color:var(--terminal-warning)}.lg-e{color:var(--terminal-error)}.lg-d{color:var(--terminal-debug)}
+.term{position:relative;flex:1;overflow:auto;padding:.9rem 1rem;border:1px solid var(--terminal-border);border-radius:16px;background:var(--terminal-bg);min-height:0}
+.tl{padding:.1rem 0;font-family:var(--font-log);font-size:.78rem;line-height:1.6;white-space:pre;color:var(--terminal-body);user-select:text}
+.tl-w{color:var(--terminal-world)}.tl-n{color:var(--terminal-notification)}.tl-pj{color:var(--terminal-player-join)}.tl-pl{color:var(--terminal-player-left)}.tl-wa{color:var(--terminal-warning)}.tl-e{color:var(--terminal-error)}.tl-db{color:var(--terminal-debug)}.tl-ds{color:var(--terminal-debug-system)}
+.tl mark.hl{display:inline;padding:.08rem .28rem;border-radius:.35rem;background:var(--terminal-highlight-bg);color:var(--terminal-highlight-text);box-shadow:inset 0 0 0 1px var(--terminal-highlight-border)}
+
+/* ── CREDIT ── */
+.cred{position:fixed;left:1.5rem;bottom:1.5rem;z-index:900;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--bg-card);color:var(--text-faint);display:inline-flex;align-items:center;justify-content:center;opacity:.5;transition:opacity .2s,transform .2s,box-shadow .2s}
+.cred:hover{opacity:1;transform:translateY(-1px);box-shadow:var(--shadow-sm);color:var(--text-dim)}
+.cred svg{width:18px;height:18px;fill:currentColor}
+.cr-bx{max-width:380px;padding:0;overflow:hidden}
+.cr-banner{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:2rem 1.5rem 1.5rem;background:var(--accent-gradient);overflow:hidden}
+.cr-glow{position:absolute;top:-40%;left:-20%;width:140%;height:140%;background:radial-gradient(ellipse at 30% 20%,rgb(255 255 255/15%) 0%,transparent 60%);pointer-events:none}
+.cr-logo{position:relative;font-size:1.3rem;font-weight:800;letter-spacing:-.02em;color:#fff;display:inline-flex;align-items:center;gap:2px}
+.cr-logo .s{font-size:.8rem;opacity:.85}
+.cr-ver{position:relative;font-size:.72rem;font-weight:600;color:rgb(255 255 255/60%);letter-spacing:.08em}
+.cr-body{display:flex;flex-direction:column;padding:1.25rem 1.5rem 1.5rem;gap:1rem}
+.cr-profile{display:flex;align-items:center;gap:.9rem}
+.cr-avatar{width:52px;height:52px;border-radius:50%;flex-shrink:0;border:2px solid var(--border);box-shadow:var(--shadow-sm);background:var(--accent-soft);display:flex;align-items:center;justify-content:center;color:var(--accent)}
+.cr-avatar svg{width:30px;height:30px;fill:currentColor}
+.cr-brand{font-size:1rem;font-weight:800;letter-spacing:.03em}
+.cr-creator{font-size:.82rem;font-weight:600;color:var(--text-dim)}
+.cr-divider{height:1px;background:var(--border)}
+.cr-links{display:flex;flex-direction:column;gap:4px}
+.cr-link{display:flex;align-items:center;gap:.65rem;padding:.55rem .75rem;border-radius:10px;border:none;background:transparent;color:var(--text-main);font-size:.84rem;font-weight:600;transition:background .15s}
+.cr-link:hover{background:var(--accent-soft)}
+.cr-link-ico{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:var(--accent-soft);color:var(--accent);flex-shrink:0}
+.cr-link-ico svg{width:14px;height:14px;fill:currentColor}
+.cr-link-lbl{flex:1;text-align:left}
+.cr-link-ar{color:var(--text-faint);font-size:1.1rem;line-height:1}
+
+/* ── TOAST ── */
+.toasts{position:fixed;right:1.5rem;bottom:1.5rem;display:flex;flex-direction:column;gap:.8rem;z-index:1400}
+.toast{display:flex;align-items:center;gap:.8rem;min-width:260px;max-width:380px;padding:.85rem 1rem;background:var(--toast-bg);border:1px solid var(--border);border-radius:16px;box-shadow:var(--toast-shadow);animation:toast-in .3s cubic-bezier(.34,1.56,.64,1)}
+@keyframes toast-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.toast.out{opacity:0;transform:translateY(10px);transition:opacity .3s,transform .3s}
+.toast-ico{display:inline-flex;flex-shrink:0;color:var(--accent)}
+.toast-ico svg{width:20px;height:20px;fill:currentColor}
+.toast-msg{color:var(--text-main);font-size:.9rem;line-height:1.45}
+
+/* ── GUIDE / TOOLTIP ── */
+[data-t]{position:relative}
 [data-t]::after{content:'';position:absolute;inset:-3px;border:2px dashed transparent;border-radius:inherit;pointer-events:none;transition:border-color .12s}
-[data-t]:hover::after{border-color:rgba(79,110,245,.4)}
-
-/* TOOLTIP */
-#tip{position:fixed;z-index:10000;max-width:300px;padding:.6rem .8rem;background:#fff;color:var(--txt);border-radius:14px;font-size:.8rem;line-height:1.5;box-shadow:0 8px 30px rgba(15,23,42,.12),0 0 0 1px rgba(0,0,0,.04);pointer-events:none;opacity:0;transform:translateY(4px);transition:opacity .12s,transform .12s}
+body:not(.no-guide) [data-t]:hover::after{border-color:rgb(123 147 248/40%)}
+#tip{position:fixed;z-index:10000;max-width:300px;padding:.6rem .8rem;background:var(--bg-card);color:var(--text-main);border-radius:14px;font-size:.8rem;line-height:1.5;box-shadow:0 8px 30px rgb(15 23 42/12%),0 0 0 1px rgb(0 0 0/6%);pointer-events:none;opacity:0;transform:translateY(4px);transition:opacity .12s,transform .12s}
 #tip.on{opacity:1;transform:translateY(0)}
-#tip b{display:block;font-weight:800;margin-bottom:.1rem;color:var(--accent);font-size:.82rem}
+#tip b{display:block;font-weight:800;margin-bottom:.15rem;color:var(--accent);font-size:.82rem}
+#tip span{color:var(--text-dim)}
+body.no-guide #tip{display:none}
+.guide{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:.6rem;padding:.45rem .6rem .45rem 1.1rem;background:var(--accent-gradient);color:#fff;border-radius:999px;font-size:.72rem;font-weight:700;box-shadow:0 4px 16px rgb(79 110 245/30%);z-index:9000;max-width:calc(100vw - 2rem)}
+.guide span{opacity:.95}
+.guide button{border:none;background:rgb(255 255 255/20%);color:#fff;font-size:.7rem;font-weight:800;padding:.3rem .7rem;border-radius:999px;white-space:nowrap}
+.guide button:hover{background:rgb(255 255 255/32%)}
 
-@media(max-width:900px){
-  .nav{padding:.75rem 1.25rem .25rem}
-  .content{padding:.75rem 1rem 2rem}
-  .db-ly{flex-direction:column}.db-sb{width:100%;min-width:0}
+/* ── RESPONSIVE ── */
+@media(max-width:1024px){
+  :root{--content-pad:1.25rem;--card-pad:1.25rem;--card-radius:20px;--gap-lg:1.25rem}
+  .nav{position:relative;grid-template-columns:auto 1fr auto;gap:.5rem;padding:.6rem var(--content-pad) .5rem}
+  .nav-brand{grid-column:1}
+  .pnav{grid-column:1/-1;grid-row:2;justify-self:center}
+  .nav-set{grid-column:3}
+  .content{padding:.75rem var(--content-pad);padding-top:0}
+  .reg-hd,.reg-acts{flex-wrap:wrap}
+  .l-row{flex-direction:column;align-items:stretch}
+  .l-acts{width:100%}.l-acts>*:not(.del){flex:1}
+  .l-grid{grid-template-columns:repeat(2,1fr)}
+  .home-head{flex-direction:column;align-items:stretch;gap:1rem}
+  .an-actrow{width:100%;flex-wrap:wrap}
   .sync-g{grid-template-columns:1fr}
-  .lv{flex-direction:column}.lv-sb{width:100%;min-width:0;max-height:200px;border-radius:var(--cr) var(--cr) 0 0;border-right:none;border-bottom:1px solid var(--bdr)}
-  .pb{font-size:.72rem;padding:5px 10px}
-  .modal{padding:.5rem}.modal-box{width:100%;height:100%;border-radius:16px}
+  .an-block-hd{flex-wrap:wrap;gap:.75rem}
+  .db-ly{grid-template-columns:1fr;height:auto}
+  .db-sb{max-height:280px}.db-ct{min-height:400px}
+  .db-ct-hd{flex-direction:column;align-items:stretch}
+  .lv-bx{width:calc(100vw - 2rem);height:calc(100vh - 2rem);border-radius:20px}
+  .lv-sb{width:200px;border-radius:20px 0 0 20px}
+  .modal-ov{padding:1rem}
+}
+@media(max-width:640px){
+  :root{--content-pad:.75rem;--card-pad:1rem;--card-radius:16px;--gap-base:1rem;--gap-lg:1rem}
+  .pb{padding:6px 12px;font-size:.78rem}
+  .l-grid{grid-template-columns:1fr}
+  .lv-bx{flex-direction:column;width:calc(100vw - 1rem);height:calc(100vh - 1rem);border-radius:16px}
+  .lv-sb{width:100%;height:170px;border-right:none;border-bottom:1px solid var(--border);border-radius:16px 16px 0 0}
+  .modal-bx{border-radius:16px;padding:1.25rem;max-width:100%}
+  .modal-acts{flex-direction:column}.modal-acts .bt{min-width:0;width:100%}
+  .guide{font-size:.66rem;padding-left:.9rem}
 }
 </style>
 </head>
-<body>
-<div class="app">
+<body class="">
+<div class="app stella-record-root light-theme" id="app">
 
+<!-- ════ NAV ════ -->
 <nav class="nav">
-  <div class="nav-brand" data-t="アプリロゴ|テーマによって色が変わります。">
+  <div class="nav-brand" data-t="アプリロゴ|STELLA RECORD のロゴ。テーマに合わせて配色が変わります。">
     <span class="nav-logo">STELLA<span class="s">&#10022;</span>RECORD</span>
   </div>
-  <div class="pnav" data-t="画面切り替え|3つの画面を切り替えられます。">
-    <button class="pb on" onclick="go('launcher',this)"><svg viewBox="0 0 24 24"><path d="M16,20H20V16H16M16,14H20V10H16M10,8H14V4H10M16,8H20V4H16M10,14H14V10H10M4,14H8V10H4M4,20H8V16H4M10,20H14V16H10M4,8H8V4H4V8Z"/></svg>ランチャー</button>
-    <button class="pb" onclick="go('analyze',this)"><svg viewBox="0 0 24 24"><path d="M22,21H2V3H4V19H6V10H10V19H12V6H16V19H18V14H22V21Z"/></svg>解析</button>
-    <button class="pb" onclick="go('database',this)"><svg viewBox="0 0 24 24"><path d="M5,4H19A2,2 0 0,1 21,6V18A2,2 0 0,1 19,20H5A2,2 0 0,0 3,18V6A2,2 0 0,0 5,4M5,8V12H11V8H5M13,8V12H19V8H13M5,14V18H11V14H5M13,14V18H19V14H13Z"/></svg>DB</button>
+  <div class="pnav" data-t="画面切り替え|「ランチャー」「解析」「DB」の3画面をいつでも切り替えられます。">
+    <button class="pb on" data-sec="registry" onclick="go('registry',this)"></button>
+    <button class="pb" data-sec="analyze" onclick="go('analyze',this)"></button>
+    <button class="pb" data-sec="database" onclick="go('database',this)"></button>
   </div>
-  <div class="nav-r">
-    <button class="nav-set" data-t="テーマ切り替え|ライト・ダーク・ミッドナイトの3種類のテーマを順番に切り替えます。">
-      <svg viewBox="0 0 24 24"><path d="M12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6A6,6 0 0,1 18,12A6,6 0 0,1 12,18M20,11H23V13H20V11M1,11H4V13H1V11M13,1V4H11V1H13M13,20V23H11V20H13M4.92,3.5L6.34,4.92L4.92,6.34L3.5,4.92L4.92,3.5M17.66,16.66L19.07,18.07L17.66,19.49L16.24,18.07L17.66,16.66M19.07,5.93L17.66,7.34L16.24,5.93L17.66,4.5L19.07,5.93M6.34,19.07L4.92,17.66L6.34,16.24L7.76,17.66L6.34,19.07Z"/></svg>
-    </button>
-  </div>
+  <button class="nav-set" id="themeBtn" onclick="cycleTheme()" data-t="テーマ切り替え|押すたびに ライト → ダーク → ミッドナイト の順でテーマが切り替わります。"></button>
 </nav>
 
 <main class="content">
 
-<!-- ── LAUNCHER ── -->
-<div class="sec on" id="sec-launcher">
-  <div class="shd"><div class="shd-row">
-    <h2>ランチャー</h2>
-    <div class="shd-acts">
-      <div class="vw-sw" data-t="表示切り替え|リスト表示とカード表示を切り替えます。">
-        <button class="on"><svg viewBox="0 0 24 24"><path d="M4 5a1 1 0 0 0 0 2h1a1 1 0 0 0 0-2H4zm5 0a1 1 0 0 0 0 2h11a1 1 0 0 0 0-2H9zM4 11a1 1 0 1 0 0 2h1a1 1 0 1 0 0-2H4zm5 0a1 1 0 1 0 0 2h11a1 1 0 1 0 0-2H9zM4 17a1 1 0 1 0 0 2h1a1 1 0 1 0 0-2H4zm5 0a1 1 0 1 0 0 2h11a1 1 0 1 0 0-2H9z"/></svg></button>
-        <button><svg viewBox="0 0 24 24"><path d="M3 3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3zm11 0a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1V3zM3 14a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6zm11 0a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-6z"/></svg></button>
-      </div>
-      <button class="bt pr" data-t="アプリを登録|EXEファイルを選ぶだけで、名前とアイコンが自動的に取得されます。"><svg viewBox="0 0 24 24"><path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"/></svg>登録</button>
-      <button class="bt" data-t="再読込|一覧を最新の状態に更新します。"><svg viewBox="0 0 24 24"><path d="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"/></svg>再読込</button>
-    </div>
-  </div></div>
-  <div class="cd">
-    <div class="l-list">
-      <article class="l-row" data-t="登録済みアプリ|ここから起動・フォルダを開く・登録解除ができます。アイコンはEXEファイルから自動取得されます。">
-        <div class="l-ico"><svg viewBox="0 0 24 24"><path d="M16,20H20V16H16M16,14H20V10H16M10,8H14V4H10M16,8H20V4H16M10,14H14V10H10M4,14H8V10H4M4,20H8V16H4M10,20H14V16H10M4,8H8V4H4V8Z"/></svg></div>
-        <div class="l-info"><h4>VRChat</h4><p>ソーシャルVRプラットフォーム</p></div>
-        <div class="l-acts">
-          <button class="bt pr" data-t="起動|このアプリを起動します。">起動</button>
-          <button class="bt" data-t="フォルダを開く|このアプリがあるフォルダをエクスプローラーで開きます。">フォルダを開く</button>
-          <div class="del" data-t="登録解除|登録を削除します。アプリ本体は消えません。"><svg viewBox="0 0 24 24"><path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/></svg></div>
+  <!-- ════ LAUNCHER ════ -->
+  <section class="sec on view" id="sec-registry">
+    <div class="shd">
+      <div class="reg-hd">
+        <h2>ランチャー</h2>
+        <div class="reg-acts">
+          <div class="vw-sw" data-t="表示切り替え|リスト表示とカード表示を切り替えます。">
+            <button id="vwList" class="on" onclick="setView('list')" aria-label="リスト表示"></button>
+            <button id="vwCard" onclick="setView('card')" aria-label="カード表示"></button>
+          </div>
+          <button class="bt pr" onclick="openRegister()" data-t="アプリを登録|実行ファイル(EXE)を選ぶだけで、名前とアイコンが自動取得されます。ここから登録します。"></button>
+          <button class="bt" id="reloadBtn" onclick="reloadRegistry()" data-t="再読込|登録一覧を最新の状態に更新します。"></button>
         </div>
-      </article>
-      <article class="l-row">
-        <div class="l-ico"><svg viewBox="0 0 24 24"><path d="M16,20H20V16H16M16,14H20V10H16M10,8H14V4H10M16,8H20V4H16M10,14H14V10H10M4,14H8V10H4M4,20H8V16H4M10,20H14V16H10M4,8H8V4H4V8Z"/></svg></div>
-        <div class="l-info"><h4>VRCX</h4><p>VRChat companion tool</p></div>
-        <div class="l-acts">
-          <button class="bt pr">起動</button>
-          <button class="bt">フォルダを開く</button>
-          <div class="del"><svg viewBox="0 0 24 24"><path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/></svg></div>
+      </div>
+    </div>
+    <div class="cd">
+      <div id="launcherBody"></div>
+    </div>
+  </section>
+
+  <!-- ════ ANALYZE ════ -->
+  <section class="sec view" id="sec-analyze">
+    <div class="hero-t">解析管理</div>
+    <div class="cd" style="margin-bottom:var(--gap-base)">
+      <div class="home-head">
+        <div><h3 class="smt">ストレージ管理</h3></div>
+        <div class="an-actrow">
+          <label class="set-row" data-t="警告ライン|アーカイブ容量がこの値に近づくと警告表示されます。MB単位で入力します。">
+            <span class="set-lbl">警告ライン</span>
+            <input class="set-inp" id="limitInp" type="number" min="1" max="10485760" value="2048">
+            <span class="set-unit">MB</span>
+          </label>
+          <button class="bt" onclick="saveLimit()" data-t="保存|入力した警告ラインの値を保存します。">保存</button>
+          <button class="auto-btn" id="autoBtn" onclick="toggleAuto()" data-t="自動起動|オンにすると、PC起動時にこのアプリが自動的に立ち上がります。"></button>
         </div>
-      </article>
+      </div>
+      <div class="stor-card" data-t="ストレージ管理|圧縮アーカイブの使用容量を確認できるエリアです。使用率が90%を超えるとメーターが警告色に変わります。">
+        <div class="stor-hd">
+          <div class="stor-title">アーカイブ容量
+            <button class="stor-refresh" onclick="refreshStorage()" data-t="更新|容量情報を今すぐ再取得します（通常は自動更新）。"><svg viewBox="0 0 24 24"><path d="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"/></svg></button>
+          </div>
+          <div class="stor-stats" id="storStats">256 MB / 2048 MB (12.5%)</div>
+        </div>
+        <div class="stor-track"><div class="stor-fill" id="storFill" style="width:12.5%"></div></div>
+      </div>
     </div>
-  </div>
-</div>
+    <div class="cd">
+      <div class="an-block-hd">
+        <div><h3 class="smt">ログデータ取込・ビューア</h3></div>
+        <button class="bt dg" onclick="openCleanup()" data-t="元ログの削除|バックアップ済みの元ログを削除してディスク容量を節約します。削除後もログビューアからは閲覧できます。">元ログの削除</button>
+      </div>
+      <div class="sync-g">
+        <div class="sync-cd" data-t="復元|圧縮アーカイブを選んでデータベースへ取り込みます。複数ファイルの一括選択にも対応します。">
+          <h4>復元</h4><p>圧縮済みログからデータを再復元します</p>
+          <button class="bt pr" style="width:100%" onclick="openArchive()">ログを選択</button>
+        </div>
+        <div class="sync-cd" data-t="ログビューア|圧縮されたログの中身をそのまま閲覧できます。色分け・フィルター・ズーム対応。">
+          <h4>ログビューア</h4><p>圧縮済みログを閲覧します</p>
+          <button class="bt" style="width:100%" onclick="openLogViewer()">ログを開く</button>
+        </div>
+      </div>
+      <div class="prog" id="prog">
+        <div class="prog-info"><span>取り込み中…</span><span id="progCount">0/0</span></div>
+        <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+        <div class="prog-status"><p>アーカイブを解凍してデータベースへ反映しています…</p><button class="prog-cancel" onclick="cancelImport()">停止</button></div>
+      </div>
+    </div>
+  </section>
 
-<!-- ── ANALYZE ── -->
-<div class="sec" id="sec-analyze">
-  <div class="hero-t">解析管理</div>
-  <div class="cd" data-t="ストレージ管理|アーカイブの使用容量の確認と、各種設定を行うエリアです。">
-    <div class="smt">ストレージ管理</div>
-    <div class="stor-hd">
-      <div class="stor-lbl">アーカイブ容量 <button data-t="更新|容量情報を今すぐ更新します。通常は30秒ごとに自動更新されます。"><svg viewBox="0 0 24 24"><path d="M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"/></svg></button></div>
-      <div class="stor-val" data-t="使用量|現在の使用量と設定した警告ラインを表示しています。">256 MB / 2048 MB (12.5%)</div>
-    </div>
-    <div class="stor-track" data-t="容量メーター|使用率が90%を超えると色が変わって警告します。"><div class="stor-fill"></div></div>
-    <div class="set-row">
-      <span class="set-lbl">警告ライン</span>
-      <input class="set-inp" value="2048" readonly data-t="警告ライン設定|容量がこの値に近づくと警告表示されます。MB単位で入力してください。">
-      <span class="set-unit">MB</span>
-      <button class="bt" style="padding:.4rem .8rem;font-size:.78rem" data-t="保存|設定した値を保存します。">保存</button>
-      <button class="auto-btn" data-t="自動起動|オンにすると、PC起動時にアプリが自動で立ち上がります。"><svg viewBox="0 0 24 24"><path d="M13,3H11V13H13V3M17.83,5.17L16.41,6.59C18.05,7.91 19,9.85 19,12A7,7 0 0,1 12,19A7,7 0 0,1 5,12C5,9.85 5.95,7.91 7.59,6.59L6.17,5.17C4.23,6.82 3,9.26 3,12A9,9 0 0,0 12,21A9,9 0 0,0 21,12C21,9.26 19.77,6.82 17.83,5.17Z"/></svg>自動起動</button>
-    </div>
-  </div>
-  <div class="cd">
-    <div class="blk-hd">
-      <div><div class="smt">ログデータ取込・ビューア</div></div>
-      <button class="bt dg" style="font-size:.78rem;padding:.45rem .9rem" data-t="元ログの削除|バックアップ済みの元ログを削除してディスク容量を節約できます。削除後もログビューアからは引き続き閲覧できます。">元ログの削除</button>
-    </div>
-    <div class="sync-g">
-      <div class="sync-cd" data-t="復元|アーカイブファイルを選んでデータベースに取り込みます。複数ファイルの一括選択もできます。">
-        <h4>復元</h4><p>圧縮済みログからデータを再復元します</p>
-        <button class="bt pr" style="width:100%;justify-content:center">ログを選択</button>
+  <!-- ════ DATABASE ════ -->
+  <section class="sec view" id="sec-database">
+    <div class="shd"><h2>DBプレビュー</h2></div>
+    <div class="db-ly">
+      <div class="db-sb" data-t="テーブル一覧|見たいテーブルやビューをクリックすると、右側にデータが表示されます。">
+        <div class="db-sb-top">
+          <span class="db-sb-lbl">テーブル一覧</span>
+          <button class="db-name-tog" id="nameTog" onclick="toggleNames()" data-t="名前切り替え|テーブル名を日本語(Logical)と物理名(Physical)で切り替えます。">Logical</button>
+        </div>
+        <div class="db-ls" id="dbList"></div>
       </div>
-      <div class="sync-cd" data-t="ログビューア|圧縮されたログの中身をそのまま閲覧できます。フィルターやズーム機能付き。">
-        <h4>ログビューア</h4><p>圧縮済みログを閲覧します</p>
-        <button class="bt" style="width:100%;justify-content:center" onclick="document.getElementById('m-lv').classList.add('on')">ログを開く</button>
+      <div class="db-ct">
+        <div class="db-ct-hd">
+          <div class="db-heading">
+            <h3 id="dbTitle">セッション</h3>
+            <span class="db-desc" id="dbDesc"></span>
+            <span class="db-meta" id="dbMeta" data-t="データ件数|表示中のデータ件数です。"></span>
+          </div>
+          <div class="db-pg" data-t="ページ送り|データが多い場合（1ページ500件）にページを切り替えて閲覧できます。"><button class="bt" disabled>←</button><span class="db-pg-info" id="dbPage">1 / 1</span><button class="bt" disabled>→</button></div>
+        </div>
+        <div class="db-wrap" data-t="データ表示|列ヘッダーをクリックすると 昇順→降順→解除 で並び替えできます。横にスクロールすると全列を確認できます。">
+          <table class="db-tbl"><thead id="dbHead"></thead><tbody id="dbBody"></tbody></table>
+        </div>
       </div>
     </div>
-  </div>
-</div>
-
-<!-- ── DATABASE ── -->
-<div class="sec" id="sec-database">
-  <div class="shd"><div class="shd-row"><h2>DBプレビュー</h2></div></div>
-  <div class="db-ly">
-    <div class="db-sb" data-t="テーブル一覧|見たいテーブルやビューをクリックすると右側にデータが表示されます。">
-      <div class="db-sb-top">
-        <span class="db-sb-lbl">テーブル一覧</span>
-        <button class="db-sb-tog" data-t="名前切り替え|テーブル名を日本語表示と英語表示で切り替えます。">Logical</button>
-      </div>
-      <div class="db-ls">
-        <button class="on">セッション</button><button>Join履歴</button><button>ユーザー一覧</button><button>遭遇ユーザー</button><button>通知</button><button>写真</button><button>OSC</button><button>VRChat+</button><button>連携アプリ</button>
-        <div class="db-dv" data-t="ビュー|複数のテーブルを組み合わせた便利な一覧表示です。">ビュー</div>
-        <button>Join履歴詳細</button><button>遭遇詳細</button><button>写真詳細</button>
-      </div>
-    </div>
-    <div class="db-ct">
-      <div class="db-ct-hd">
-        <div><h3>セッション</h3><span class="meta" data-t="データ件数|表示中のデータ件数です。">1～500 / 全 1234 件</span></div>
-        <div class="db-pg" data-t="ページ切り替え|データが多い場合にページを切り替えて閲覧できます。"><button>←</button><span>1 / 3</span><button>→</button></div>
-      </div>
-      <div style="overflow-x:auto;flex:1">
-        <table class="db-tbl">
-          <thead><tr>
-            <th data-t="並び替え|クリックで昇順→降順→元の順に切り替わります。">ID <span class="sort">▼</span></th>
-            <th>元ログ名</th><th>アカウント名</th><th>開始時刻</th><th>終了時刻</th>
-          </tr></thead>
-          <tbody>
-            <tr><td>1</td><td style="font-family:var(--mono);font-size:.72rem">output_log_2025-04-30.txt</td><td>ぷらねっと</td><td>2025-04-30 20:15</td><td>2025-04-30 23:45</td></tr>
-            <tr><td>2</td><td style="font-family:var(--mono);font-size:.72rem">output_log_2025-05-01.txt</td><td>ぷらねっと</td><td>2025-05-01 18:30</td><td>2025-05-01 22:10</td></tr>
-            <tr><td>3</td><td style="font-family:var(--mono);font-size:.72rem">output_log_2025-05-02.txt</td><td>ぷらねっと</td><td>2025-05-02 21:00</td><td>2025-05-02 23:55</td></tr>
-            <tr><td>4</td><td style="font-family:var(--mono);font-size:.72rem">output_log_2025-05-03.txt</td><td>ぷらねっと</td><td>2025-05-03 19:45</td><td class="nl">NULL</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-</div>
+  </section>
 
 </main>
 
-<!-- ── LOG VIEWER MODAL ── -->
-<div class="modal" id="m-lv">
-  <div class="modal-box">
-    <div class="lv">
-      <aside class="lv-sb">
-        <div class="lv-sb-hd"><span>ログファイル</span><small>3 件</small></div>
-        <button class="lv-fb" data-t="ファイルを選択|アーカイブ以外のログファイルもここから開けます。">ファイルを選択</button>
-        <div class="lv-fl" data-t="ファイル一覧|閲覧したいファイルをクリックすると右側に内容が表示されます。">
-          <button class="lv-fi on">2025/04/30 (水) 20:15<small>2.4 MB</small></button>
-          <button class="lv-fi">2025/05/01 (木) 18:30<small>1.8 MB</small></button>
-          <button class="lv-fi">2025/05/02 (金) 21:00<small>3.1 MB</small></button>
-        </div>
-      </aside>
-      <div class="lv-mn">
-        <div class="lv-mn-hd">
-          <div><h3>ログビューア</h3><small>output_log_2025-04-30.txt</small></div>
-          <span class="lv-lc" data-t="行数|ログの全行数です。フィルター中は一致した件数も表示されます。">152847 行</span>
-        </div>
-        <div class="lgd" data-t="フィルター|ログをカテゴリーで絞り込めます。クリックでオン・オフを切り替えます。">
-          <span class="lg lg-w">ワールド</span><span class="lg lg-n">通知</span><span class="lg lg-p">入退室</span><span class="lg lg-wa">警告</span><span class="lg lg-e">エラー</span><span class="lg lg-d">デバッグ</span>
-        </div>
-        <div class="term" data-t="ログ表示|ログの中身が色分けされて表示されます。Ctrl+スクロールで拡大・縮小できます。重要なキーワードは自動的にハイライトされます。">
-<div class="tl">2025.04.30 20:15:03 Log        -  VRCApplication: Version 2024.4.2</div>
-<div class="tl">2025.04.30 20:15:04 Log        -  [Behaviour] Initializing...</div>
-<div class="tl tl-w">2025.04.30 20:15:30 Log        -  [Behaviour] Entering Room: <mark>Tutorial World</mark></div>
-<div class="tl">2025.04.30 20:15:31 Log        -  [Behaviour] Joining wrld_xxx:12345~friends~region(jp)</div>
-<div class="tl tl-pj">2025.04.30 20:15:35 Log        -  [Behaviour] OnPlayerJoined <mark>ぷらねっと</mark> (usr_abc123)</div>
-<div class="tl tl-pj">2025.04.30 20:15:36 Log        -  [Behaviour] OnPlayerJoined <mark>StarGazer</mark> (usr_def456)</div>
-<div class="tl tl-n">2025.04.30 20:16:02 Log        -  Received Notification: &lt;Notification from <mark>cosmic</mark>&gt; boop</div>
-<div class="tl tl-wa">2025.04.30 20:16:15 Warning    -  [Network] Connection quality degraded</div>
-<div class="tl tl-e">2025.04.30 20:16:20 Error      -  [Avatar] Failed to load avatar asset</div>
-<div class="tl tl-pl">2025.04.30 20:18:45 Log        -  [Behaviour] OnPlayerLeft <mark>StarGazer</mark> (usr_def456)</div>
-<div class="tl tl-db">2025.04.30 20:19:00 Debug      -  [OSC] Service discovery completed</div>
-<div class="tl tl-w">2025.04.30 20:20:10 Log        -  [Behaviour] OnLeftRoom</div>
-<div class="tl tl-w">2025.04.30 20:20:15 Log        -  [Behaviour] Entering Room: <mark>Cozy Lounge</mark></div>
-        </div>
-      </div>
+<!-- ════ REGISTER MODAL ════ -->
+<div class="modal-ov" id="m-register">
+  <div class="modal-bx">
+    <h3>アプリを登録</h3>
+    <div class="rf">
+      <label class="ff"><span>実行ファイル</span>
+        <div class="fpr"><input class="fi" id="regPath" type="text" readonly placeholder="ファイルを選択してください"><button class="bt" onclick="pickFile()">参照</button></div>
+      </label>
+      <label class="ff"><span>アプリ名</span><input class="fi" id="regName" type="text" placeholder="表示名を入力" oninput="regValidate()"></label>
+      <label class="ff"><span>説明（任意）</span><input class="fi" id="regDesc" type="text" placeholder="アプリの説明"></label>
     </div>
-    <div class="modal-acts"><button class="bt" onclick="document.getElementById('m-lv').classList.remove('on')">閉じる</button></div>
+    <div class="modal-acts">
+      <button class="bt" onclick="closeModal('m-register')">キャンセル</button>
+      <button class="bt pr" id="regConfirm" disabled onclick="confirmRegister()">登録</button>
+    </div>
   </div>
 </div>
 
+<!-- ════ ARCHIVE SELECTOR MODAL ════ -->
+<div class="modal-ov full" id="m-archive">
+  <div class="modal-bx as-bx">
+    <div class="as-hd">
+      <div><h3>復元</h3><p>取り込むログを選択してください</p></div>
+      <div class="as-meta"><span class="as-count" id="asCount">0 / 0 件選択中</span><button class="bt" style="font-size:.8rem;padding:.4rem 1rem" onclick="archiveSelectAll()" id="asAll">すべて選択</button></div>
+    </div>
+    <div class="fl-list" id="asList"></div>
+    <div class="modal-acts">
+      <button class="bt" onclick="closeModal('m-archive')">キャンセル</button>
+      <button class="bt pr" id="asConfirm" disabled onclick="confirmImport()">取り込み開始</button>
+    </div>
+  </div>
 </div>
 
-<div class="cred" data-t="クレジット|アプリの情報と制作者へのリンクを表示します。"><svg viewBox="0 0 24 24"><path d="M13,9H11V7H13M13,17H11V11H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z"/></svg></div>
-<div class="guide">ガイドモード — 各パーツにカーソルを合わせると説明が表示されます</div>
+<!-- ════ CLEANUP MODAL ════ -->
+<div class="modal-ov" id="m-cleanup">
+  <button class="modal-bd" onclick="closeModal('m-cleanup')"></button>
+  <div class="modal-bx cl-bx">
+    <div class="cl-hd">
+      <div class="cl-warn"><svg viewBox="0 0 24 24"><path d="M13,14H11V10H13M13,18H11V16H13M1,21H23L12,2L1,21Z"/></svg></div>
+      <div>
+        <h3 class="cl-title">元ログ削除</h3>
+        <p class="cl-sub">ログの保管元に存在する元ログを削除します<br><span class="cl-danger">※削除した場合、元には戻せません</span></p>
+      </div>
+    </div>
+    <div class="cl-notice">対象データはSTELLA RECORD側に圧縮バックアップされているため、削除後もログビューアから閲覧できます</div>
+    <div class="cl-lhd"><button class="cl-toggle" id="clToggle" onclick="cleanupToggleAll()">すべて解除</button><span class="cl-lmeta" id="clMeta"></span></div>
+    <div class="cl-list" id="clList"></div>
+    <div class="modal-acts">
+      <button class="bt" onclick="closeModal('m-cleanup')">キャンセル</button>
+      <button class="bt dg wipe" id="clConfirm" onclick="confirmCleanup()">0 件を削除</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ LOG VIEWER MODAL ════ -->
+<div class="modal-ov full" id="m-logviewer">
+  <div class="modal-bx lv-bx">
+    <aside class="lv-sb">
+      <div class="lv-sb-hd"><span class="lv-sb-title">ログファイル</span><span class="lv-sb-count" id="lvCount">3 件</span></div>
+      <div class="lv-fsw"><button class="lv-fb" onclick="toast('ファイル選択ダイアログを開きます（サンプル版では無効）')" data-t="ファイルを選択|アーカイブ以外の任意のログファイルもここから開けます。">ファイルを選択</button></div>
+      <div class="lv-list" id="lvList"></div>
+    </aside>
+    <div class="lv-mn">
+      <div class="lv-mn-hd">
+        <div style="min-width:0"><h3 class="lv-title">ログビューア</h3><p class="lv-sub" id="lvSub"></p></div>
+        <div class="lv-meta"><span class="lv-lc" id="lvLineCount"></span><span class="lv-zoom" id="lvZoom" style="display:none"></span></div>
+      </div>
+      <div class="lgd" id="lvLegend" data-t="フィルター|カテゴリーでログを絞り込みます。クリックでオン・オフを切り替えます。">
+        <button class="lg lg-w" data-k="world" onclick="toggleFilter('world',this)">ワールド</button>
+        <button class="lg lg-n" data-k="notification" onclick="toggleFilter('notification',this)">通知</button>
+        <button class="lg lg-p" data-k="player" onclick="toggleFilter('player',this)">入退室</button>
+        <button class="lg lg-wa" data-k="warning" onclick="toggleFilter('warning',this)">警告</button>
+        <button class="lg lg-e" data-k="error" onclick="toggleFilter('error',this)">エラー</button>
+        <button class="lg lg-d" data-k="debug" onclick="toggleFilter('debug',this)">デバッグ</button>
+      </div>
+      <div class="term" id="term" data-t="ログ表示|色分け表示されます。重要キーワードは自動でハイライト。Ctrl+ホイールで拡大・縮小できます。実アプリでは10万行超でも高速に表示します。"></div>
+      <div class="modal-acts"><button class="bt" onclick="closeModal('m-logviewer')">閉じる</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ CREDIT ════ -->
+<button class="cred" onclick="openCredit()" aria-label="クレジット" data-t="クレジット|アプリ情報・制作者情報を表示します。"><svg viewBox="0 0 24 24"><path d="M13,9H11V7H13M13,17H11V11H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z"/></svg></button>
+<div class="modal-ov" id="m-credit">
+  <button class="modal-bd" onclick="closeModal('m-credit')"></button>
+  <div class="modal-bx cr-bx">
+    <div class="cr-banner">
+      <div class="cr-glow"></div>
+      <span class="cr-logo">STELLA<span class="s">&#10022;</span>RECORD</span>
+      <span class="cr-ver">v1.0.0</span>
+    </div>
+    <div class="cr-body">
+      <div class="cr-profile">
+        <div class="cr-avatar"><svg viewBox="0 0 24 24"><path d="M12,4A4,4 0 0,1 16,8A4,4 0 0,1 12,12A4,4 0 0,1 8,8A4,4 0 0,1 12,4M12,14C16.42,14 20,15.79 20,18V20H4V18C4,15.79 7.58,14 12,14Z"/></svg></div>
+        <div><p class="cr-brand">CosmoArtsStore</p><p class="cr-creator">by ぷらねっと</p></div>
+      </div>
+      <div class="cr-divider"></div>
+      <div class="cr-links">
+        <button class="cr-link" onclick="toast('外部リンクを開きます（サンプル版では無効）')"><span class="cr-link-ico"><svg viewBox="0 0 24 24"><path d="M12,2L14.47,7.29L20.24,8.13L16.06,12.2L17.05,17.94L12,15.29L6.95,17.94L7.94,12.2L3.76,8.13L9.53,7.29L12,2Z"/></svg></span><span class="cr-link-lbl">lit.link</span><span class="cr-link-ar">&#8250;</span></button>
+        <button class="cr-link" onclick="toast('外部リンクを開きます（サンプル版では無効）')"><span class="cr-link-ico"><svg viewBox="0 0 24 24"><path d="M21,19V20H3V19L5,17V11C5,7.9 7.03,5.17 10,4.29C10,4.19 10,4.1 10,4A2,2 0 0,1 12,2A2,2 0 0,1 14,4C14,4.1 14,4.19 14,4.29C16.97,5.17 19,7.9 19,11V17L21,19M14,21A2,2 0 0,1 12,23A2,2 0 0,1 10,21"/></svg></span><span class="cr-link-lbl">X (Twitter)</span><span class="cr-link-ar">&#8250;</span></button>
+        <button class="cr-link" onclick="toast('外部リンクを開きます（サンプル版では無効）')"><span class="cr-link-ico"><svg viewBox="0 0 24 24"><path d="M16,20H20V16H16M16,14H20V10H16M10,8H14V4H10M16,8H20V4H16M10,14H14V10H10M4,14H8V10H4M4,20H8V16H4M10,20H14V16H10M4,8H8V4H4V8Z"/></svg></span><span class="cr-link-lbl">BOOTH</span><span class="cr-link-ar">&#8250;</span></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
 <div id="tip"></div>
+<div class="guide"><span>ガイド：各パーツにカーソルを合わせると説明が出ます</span><button id="guideToggle" onclick="toggleGuide()">非表示</button></div>
 
 <script>
 (function(){
-  var tip=document.getElementById('tip'),ht;
-  document.addEventListener('mouseenter',function(e){
-    var el=e.target.closest('[data-t]');if(!el)return;clearTimeout(ht);
-    var p=el.getAttribute('data-t').split('|');
-    tip.innerHTML='<b>'+p[0]+'</b>'+(p[1]?'<span style="color:#6b7280">'+p[1]+'</span>':'');
-    tip.classList.add('on');pos(el);
-  },true);
-  document.addEventListener('mouseleave',function(e){
-    if(!e.target.closest('[data-t]'))return;ht=setTimeout(function(){tip.classList.remove('on')},60);
-  },true);
-  function pos(el){
-    var r=el.getBoundingClientRect(),tw=tip.offsetWidth,th=tip.offsetHeight;
-    var x=r.left+r.width/2-tw/2,y=r.bottom+8;
-    if(y+th>innerHeight-10)y=r.top-th-8;
-    if(x<10)x=10;if(x+tw>innerWidth-10)x=innerWidth-tw-10;
-    tip.style.left=x+'px';tip.style.top=y+'px';
+"use strict";
+
+/* ───────── アイコン ───────── */
+var ICON = {
+  rocket:'M16,20H20V16H16M16,14H20V10H16M10,8H14V4H10M16,8H20V4H16M10,14H14V10H10M4,14H8V10H4M4,20H8V16H4M10,20H14V16H10M4,8H8V4H4V8Z',
+  chartBar:'M22,21H2V3H4V19H6V10H10V19H12V6H16V19H18V14H22V21Z',
+  tableGrid:'M5,4H19A2,2 0 0,1 21,6V18A2,2 0 0,1 19,20H5A2,2 0 0,0 3,18V6A2,2 0 0,0 5,4M5,8V12H11V8H5M13,8V12H19V8H13M5,14V18H11V14H5M13,14V18H19V14H13Z',
+  sun:'M12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6A6,6 0 0,1 18,12A6,6 0 0,1 12,18M20,11H23V13H20V11M1,11H4V13H1V11M13,1V4H11V1H13M13,20V23H11V20H13M4.92,3.5L6.34,4.92L4.92,6.34L3.5,4.92L4.92,3.5M17.66,16.66L19.07,18.07L17.66,19.49L16.24,18.07L17.66,16.66M19.07,5.93L17.66,7.34L16.24,5.93L17.66,4.5L19.07,5.93M6.34,19.07L4.92,17.66L6.34,16.24L7.76,17.66L6.34,19.07Z',
+  moon:'M17.75,4.09L15.22,6.03L16.13,9.09L13.5,7.28L10.87,9.09L11.78,6.03L9.25,4.09L12.44,4L13.5,1L14.56,4L17.75,4.09M21.25,11L19.61,12.25L20.2,14.23L18.5,13.06L16.8,14.23L17.39,12.25L15.75,11L17.81,10.95L18.5,9L19.19,10.95L21.25,11M18.97,15.95C19.8,15.87 20.69,17.05 20.16,17.8C19.84,18.25 19.5,18.67 19.08,19.07C15.17,23 8.84,23 4.94,19.07C1.03,15.17 1.03,8.83 4.94,4.93C5.34,4.53 5.76,4.17 6.21,3.85C6.96,3.32 8.14,4.21 8.06,5.04C7.79,7.9 8.75,10.87 10.95,13.06C13.14,15.26 16.1,16.22 18.97,15.95M17.33,17.97C14.5,17.81 11.7,16.64 9.53,14.5C7.36,12.31 6.2,9.5 6.04,6.68C3.23,9.82 3.23,14.4 6.04,17.55C8.83,20.7 13.4,20.7 16.19,17.55L17.33,17.97Z',
+  eclipse:'M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4M12,6A6,6 0 0,0 6,12A6,6 0 0,0 12,18A6,6 0 0,0 18,12A6,6 0 0,0 12,6Z',
+  list:'M4 5a1 1 0 0 0 0 2h1a1 1 0 0 0 0-2H4zm5 0a1 1 0 0 0 0 2h11a1 1 0 0 0 0-2H9zM4 11a1 1 0 1 0 0 2h1a1 1 0 1 0 0-2H4zm5 0a1 1 0 1 0 0 2h11a1 1 0 1 0 0-2H9zM4 17a1 1 0 1 0 0 2h1a1 1 0 1 0 0-2H4zm5 0a1 1 0 1 0 0 2h11a1 1 0 1 0 0-2H9z',
+  grid:'M3 3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3zm11 0a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1V3zM3 14a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6zm11 0a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-6z',
+  plus:'M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z',
+  refresh:'M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z',
+  trash:'M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z',
+  power:'M13,3H11V13H13V3M17.83,5.17L16.41,6.59C18.05,7.91 19,9.85 19,12A7,7 0 0,1 12,19A7,7 0 0,1 5,12C5,9.85 5.95,7.91 7.59,6.59L6.17,5.17C4.23,6.82 3,9.26 3,12A9,9 0 0,0 12,21A9,9 0 0,0 21,12C21,9.26 19.77,6.82 17.83,5.17Z',
+  folder:'M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z',
+  fallback:'M16,9H19L14,16L9,9H12V5H16M11,2H13V4H11V2M15,19V17H17V19H15M11,19V17H13V19H11M7,19V17H9V19H7Z'
+};
+function svg(name,cls){return '<svg class="'+(cls||'icon-svg')+'" viewBox="0 0 24 24"><path d="'+ICON[name]+'"/></svg>';}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function $(id){return document.getElementById(id);}
+
+/* ───────── ナビ ───────── */
+var NAV={registry:{icon:'rocket',label:'ランチャー'},analyze:{icon:'chartBar',label:'解析'},database:{icon:'tableGrid',label:'DB'}};
+document.querySelectorAll('.pb').forEach(function(b){var s=b.getAttribute('data-sec');b.innerHTML=svg(NAV[s].icon)+NAV[s].label;});
+$('vwList').innerHTML=svg('list');$('vwCard').innerHTML=svg('grid');
+document.querySelector('[onclick="openRegister()"]').innerHTML=svg('plus')+'登録';
+$('reloadBtn').innerHTML='<span class="reload-ic" id="reloadIc">'+svg('refresh')+'</span>再読込';
+
+/* ───────── テーマ ───────── */
+var THEMES=['light','dark','midnight'],themeIcon={light:'sun',dark:'moon',midnight:'eclipse'},themeIdx=0;
+function applyTheme(){
+  var app=$('app');app.className='app stella-record-root '+THEMES[themeIdx]+'-theme';
+  $('themeBtn').innerHTML=svg(themeIcon[THEMES[themeIdx]]);
+}
+window.cycleTheme=function(){
+  document.documentElement.classList.add('disable-transitions');
+  themeIdx=(themeIdx+1)%THEMES.length;applyTheme();
+  requestAnimationFrame(function(){requestAnimationFrame(function(){document.documentElement.classList.remove('disable-transitions');});});
+  toast('テーマ: '+({light:'ライト',dark:'ダーク',midnight:'ミッドナイト'})[THEMES[themeIdx]]);
+};
+applyTheme();
+
+/* ───────── セクション切替 ───────── */
+window.go=function(id,btn){
+  document.querySelectorAll('.sec').forEach(function(s){s.classList.remove('on');});
+  $('sec-'+id).classList.add('on');
+  document.querySelectorAll('.pb').forEach(function(p){p.classList.remove('on');});
+  if(btn)btn.classList.add('on');
+  if(id==='database')renderDB();
+};
+
+/* ───────── トースト ───────── */
+window.toast=function(msg){
+  var box=$('toasts'),el=document.createElement('div');el.className='toast';
+  el.innerHTML='<span class="toast-ico">'+svg('info')+'</span><span class="toast-msg">'+esc(msg)+'</span>';
+  box.appendChild(el);
+  setTimeout(function(){el.classList.add('out');setTimeout(function(){el.remove();},300);},3000);
+};
+
+/* ───────── ランチャー ───────── */
+var DEFAULT_APPS=[
+  {name:'VRChat',desc:'ソーシャルVRプラットフォーム',icon:'rocket'},
+  {name:'サンプルアプリ A',desc:'連携ツールの例',icon:'fallback'},
+  {name:'サンプルアプリ B',desc:'登録したアプリの例',icon:'fallback'}
+];
+var apps=DEFAULT_APPS.slice(),view='list';
+function appActions(i){
+  return '<button class="bt pr" onclick="launchApp('+i+')">起動</button>'+
+         '<button class="bt" onclick="openFolder('+i+')">フォルダを開く</button>'+
+         '<button class="del" onclick="unregister('+i+')" aria-label="登録解除">'+svg('trash')+'</button>';
+}
+function renderLauncher(){
+  var b=$('launcherBody');
+  if(apps.length===0){b.innerHTML='<div class="l-empty">登録されているアプリはありません</div>';return;}
+  var h='',i;
+  if(view==='list'){
+    h='<div class="l-list">';
+    for(i=0;i<apps.length;i++){var a=apps[i];
+      h+='<article class="l-row"'+(i===0?' data-t="登録済みアプリ|ここから 起動・フォルダを開く・登録解除 ができます。アイコンはEXEから自動取得されます。"':'')+'>'+
+        '<div class="l-main"><div class="l-ico">'+svg(a.icon)+'</div>'+
+        '<div class="l-copy"><h4>'+esc(a.name)+'</h4><p>'+esc(a.desc||'No description')+'</p></div></div>'+
+        '<div class="l-acts">'+appActions(i)+'</div></article>';
+    }
+    h+='</div>';
+  }else{
+    h='<div class="l-grid">';
+    for(i=0;i<apps.length;i++){var c=apps[i];
+      h+='<article class="l-card"><div class="l-card-ico">'+svg(c.icon)+'</div>'+
+        '<div><h4>'+esc(c.name)+'</h4><p>'+esc(c.desc||'No description')+'</p></div>'+
+        '<div class="l-card-acts">'+appActions(i)+'</div></article>';
+    }
+    h+='</div>';
   }
-  window.go=function(id,btn){
-    document.querySelectorAll('.sec').forEach(function(s){s.classList.remove('on')});
-    document.getElementById('sec-'+id).classList.add('on');
-    document.querySelectorAll('.pb').forEach(function(p){p.classList.remove('on')});
-    btn.classList.add('on');
-  };
+  b.innerHTML=h;
+}
+window.setView=function(v){view=v;$('vwList').classList.toggle('on',v==='list');$('vwCard').classList.toggle('on',v==='card');renderLauncher();};
+window.launchApp=function(i){toast(apps[i].name+' を起動しました');};
+window.openFolder=function(i){toast(apps[i].name+' のフォルダを開きました');};
+window.unregister=function(i){var n=apps[i].name;apps.splice(i,1);renderLauncher();toast(n+' の登録を解除しました');};
+window.reloadRegistry=function(){
+  var ic=$('reloadIc');ic.classList.remove('spin');void ic.offsetWidth;ic.classList.add('spin');
+  apps=DEFAULT_APPS.slice();renderLauncher();toast('一覧を再読込しました');
+};
+renderLauncher();
+
+/* 登録モーダル */
+window.openRegister=function(){$('regPath').value='';$('regName').value='';$('regDesc').value='';regValidate();openModal('m-register');};
+window.pickFile=function(){
+  $('regPath').value='C:\\Apps\\SampleAppC\\SampleAppC.exe';
+  if(!$('regName').value)$('regName').value='サンプルアプリ C';
+  regValidate();toast('実行ファイルを選択しました（サンプル）');
+};
+window.regValidate=function(){$('regConfirm').disabled=!($('regPath').value && $('regName').value.trim());};
+window.confirmRegister=function(){
+  apps.push({name:$('regName').value.trim(),desc:$('regDesc').value.trim(),icon:'fallback'});
+  closeModal('m-register');renderLauncher();toast($('regName').value.trim()+' を登録しました');
+};
+
+/* ───────── 解析 ───────── */
+window.refreshStorage=function(){toast('容量情報を更新しました');};
+window.saveLimit=function(){
+  var v=parseInt($('limitInp').value,10)||0,cur=256,pct=Math.min(100,(cur/v*100));
+  $('storStats').textContent=cur+' MB / '+v+' MB ('+pct.toFixed(1)+'%)';
+  var f=$('storFill');f.style.width=pct+'%';f.classList.toggle('warn',pct>90);
+  toast('設定を保存しました');
+};
+var autoOn=false;
+window.toggleAuto=function(){autoOn=!autoOn;$('autoBtn').classList.toggle('on',autoOn);toast(autoOn?'自動起動を有効にしました':'自動起動を無効にしました');};
+$('autoBtn').innerHTML=svg('power')+'<span>自動起動</span>';
+
+/* 取り込み進捗シミュレーション */
+var importTimer=null,importCancel=false;
+window.confirmImport=function(){
+  var total=archiveSel.size;if(total===0)return;
+  closeModal('m-archive');
+  $('prog').classList.add('on');importCancel=false;
+  var done=0;$('progCount').textContent='0/'+total;$('progFill').style.width='0%';
+  importTimer=setInterval(function(){
+    if(importCancel){clearInterval(importTimer);$('prog').classList.remove('on');toast('取り込みを停止しました');return;}
+    done++;$('progCount').textContent=done+'/'+total;$('progFill').style.width=(done/total*100)+'%';
+    if(done>=total){clearInterval(importTimer);setTimeout(function(){$('prog').classList.remove('on');toast('取り込みが完了しました（'+total+' 件）');},600);}
+  },650);
+};
+window.cancelImport=function(){importCancel=true;};
+
+/* ───────── アーカイブ選択モーダル ───────── */
+var ARCHIVES=[
+  {name:'2025-04-30_20-15-00.tar.zst',size:'2.40 MB'},
+  {name:'2025-05-01_18-30-00.tar.zst',size:'1.80 MB'},
+  {name:'2025-05-02_21-00-00.tar.zst',size:'3.10 MB'}
+];
+var archiveSel=new Set();
+function renderArchive(){
+  var h='';
+  ARCHIVES.forEach(function(f,i){
+    var on=archiveSel.has(i);
+    h+='<button class="fl-item'+(on?' on':'')+'" onclick="archiveToggle('+i+')">'+
+       '<span class="cb'+(on?' on':'')+'"><svg viewBox="0 0 12 10"><polyline points="1.5 5 4.5 8 10.5 2"/></svg></span>'+
+       '<span class="fl-fico">'+svg('folder')+'</span>'+
+       '<span class="fl-mb"><span class="fl-name">'+esc(f.name)+'</span><span class="fl-size">'+f.size+'</span></span></button>';
+  });
+  $('asList').innerHTML=h;
+  $('asCount').textContent=archiveSel.size+' / '+ARCHIVES.length+' 件選択中';
+  $('asAll').textContent=archiveSel.size===ARCHIVES.length?'すべて解除':'すべて選択';
+  $('asConfirm').disabled=archiveSel.size===0;
+}
+window.openArchive=function(){archiveSel=new Set();renderArchive();openModal('m-archive');};
+window.archiveToggle=function(i){if(archiveSel.has(i))archiveSel.delete(i);else archiveSel.add(i);renderArchive();};
+window.archiveSelectAll=function(){if(archiveSel.size===ARCHIVES.length)archiveSel=new Set();else{archiveSel=new Set();ARCHIVES.forEach(function(_,i){archiveSel.add(i);});}renderArchive();};
+
+/* ───────── クリーンアップモーダル ───────── */
+var SRC_LOGS=[
+  {name:'output_log_2025-04-30.txt',size:'12.4 MB'},
+  {name:'output_log_2025-05-01.txt',size:'9.8 MB'},
+  {name:'output_log_2025-05-02.txt',size:'15.1 MB'},
+  {name:'output_log_2025-05-03.txt',size:'7.2 MB'}
+];
+var cleanupSel=new Set();
+function bytesOf(s){return parseFloat(s);} // 表示用の簡易合計（MB前提）
+function renderCleanup(){
+  var h='';
+  SRC_LOGS.forEach(function(f,i){
+    var on=cleanupSel.has(i);
+    h+='<button class="cl-row'+(on?' on':'')+'" onclick="cleanupToggle('+i+')">'+
+       '<span class="cb'+(on?' on':'')+'"><svg viewBox="0 0 12 10"><polyline points="1.5 5 4.5 8 10.5 2"/></svg></span>'+
+       '<span class="cl-name">'+esc(f.name)+'</span><span class="cl-size">'+f.size+'</span></button>';
+  });
+  $('clList').innerHTML=h;
+  var tot=0;cleanupSel.forEach(function(i){tot+=bytesOf(SRC_LOGS[i].size);});
+  $('clMeta').textContent=cleanupSel.size+' / '+SRC_LOGS.length+' 件 選択中 — '+tot.toFixed(1)+' MB';
+  $('clToggle').textContent=cleanupSel.size===SRC_LOGS.length?'すべて解除':'すべて選択';
+  $('clConfirm').textContent=cleanupSel.size+' 件を削除';
+  $('clConfirm').disabled=cleanupSel.size===0;
+}
+window.openCleanup=function(){cleanupSel=new Set();SRC_LOGS.forEach(function(_,i){cleanupSel.add(i);});renderCleanup();openModal('m-cleanup');};
+window.cleanupToggle=function(i){if(cleanupSel.has(i))cleanupSel.delete(i);else cleanupSel.add(i);renderCleanup();};
+window.cleanupToggleAll=function(){if(cleanupSel.size===SRC_LOGS.length)cleanupSel=new Set();else{cleanupSel=new Set();SRC_LOGS.forEach(function(_,i){cleanupSel.add(i);});}renderCleanup();};
+window.confirmCleanup=function(){var n=cleanupSel.size;closeModal('m-cleanup');toast(n+' 件の元ログを削除しました');};
+
+/* ───────── ログビューア ───────── */
+var P='2025.05.0';
+function L(t,c,cats){return {t:t,c:c||'',cats:cats||[]};}
+var LOGFILES=[
+  {date:'2025/04/30 (水) 20:15',size:'2.40 MB',src:'output_log_2025-04-30.txt',lines:[
+    L('2025.04.30 20:15:03 Log        -  VRChat Version 2025.1.x'),
+    L('2025.04.30 20:15:04 Log        -  [Behaviour] Initializing...'),
+    L('2025.04.30 20:15:30 Log        -  [Behaviour] Entering Room: <mark class="hl">Sample World A</mark>','tl-w',['world']),
+    L('2025.04.30 20:15:31 Log        -  [Behaviour] Joining wrld_1111aaaa:00001~friends~region(jp)'),
+    L('2025.04.30 20:15:35 Log        -  [Behaviour] OnPlayerJoined <mark class="hl">User_A</mark> (usr_aaaa0001)','tl-pj',['player']),
+    L('2025.04.30 20:15:36 Log        -  [Behaviour] OnPlayerJoined <mark class="hl">User_B</mark> (usr_bbbb0002)','tl-pj',['player']),
+    L('2025.04.30 20:16:02 Log        -  Received Notification: &lt;Notification from <mark class="hl">User_C</mark>&gt; friend request','tl-n',['notification']),
+    L('2025.04.30 20:16:15 Warning    -  [Network] Connection quality degraded','tl-wa',['warning']),
+    L('2025.04.30 20:16:20 Error      -  [Avatar] Failed to load avatar asset','tl-e',['error']),
+    L('2025.04.30 20:18:45 Log        -  [Behaviour] OnPlayerLeft <mark class="hl">User_B</mark> (usr_bbbb0002)','tl-pl',['player']),
+    L('2025.04.30 20:19:00 Debug      -  [OSC] Service discovery completed','tl-db',['debug']),
+    L('2025.04.30 20:20:10 Log        -  [Behaviour] OnLeftRoom','tl-w',['world']),
+    L('2025.04.30 20:20:15 Log        -  [Behaviour] Entering Room: <mark class="hl">Demo Lounge</mark>','tl-w',['world'])
+  ]},
+  {date:'2025/05/01 (木) 18:30',size:'1.80 MB',src:'output_log_2025-05-01.txt',lines:[
+    L('2025.05.01 18:30:02 Log        -  VRChat Version 2025.1.x'),
+    L('2025.05.01 18:30:03 Log        -  [Behaviour] Initializing...'),
+    L('2025.05.01 18:30:40 Log        -  [Behaviour] Entering Room: <mark class="hl">Test Hub</mark>','tl-w',['world']),
+    L('2025.05.01 18:30:41 Log        -  [Behaviour] Joining wrld_2222bbbb:00002~friends+(usr_self0001)~region(eu)'),
+    L('2025.05.01 18:30:47 Log        -  [Behaviour] OnPlayerJoined <mark class="hl">User_D</mark> (usr_dddd0004)','tl-pj',['player']),
+    L('2025.05.01 18:31:10 Log        -  Received Notification: &lt;Notification from <mark class="hl">User_A</mark>&gt; invite','tl-n',['notification']),
+    L('2025.05.01 18:32:00 Warning    -  [Network] Packet loss detected','tl-wa',['warning']),
+    L('2025.05.01 18:40:05 Log        -  [Behaviour] OnPlayerJoined <mark class="hl">User_A</mark> (usr_aaaa0001)','tl-pj',['player']),
+    L('2025.05.01 19:05:22 Log        -  [Behaviour] OnPlayerLeft <mark class="hl">User_D</mark> (usr_dddd0004)','tl-pl',['player']),
+    L('2025.05.01 19:06:00 Debug      -  [OSC] Endpoint registered: /avatar/parameters','tl-db',['debug']),
+    L('2025.05.01 21:00:00 Log        -  [Behaviour] OnLeftRoom','tl-w',['world'])
+  ]},
+  {date:'2025/05/02 (金) 21:00',size:'3.10 MB',src:'output_log_2025-05-02.txt',lines:[
+    L('2025.05.02 21:00:05 Log        -  VRChat Version 2025.1.x'),
+    L('2025.05.02 21:05:00 Log        -  [Behaviour] Entering Room: <mark class="hl">Demo Lounge</mark>','tl-w',['world']),
+    L('2025.05.02 21:05:01 Log        -  [Behaviour] Joining wrld_3333cccc:00007~public~region(us)'),
+    L('2025.05.02 21:06:00 Log        -  [Behaviour] OnPlayerJoined <mark class="hl">User_C</mark> (usr_cccc0003)','tl-pj',['player']),
+    L('2025.05.02 21:08:30 Log        -  [Behaviour] OnPlayerJoined <mark class="hl">User_B</mark> (usr_bbbb0002)','tl-pj',['player']),
+    L('2025.05.02 21:20:00 Log        -  Received Notification: &lt;Notification from <mark class="hl">User_C</mark>&gt; friend request','tl-n',['notification']),
+    L('2025.05.02 22:00:10 Error      -  [Avatar] Failed to download avatar (timeout)','tl-e',['error']),
+    L('2025.05.02 22:10:00 Log        -  [Behaviour] OnPlayerLeft <mark class="hl">User_B</mark> (usr_bbbb0002)','tl-pl',['player']),
+    L('2025.05.02 22:30:00 Log        -  [Behaviour] OnLeftRoom','tl-w',['world']),
+    L('2025.05.02 22:35:00 Log        -  [Behaviour] Entering Room: <mark class="hl">Sample World B</mark>','tl-w',['world']),
+    L('2025.05.02 23:00:00 Debug      -  [OSC] Service discovery completed','tl-db',['debug'])
+  ]}
+];
+var lvFile=0,lvFilter=null,lvZoom=1;
+function renderLvList(){
+  var h='';
+  LOGFILES.forEach(function(f,i){
+    h+='<button class="lv-item'+(i===lvFile?' on':'')+'" onclick="selectLog('+i+')">'+
+       '<span class="lv-date">'+f.date+'</span><span class="lv-size">'+f.size+'</span></button>';
+  });
+  $('lvList').innerHTML=h;$('lvCount').textContent=LOGFILES.length+' 件';
+}
+function renderTerm(){
+  var f=LOGFILES[lvFile],h='',shown=0;
+  f.lines.forEach(function(ln){
+    var match=!lvFilter||ln.cats.indexOf(lvFilter)!==-1;
+    if(!match)return;shown++;
+    h+='<div class="tl '+ln.c+'" style="font-size:'+(0.78*lvZoom).toFixed(2)+'rem">'+ln.t+'</div>';
+  });
+  $('term').innerHTML=h;
+  $('lvSub').textContent=f.src;
+  $('lvLineCount').textContent=lvFilter?(shown+' / '+f.lines.length+' 行'):(f.lines.length+' 行');
+  var z=$('lvZoom');if(lvZoom!==1){z.style.display='';z.textContent=Math.round(lvZoom*100)+'%';}else z.style.display='none';
+}
+window.selectLog=function(i){lvFile=i;renderLvList();$('term').scrollTop=0;renderTerm();};
+window.toggleFilter=function(k,btn){
+  if(lvFilter===k){lvFilter=null;btn.classList.remove('on');}
+  else{lvFilter=k;document.querySelectorAll('#lvLegend .lg').forEach(function(b){b.classList.remove('on');});btn.classList.add('on');}
+  $('term').scrollTop=0;renderTerm();
+};
+window.openLogViewer=function(){lvFilter=null;lvZoom=1;document.querySelectorAll('#lvLegend .lg').forEach(function(b){b.classList.remove('on');});renderLvList();renderTerm();openModal('m-logviewer');};
+$('term').addEventListener('wheel',function(e){
+  if(!e.ctrlKey)return;e.preventDefault();
+  lvZoom=Math.round(Math.min(2.5,Math.max(0.5,lvZoom+(e.deltaY<0?0.1:-0.1)))*100)/100;
+  renderTerm();
+},{passive:false});
+
+/* ───────── DB ───────── */
+function C(n,l){return {n:n,l:l};}
+var DB=[
+ {name:'sessions',label:'セッション',view:false,desc:'ログファイルに記録されたログイン～ログアウトのセッション情報テーブル',
+  cols:[C('id','ID'),C('log_name','元ログ名'),C('account_id','アカウントID'),C('account_name','アカウント名'),C('start_time','開始時刻'),C('end_time','終了時刻')],
+  rows:[
+   ['4','output_log_2025-05-03.txt','usr_self0001','User_Me','2025-05-03 19:45:00','NULL'],
+   ['3','output_log_2025-05-02.txt','usr_self0001','User_Me','2025-05-02 21:00:00','2025-05-02 23:55:48'],
+   ['2','output_log_2025-05-01.txt','usr_self0001','User_Me','2025-05-01 18:30:00','2025-05-01 22:10:33'],
+   ['1','output_log_2025-04-30.txt','usr_self0001','User_Me','2025-04-30 20:15:00','2025-04-30 23:45:12']
+  ]},
+ {name:'visits',label:'Join履歴',view:false,desc:'Joinしたインスタンスに紐づくデータテーブル',
+  cols:[C('id','ID'),C('session_id','セッション'),C('world_name','ワールド名'),C('instance_id','インスタンスID'),C('instance_type','インスタンスタイプ'),C('region','リージョン'),C('join_time','Join時刻'),C('leave_time','Leave時刻')],
+  rows:[
+   ['12','4','Sample World A','00001','friends','jp','2025-05-03 19:50:00','2025-05-03 20:40:00'],
+   ['11','3','Demo Lounge','00007','public','us','2025-05-02 21:05:00','2025-05-02 22:30:00'],
+   ['10','3','Sample World B','00003','invite','jp','2025-05-02 22:35:00','2025-05-02 23:50:00'],
+   ['9','2','Test Hub','00002','friends+','eu','2025-05-01 18:35:00','2025-05-01 21:00:00']
+  ]},
+ {name:'with_users',label:'遭遇ユーザー',view:false,desc:'インスタンスごとに出会ったユーザー記録テーブル',
+  cols:[C('id','ID'),C('visit_id','Join'),C('vrchat_id','ユーザーID'),C('is_self','is_self'),C('join_time','Join時刻'),C('leave_time','Leave時刻')],
+  rows:[
+   ['40','12','usr_self0001','1','2025-05-03 19:50:00','2025-05-03 20:40:00'],
+   ['41','12','usr_aaaa0001','0','2025-05-03 19:52:10','2025-05-03 20:38:00'],
+   ['42','12','usr_bbbb0002','0','2025-05-03 20:01:00','2025-05-03 20:25:00'],
+   ['43','11','usr_cccc0003','0','2025-05-02 21:06:00','2025-05-02 22:10:00']
+  ]},
+ {name:'find_users',label:'ユーザー一覧',view:false,desc:'ログから検出したユーザーの一覧テーブル',
+  cols:[C('vrchat_id','ユーザーID'),C('account_name','ユーザー名')],
+  rows:[['usr_aaaa0001','User_A'],['usr_bbbb0002','User_B'],['usr_cccc0003','User_C'],['usr_dddd0004','User_D']]},
+ {name:'notifications',label:'通知',view:false,desc:'招待やグループ通知などの履歴テーブル',
+  cols:[C('id','ID'),C('notif_type','通知種別'),C('message','本文'),C('sender_name','送信者名'),C('sender_user_id','送信者ID'),C('notif_id','VRC通知ID'),C('session_id','セッション'),C('created_at','作成時刻'),C('received_at','受信時刻'),C('target_world_name','遷移先ワールド名'),C('target_instance_id','遷移先インスタンスID'),C('target_instance_type','遷移先インスタンスタイプ'),C('target_owner','遷移先オーナー'),C('target_region','遷移先リージョン')],
+  rows:[
+   ['7','group','グループ投稿の通知','User_B','usr_bbbb0002','not_xxxx0003','2','2025-05-01 19:00:00','2025-05-01 19:00:03','NULL','NULL','NULL','NULL','NULL'],
+   ['6','invite','Join me!','User_A','usr_aaaa0001','not_xxxx0002','3','2025-05-02 21:20:00','2025-05-02 21:20:01','Sample World B','00003','invite','usr_aaaa0001','jp'],
+   ['5','friendRequest','フレンド申請が届きました','User_C','usr_cccc0003','not_xxxx0001','3','2025-05-02 21:10:00','2025-05-02 21:10:02','NULL','NULL','NULL','NULL','NULL']
+  ]},
+ {name:'screenshots',label:'写真',view:false,desc:'撮影した写真に紐づく関連情報テーブル',
+  cols:[C('id','ID'),C('visit_id','Join'),C('file_path','ファイルパス'),C('resolution_width','幅'),C('resolution_height','高さ'),C('timestamp','撮影時刻')],
+  rows:[
+   ['23','10','C:\\Users\\user\\Pictures\\VRChat\\2025-05\\img_0003.png','1920','1080','2025-05-02 23:10:00'],
+   ['22','11','C:\\Users\\user\\Pictures\\VRChat\\2025-05\\img_0002.png','3840','2160','2025-05-02 21:40:00'],
+   ['21','12','C:\\Users\\user\\Pictures\\VRChat\\2025-05\\img_0001.png','1920','1080','2025-05-03 20:05:00']
+  ]},
+ {name:'osc',label:'OSC',view:false,desc:'OSCアプリケーションの関連情報テーブル',
+  cols:[C('id','ID'),C('session_id','セッション'),C('event_type','イベント種別'),C('service_name','サービス名'),C('service_type','サービス種別'),C('ip_address','IPアドレス'),C('port','ポート番号'),C('timestamp','検出時刻')],
+  rows:[
+   ['3','4','found','SampleOSCApp','OSCQuery','127.0.0.1','9001','2025-05-03 19:46:00'],
+   ['2','3','found','SampleOSCApp','OSC','127.0.0.1','9000','2025-05-02 21:01:00'],
+   ['1','2','found','ExternalToolB','OSCQuery','127.0.0.1','9002','2025-05-01 18:31:00']
+  ]},
+ {name:'subscription',label:'VRChat+加入状態',view:false,desc:'セッションごとのVRChat+加入状態の記録テーブル',
+  cols:[C('id','ID'),C('session_id','セッション'),C('is_active','有効フラグ'),C('subscription_id','VRC契約ID'),C('description','説明'),C('checked_at','確認時刻')],
+  rows:[
+   ['3','4','1','sub_xxxx0001','VRChat+ (monthly)','2025-05-03 19:45:30'],
+   ['2','3','1','sub_xxxx0001','VRChat+ (monthly)','2025-05-02 21:00:30'],
+   ['1','2','0','NULL','非加入','2025-05-01 18:30:30']
+  ]},
+ {name:'apps',label:'連携アプリ',view:false,desc:'ランチャーに登録されたアプリ情報テーブル',
+  cols:[C('name','アプリ名'),C('description','説明'),C('path','パス'),C('icon','アイコン')],
+  rows:[
+   ['VRChat','ソーシャルVRプラットフォーム','C:\\Program Files (x86)\\Steam\\steamapps\\common\\VRChat\\VRChat.exe','<BLOB>'],
+   ['サンプルアプリ A','連携ツールの例','C:\\Apps\\SampleAppA\\SampleAppA.exe','<BLOB>'],
+   ['サンプルアプリ B','登録したアプリの例','D:\\Tools\\SampleAppB\\SampleAppB.exe','NULL']
+  ]},
+ {name:'visit_summary',label:'Join履歴詳細',view:true,desc:'Join履歴テーブル+ワールド名・滞在時間補完ビュー',
+  cols:[C('visit_id','ID'),C('world_name','ワールド名'),C('instance_id','インスタンスID'),C('instance_type','インスタンスタイプ'),C('region','リージョン'),C('join_time','Join時刻'),C('leave_time','Leave時刻'),C('duration_sec','滞在秒数'),C('other_player_count','他プレイヤー数')],
+  rows:[
+   ['12','Sample World A','00001','friends','jp','2025-05-03 19:50:00','2025-05-03 20:40:00','3000','2'],
+   ['11','Demo Lounge','00007','public','us','2025-05-02 21:05:00','2025-05-02 22:30:00','5100','8'],
+   ['10','Sample World B','00003','invite','jp','2025-05-02 22:35:00','2025-05-02 23:50:00','4500','4']
+  ]},
+ {name:'with_users_detail',label:'遭遇ユーザー詳細',view:true,desc:'遭遇ユーザーテーブル+ワールド名・ユーザー名補完ビュー',
+  cols:[C('id','ID'),C('visit_id','Join'),C('world_name','ワールド名'),C('vrchat_id','ユーザーID'),C('user_name','ユーザー名'),C('is_self','is_self'),C('join_time','Join時刻'),C('leave_time','Leave時刻')],
+  rows:[
+   ['41','12','Sample World A','usr_aaaa0001','User_A','0','2025-05-03 19:52:10','2025-05-03 20:38:00'],
+   ['42','12','Sample World A','usr_bbbb0002','User_B','0','2025-05-03 20:01:00','2025-05-03 20:25:00'],
+   ['43','11','Demo Lounge','usr_cccc0003','User_C','0','2025-05-02 21:06:00','2025-05-02 22:10:00']
+  ]},
+ {name:'screenshots_detail',label:'写真詳細',view:true,desc:'写真テーブル+ワールド名補完ビュー',
+  cols:[C('id','ID'),C('visit_id','Join'),C('world_name','ワールド名'),C('file_path','ファイルパス'),C('resolution_width','幅'),C('resolution_height','高さ'),C('timestamp','撮影時刻')],
+  rows:[
+   ['21','12','Sample World A','C:\\Users\\user\\Pictures\\VRChat\\2025-05\\img_0001.png','1920','1080','2025-05-03 20:05:00'],
+   ['22','11','Demo Lounge','C:\\Users\\user\\Pictures\\VRChat\\2025-05\\img_0002.png','3840','2160','2025-05-02 21:40:00']
+  ]}
+];
+var dbCur='sessions',dbPhysical=false,dbSort=null,dbInit=false;
+function dbGet(n){for(var i=0;i<DB.length;i++)if(DB[i].name===n)return DB[i];return null;}
+function renderDbList(){
+  var h='',i,t;
+  for(i=0;i<DB.length;i++){t=DB[i];if(t.view)continue;
+    h+='<button class="db-item'+(t.name===dbCur?' on':'')+'" onclick="selectTable(\''+t.name+'\')">'+esc(dbPhysical?t.name:t.label)+'</button>';
+  }
+  var anyView=DB.some(function(x){return x.view;});
+  if(anyView){h+='<div class="db-dv">ビュー</div>';
+    for(i=0;i<DB.length;i++){t=DB[i];if(!t.view)continue;
+      h+='<button class="db-item'+(t.name===dbCur?' on':'')+'" onclick="selectTable(\''+t.name+'\')">'+esc(dbPhysical?t.name:t.label)+'</button>';
+    }
+  }
+  $('dbList').innerHTML=h;
+}
+function sortRows(t){
+  if(!dbSort)return t.rows.slice();
+  var idx=-1;t.cols.forEach(function(c,i){if(c.n===dbSort.col)idx=i;});
+  if(idx<0)return t.rows.slice();
+  var rows=t.rows.slice(),allNum=rows.every(function(r){return r[idx]==='NULL'||!isNaN(parseFloat(r[idx]));});
+  rows.sort(function(a,b){
+    var x=a[idx],y=b[idx];
+    if(allNum){x=x==='NULL'?-Infinity:parseFloat(x);y=y==='NULL'?-Infinity:parseFloat(y);return x-y;}
+    return x<y?-1:x>y?1:0;
+  });
+  if(dbSort.dir==='desc')rows.reverse();
+  return rows;
+}
+function renderTable(){
+  var t=dbGet(dbCur);if(!t)return;
+  $('dbTitle').textContent=t.label;
+  $('dbDesc').textContent=t.desc;
+  var total=t.rows.length;
+  $('dbMeta').textContent=total>0?('1～'+total+' / 全 '+total+' 件'):'0 件';
+  $('dbPage').textContent='1 / 1';
+  var head='<tr>';
+  t.cols.forEach(function(c){
+    var on=dbSort&&dbSort.col===c.n,ar=on?(dbSort.dir==='asc'?'▲':'▼'):'▲';
+    head+='<th onclick="toggleSort(\''+c.n+'\')"><div class="col-lbl">'+esc(c.l)+'<span class="sort-ar'+(on?' on':'')+'">'+ar+'</span></div></th>';
+  });
+  head+='</tr>';$('dbHead').innerHTML=head;
+  var rows=sortRows(t),body='';
+  rows.forEach(function(r){
+    body+='<tr>';
+    r.forEach(function(cell,ci){
+      var cls='';if(cell==='NULL')cls=' class="nl"';else if(/[\\\/]|\.txt$|\.png$|^usr_|^wrld_|^not_|^sub_/.test(cell)||t.cols[ci].n==='log_name'||t.cols[ci].n==='file_path')cls=' class="mono"';
+      body+='<td'+cls+'>'+esc(cell)+'</td>';
+    });
+    body+='</tr>';
+  });
+  $('dbBody').innerHTML=body;
+}
+function renderDB(){if(!dbInit){dbInit=true;}renderDbList();renderTable();}
+window.selectTable=function(n){dbCur=n;dbSort=null;renderDbList();renderTable();};
+window.toggleNames=function(){dbPhysical=!dbPhysical;$('nameTog').textContent=dbPhysical?'Physical':'Logical';renderDbList();};
+window.toggleSort=function(col){
+  if(dbSort&&dbSort.col===col){dbSort=dbSort.dir==='asc'?{col:col,dir:'desc'}:null;}
+  else dbSort={col:col,dir:'asc'};
+  renderTable();
+};
+
+/* ───────── モーダル開閉 ───────── */
+window.openModal=function(id){$(id).classList.add('on');};
+window.closeModal=function(id){$(id).classList.remove('on');};
+window.openCredit=function(){openModal('m-credit');};
+// オーバーレイ背景クリックで閉じる（fullscreen以外）
+['m-archive','m-logviewer'].forEach(function(id){
+  $(id).addEventListener('mousedown',function(e){if(e.target===this)closeModal(id);});
+});
+
+/* ───────── ガイド / ツールチップ ───────── */
+var tip=$('tip'),ht;
+function showTip(el){
+  var p=el.getAttribute('data-t').split('|');
+  tip.innerHTML='<b>'+esc(p[0])+'</b>'+(p[1]?'<span>'+esc(p[1])+'</span>':'');
+  tip.classList.add('on');posTip(el);
+}
+function posTip(el){
+  var r=el.getBoundingClientRect(),tw=tip.offsetWidth,th=tip.offsetHeight;
+  var x=r.left+r.width/2-tw/2,y=r.bottom+8;
+  if(y+th>innerHeight-10)y=r.top-th-8;
+  if(x<10)x=10;if(x+tw>innerWidth-10)x=innerWidth-tw-10;
+  tip.style.left=x+'px';tip.style.top=y+'px';
+}
+document.addEventListener('mouseover',function(e){
+  if(document.body.classList.contains('no-guide'))return;
+  var el=e.target.closest('[data-t]');if(!el)return;clearTimeout(ht);showTip(el);
+});
+document.addEventListener('mouseout',function(e){
+  var el=e.target.closest('[data-t]');if(!el)return;
+  ht=setTimeout(function(){tip.classList.remove('on');},60);
+});
+window.toggleGuide=function(){
+  var off=document.body.classList.toggle('no-guide');
+  $('guideToggle').textContent=off?'ガイドを表示':'非表示';
+  if(off)tip.classList.remove('on');
+};
+
 })();
 </script>
 </body>
