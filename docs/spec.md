@@ -458,6 +458,8 @@ React (LogViewerModal):
   @tanstack/react-virtual で表示行のみ DOM 化
 ```
 
+> **カテゴリ地色とハイライトの出所**: 行の**カテゴリ地色**（世界/通知/入退室など）は DB ヒントが無くてもログ行のテキスト構造（`classify_text_category`）から付与される。このため DB 未取り込みの外部ログでもカテゴリ色は表示される。一方**キーワードハイライト**（プレイヤー名・ワールド名等の強調）は DB 登録済みデータにマッチした場合のみ付与し、テキストのみのフォールバックは持たない（確定データだけを強調する方針）。`read_archive_log_viewer` / `read_external_log_viewer` は同じ `build_db_hints(source_name)` でこのヒントを構築するため、取り込み済みログはハイライト込みのフル表示、未取り込みログはカテゴリ地色＋レベル色で表示される。
+
 ### Cancellation
 
 ```

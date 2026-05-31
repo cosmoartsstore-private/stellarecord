@@ -671,6 +671,34 @@ fn resolve_db_keyword_marker<'a>(
         .find(|marker| line.contains(marker.text.as_str()))
 }
 
+/// 行テキストのみからビューアカテゴリを推定する（DB ヒント不在時のフォールバック）。
+///
+/// DB に取り込まれていない外部ログでも、ワールド/プレイヤー/通知の地色が付くように
+/// 取り込みパーサと同じパターンで行種別を判定する。地色はログ自身の構造から導けるため
+/// DB 登録の有無に依存させない。一方ハイライト（キーワード強調）は確定データのみという
+/// 方針を保つため、ここではカテゴリのみを返しハイライト文字列は生成しない。
+fn classify_text_category(line: &str) -> Option<&'static str> {
+    if analyze::RE_PLAYER_JOIN_COMPLETE.is_match(line) {
+        return Some("player_ready");
+    }
+    if analyze::RE_PLAYER_JOIN.is_match(line) {
+        return Some("player_join");
+    }
+    if analyze::RE_PLAYER_LEFT.is_match(line) {
+        return Some("player_left");
+    }
+    if line.contains("Received Notification:") {
+        return Some("notification");
+    }
+    if line.contains("[Behaviour] Entering Room:")
+        || line.contains("[Behaviour] OnLeftRoom")
+        || line.contains("[Behaviour] Joining wrld_")
+    {
+        return Some("world");
+    }
+    None
+}
+
 /// 複数行にまたがる DB 関連ブロックを継続中であることを表す。
 ///
 /// `VRChat` ログでは大半の行が独立したタイムスタンプを持つが、一部のレコードは
@@ -840,7 +868,8 @@ fn emit_log_viewer_chunks(
         //   1. 範囲ブロックが進行中ならその範囲カテゴリ（複数行を同じカテゴリに統一）
         //   2. DB キーワードマーカーのカテゴリ
         //   3. DB タイムスタンプヒントのカテゴリ
-        //   4. 上記いずれも該当しなければ "plain"
+        //   4. 行テキストからの揮発性分類（未取り込みの外部ログでもカテゴリ地色を付与）
+        //   5. 上記いずれも該当しなければ "plain"
         let category = active_range
             .as_ref()
             .map(|block| block.category.to_string())
@@ -850,9 +879,12 @@ fn emit_log_viewer_chunks(
                     .as_ref()
                     .and_then(|cat_map| resolve_db_category(&line, &timestamp, cat_map))
             })
+            .or_else(|| classify_text_category(&line).map(str::to_string))
             .unwrap_or_else(|| "plain".to_string());
 
-        // ハイライトは DB マーカーがマッチした場合のみ。正規表現フォールバックは持たない。
+        // ハイライト（キーワード強調）は DB マーカーがマッチした場合のみ付与する。
+        // カテゴリ地色は未取り込みログでも classify_text_category で付くが、ハイライトは
+        // 確定データのみを強調する方針のため、揮発性のテキストフォールバックを意図的に持たない。
         let highlight_text = keyword_marker.map(|marker| marker.text.clone());
 
         // Notification 範囲は閉じ `>` を含む行を最終行として範囲を解除する。
@@ -1300,6 +1332,70 @@ pub fn delete_source_logs(file_names: Vec<String>) -> Result<usize, String> {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+
+    // ── classify_text_category (純粋: DB ヒント不在時の行テキストからのカテゴリ推定) ──
+
+    #[test]
+    fn classify_text_category_detects_world() {
+        assert_eq!(
+            classify_text_category(
+                "2025.05.15 20:00:00 Log        -  [Behaviour] Entering Room: Crystal Garden"
+            ),
+            Some("world")
+        );
+        assert_eq!(
+            classify_text_category("2025.05.15 20:00:00 Log        -  [Behaviour] Joining wrld_abc12345-0000-4000-8000-000000000000:1~public~region(jp)"),
+            Some("world")
+        );
+        assert_eq!(
+            classify_text_category("2025.05.15 20:00:00 Log        -  [Behaviour] OnLeftRoom"),
+            Some("world")
+        );
+    }
+
+    #[test]
+    fn classify_text_category_detects_players() {
+        assert_eq!(
+            classify_text_category("2025.05.15 20:00:00 Log        -  [Behaviour] OnPlayerJoined Comet (usr_11111111-2222-4333-8444-555555555555)"),
+            Some("player_join")
+        );
+        assert_eq!(
+            classify_text_category(
+                "2025.05.15 20:00:00 Log        -  [Behaviour] OnPlayerJoinComplete Comet"
+            ),
+            Some("player_ready")
+        );
+        assert_eq!(
+            classify_text_category("2025.05.15 20:00:00 Log        -  [Behaviour] OnPlayerLeft Comet (usr_11111111-2222-4333-8444-555555555555)"),
+            Some("player_left")
+        );
+    }
+
+    #[test]
+    fn classify_text_category_detects_notification() {
+        assert_eq!(
+            classify_text_category(
+                "2025.05.15 20:00:00 Log        -  Received Notification: <Notification from username:Comet ...>"
+            ),
+            Some("notification")
+        );
+    }
+
+    #[test]
+    fn classify_text_category_returns_none_for_plain_lines() {
+        assert_eq!(
+            classify_text_category(
+                "2025.05.15 20:00:00 Log        -  [Behaviour] Successfully joined room"
+            ),
+            None
+        );
+        assert_eq!(
+            classify_text_category(
+                "2025.05.15 20:00:00 Debug      -  Odin Serializer initialization"
+            ),
+            None
+        );
+    }
 
     // ── classify_log_level ──
 
