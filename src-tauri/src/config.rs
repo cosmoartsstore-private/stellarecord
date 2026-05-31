@@ -353,7 +353,7 @@ mod tests {
         let _guard = TestRegGuard(test_path.to_string());
 
         let setting = PolarisSetting {
-            archive_path: r"F:\planetes-atelier\software\AppTest\archive".to_string(),
+            archive_path: r"C:\StellaRecordTest\archive".to_string(),
             capacity_threshold_bytes: 1_073_741_824,
         };
 
@@ -377,8 +377,8 @@ mod tests {
         let _guard = TestRegGuard(test_path.to_string());
 
         let setting = StellaRecordSetting {
-            archive_path: r"F:\planetes-atelier\software\AppTest\archive".to_string(),
-            db_path: r"F:\planetes-atelier\software\AppTest\db\test.db".to_string(),
+            archive_path: r"C:\StellaRecordTest\archive".to_string(),
+            db_path: r"C:\StellaRecordTest\db\test.db".to_string(),
             enable_startup: true,
             startup_preference_set: true,
         };
@@ -451,28 +451,24 @@ mod tests {
     #[test]
     fn effective_archive_dir_uses_explicit_path() {
         let setting = StellaRecordSetting {
-            archive_path: r"F:\planetes-atelier\software\AppTest\archive".to_string(),
+            archive_path: r"C:\StellaRecordTest\archive".to_string(),
             ..Default::default()
         };
         assert_eq!(
             setting.get_effective_archive_dir(),
-            Some(PathBuf::from(
-                r"F:\planetes-atelier\software\AppTest\archive"
-            ))
+            Some(PathBuf::from(r"C:\StellaRecordTest\archive"))
         );
     }
 
     #[test]
     fn effective_db_path_uses_explicit_path() {
         let setting = StellaRecordSetting {
-            db_path: r"F:\planetes-atelier\software\AppTest\db\test.db".to_string(),
+            db_path: r"C:\StellaRecordTest\db\test.db".to_string(),
             ..Default::default()
         };
         assert_eq!(
             setting.get_effective_db_path(),
-            Some(PathBuf::from(
-                r"F:\planetes-atelier\software\AppTest\db\test.db"
-            ))
+            Some(PathBuf::from(r"C:\StellaRecordTest\db\test.db"))
         );
     }
 }

@@ -291,8 +291,11 @@ mod tests {
 
     #[test]
     fn component_install_dir_returns_path_when_valid() {
+        // 実在するパスでないと get_component_install_dir が None を返すため、
+        // 環境非依存にするよう一時ディレクトリを InstallLocation に設定する。
         let (key, _guard) = create_test_key("install_valid");
-        let test_dir = r"F:\planetes-atelier\software\AppTest";
+        let temp = tempfile::tempdir().unwrap();
+        let test_dir = temp.path().to_str().unwrap();
         key.set_value("InstallLocation", &test_dir).unwrap();
 
         let result = get_component_install_dir("_Test_install_valid");
