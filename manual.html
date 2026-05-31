@@ -524,7 +524,7 @@ body.no-guide #tip{display:none}
       <div class="prog" id="prog">
         <div class="prog-info"><span>取り込み中…</span><span id="progCount">0/0</span></div>
         <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
-        <div class="prog-status"><p>アーカイブを解凍してデータベースへ反映しています…</p><button class="prog-cancel" onclick="cancelImport()">停止</button></div>
+        <div class="prog-status"><p id="progStatus"></p><button class="prog-cancel" onclick="cancelImport()">停止</button></div>
       </div>
     </div>
   </section>
@@ -617,7 +617,7 @@ body.no-guide #tip{display:none}
   <div class="modal-bx lv-bx">
     <aside class="lv-sb">
       <div class="lv-sb-hd"><span class="lv-sb-title">ログファイル</span><span class="lv-sb-count" id="lvCount">3 件</span></div>
-      <div class="lv-fsw"><button class="lv-fb" onclick="toast('ファイル選択ダイアログを開きます（サンプル版では無効）')" data-t="ファイルを選択|アーカイブ以外の任意のログファイルもここから開けます。">ファイルを選択</button></div>
+      <div class="lv-fsw"><button class="lv-fb" data-t="ファイルを選択|アーカイブ以外の任意のログファイルもここから開けます。">ファイルを選択</button></div>
       <div class="lv-list" id="lvList"></div>
     </aside>
     <div class="lv-mn">
@@ -656,9 +656,9 @@ body.no-guide #tip{display:none}
       </div>
       <div class="cr-divider"></div>
       <div class="cr-links">
-        <button class="cr-link" onclick="toast('外部リンクを開きます（サンプル版では無効）')"><span class="cr-link-ico"><svg viewBox="0 0 24 24"><path d="M12,2L14.47,7.29L20.24,8.13L16.06,12.2L17.05,17.94L12,15.29L6.95,17.94L7.94,12.2L3.76,8.13L9.53,7.29L12,2Z"/></svg></span><span class="cr-link-lbl">lit.link</span><span class="cr-link-ar">&#8250;</span></button>
-        <button class="cr-link" onclick="toast('外部リンクを開きます（サンプル版では無効）')"><span class="cr-link-ico"><svg viewBox="0 0 24 24"><path d="M21,19V20H3V19L5,17V11C5,7.9 7.03,5.17 10,4.29C10,4.19 10,4.1 10,4A2,2 0 0,1 12,2A2,2 0 0,1 14,4C14,4.1 14,4.19 14,4.29C16.97,5.17 19,7.9 19,11V17L21,19M14,21A2,2 0 0,1 12,23A2,2 0 0,1 10,21"/></svg></span><span class="cr-link-lbl">X (Twitter)</span><span class="cr-link-ar">&#8250;</span></button>
-        <button class="cr-link" onclick="toast('外部リンクを開きます（サンプル版では無効）')"><span class="cr-link-ico"><svg viewBox="0 0 24 24"><path d="M16,20H20V16H16M16,14H20V10H16M10,8H14V4H10M16,8H20V4H16M10,14H14V10H10M4,14H8V10H4M4,20H8V16H4M10,20H14V16H10M4,8H8V4H4V8Z"/></svg></span><span class="cr-link-lbl">BOOTH</span><span class="cr-link-ar">&#8250;</span></button>
+        <button class="cr-link"><span class="cr-link-ico"><svg viewBox="0 0 24 24"><path d="M12,2L14.47,7.29L20.24,8.13L16.06,12.2L17.05,17.94L12,15.29L6.95,17.94L7.94,12.2L3.76,8.13L9.53,7.29L12,2Z"/></svg></span><span class="cr-link-lbl">lit.link</span><span class="cr-link-ar">&#8250;</span></button>
+        <button class="cr-link"><span class="cr-link-ico"><svg viewBox="0 0 24 24"><path d="M21,19V20H3V19L5,17V11C5,7.9 7.03,5.17 10,4.29C10,4.19 10,4.1 10,4A2,2 0 0,1 12,2A2,2 0 0,1 14,4C14,4.1 14,4.19 14,4.29C16.97,5.17 19,7.9 19,11V17L21,19M14,21A2,2 0 0,1 12,23A2,2 0 0,1 10,21"/></svg></span><span class="cr-link-lbl">X (Twitter)</span><span class="cr-link-ar">&#8250;</span></button>
+        <button class="cr-link"><span class="cr-link-ico"><svg viewBox="0 0 24 24"><path d="M16,20H20V16H16M16,14H20V10H16M10,8H14V4H10M16,8H20V4H16M10,14H14V10H10M4,14H8V10H4M4,20H8V16H4M10,20H14V16H10M4,8H8V4H4V8Z"/></svg></span><span class="cr-link-lbl">BOOTH</span><span class="cr-link-ar">&#8250;</span></button>
       </div>
     </div>
   </div>
@@ -710,7 +710,6 @@ window.cycleTheme=function(){
   document.documentElement.classList.add('disable-transitions');
   themeIdx=(themeIdx+1)%THEMES.length;applyTheme();
   requestAnimationFrame(function(){requestAnimationFrame(function(){document.documentElement.classList.remove('disable-transitions');});});
-  toast('テーマ: '+({light:'ライト',dark:'ダーク',midnight:'ミッドナイト'})[THEMES[themeIdx]]);
 };
 applyTheme();
 
@@ -769,20 +768,21 @@ function renderLauncher(){
 }
 window.setView=function(v){view=v;$('vwList').classList.toggle('on',v==='list');$('vwCard').classList.toggle('on',v==='card');renderLauncher();};
 window.launchApp=function(i){toast(apps[i].name+' を起動しました');};
-window.openFolder=function(i){toast(apps[i].name+' のフォルダを開きました');};
+window.openFolder=function(){/* 実アプリではエクスプローラーでフォルダを開く（画面側の通知なし） */};
 window.unregister=function(i){var n=apps[i].name;apps.splice(i,1);renderLauncher();toast(n+' の登録を解除しました');};
 window.reloadRegistry=function(){
   var ic=$('reloadIc');ic.classList.remove('spin');void ic.offsetWidth;ic.classList.add('spin');
-  apps=DEFAULT_APPS.slice();renderLauncher();toast('一覧を再読込しました');
+  apps=DEFAULT_APPS.slice();renderLauncher();
 };
 renderLauncher();
 
 /* 登録モーダル */
 window.openRegister=function(){$('regPath').value='';$('regName').value='';$('regDesc').value='';regValidate();openModal('m-register');};
 window.pickFile=function(){
+  // 実アプリではファイル選択ダイアログを開き、選んだEXEから表示名を自動補完する
   $('regPath').value='C:\\Apps\\SampleAppC\\SampleAppC.exe';
   if(!$('regName').value)$('regName').value='サンプルアプリ C';
-  regValidate();toast('実行ファイルを選択しました（サンプル）');
+  regValidate();
 };
 window.regValidate=function(){$('regConfirm').disabled=!($('regPath').value && $('regName').value.trim());};
 window.confirmRegister=function(){
@@ -791,7 +791,7 @@ window.confirmRegister=function(){
 };
 
 /* ───────── 解析 ───────── */
-window.refreshStorage=function(){toast('容量情報を更新しました');};
+window.refreshStorage=function(){/* 実アプリでは容量情報を再取得（通常は30秒ごとに自動更新） */};
 window.saveLimit=function(){
   var v=parseInt($('limitInp').value,10)||0,cur=256,pct=Math.min(100,(cur/v*100));
   $('storStats').textContent=cur+' MB / '+v+' MB ('+pct.toFixed(1)+'%)';
@@ -805,15 +805,19 @@ $('autoBtn').innerHTML=svg('power')+'<span>自動起動</span>';
 /* 取り込み進捗シミュレーション */
 var importTimer=null,importCancel=false;
 window.confirmImport=function(){
-  var total=archiveSel.size;if(total===0)return;
+  var targets=[];ARCHIVES.forEach(function(f,i){if(archiveSel.has(i))targets.push(f.name);});
+  var total=targets.length;if(total===0)return;
   closeModal('m-archive');
   $('prog').classList.add('on');importCancel=false;
-  var done=0;$('progCount').textContent='0/'+total;$('progFill').style.width='0%';
+  var done=0;
+  $('progCount').textContent='0/'+total;$('progFill').style.width='0%';
+  $('progStatus').textContent=total+'件のログを処理します';
   importTimer=setInterval(function(){
-    if(importCancel){clearInterval(importTimer);$('prog').classList.remove('on');toast('取り込みを停止しました');return;}
+    if(importCancel){clearInterval(importTimer);$('prog').classList.remove('on');toast('解析の中断を要求しました');return;}
+    $('progStatus').textContent='処理中: '+targets[done];
     done++;$('progCount').textContent=done+'/'+total;$('progFill').style.width=(done/total*100)+'%';
-    if(done>=total){clearInterval(importTimer);setTimeout(function(){$('prog').classList.remove('on');toast('取り込みが完了しました（'+total+' 件）');},600);}
-  },650);
+    if(done>=total){clearInterval(importTimer);$('progStatus').textContent='完了';setTimeout(function(){$('prog').classList.remove('on');},700);}
+  },700);
 };
 window.cancelImport=function(){importCancel=true;};
 
@@ -869,7 +873,7 @@ function renderCleanup(){
 window.openCleanup=function(){cleanupSel=new Set();SRC_LOGS.forEach(function(_,i){cleanupSel.add(i);});renderCleanup();openModal('m-cleanup');};
 window.cleanupToggle=function(i){if(cleanupSel.has(i))cleanupSel.delete(i);else cleanupSel.add(i);renderCleanup();};
 window.cleanupToggleAll=function(){if(cleanupSel.size===SRC_LOGS.length)cleanupSel=new Set();else{cleanupSel=new Set();SRC_LOGS.forEach(function(_,i){cleanupSel.add(i);});}renderCleanup();};
-window.confirmCleanup=function(){var n=cleanupSel.size;closeModal('m-cleanup');toast(n+' 件の元ログを削除しました');};
+window.confirmCleanup=function(){var n=cleanupSel.size;closeModal('m-cleanup');toast('元ログ '+n+' 件を削除しました');};
 
 /* ───────── ログビューア ───────── */
 var P='2025.05.0';
