@@ -9,6 +9,7 @@
   - [Backend](#backend)
   - [Build and Distribution](#build-and-distribution)
   - [Quality and Tooling](#quality-and-tooling)
+  - [Testing and CI](#testing-and-ci)
 - [Architecture Decision Records](#architecture-decision-records)
   - [ADR-001 Application Framework: Tauri v2](#adr-001-application-framework-tauri-v2)
   - [ADR-002 State Management: React Hooks](#adr-002-state-management-react-hooks)
@@ -83,6 +84,17 @@
 | CSS Linter | [Stylelint](https://stylelint.io/) (`stylelint-config-standard`) | 16.25 |
 | Formatter | [Prettier](https://prettier.io/) | 3.6 |
 | Rust Linter | clippy (workspace lints) | bundled |
+| TS Test Runner | [Vitest](https://vitest.dev/) | 4.1 |
+| TS Coverage | [@vitest/coverage-v8](https://www.npmjs.com/package/@vitest/coverage-v8) | 4.1 |
+| Rust Test | `cargo test --lib` (組み込み `#[cfg(test)]`) + [tempfile](https://crates.io/crates/tempfile) (dev) | 3.x |
+| CI | GitHub Actions (`.github/workflows/ci.yml`) | - |
+
+### Testing and CI
+
+- **単体テスト**: Rust は組み込みの `#[cfg(test)]` モジュール (`cargo test --lib`)、フロントエンドは Vitest (`*.test.ts`) を採用。ファイル I/O テストには dev-dependency `tempfile` を使用する。
+- **カバレッジ**: フロントエンドは `@vitest/coverage-v8` (`npm run test:coverage`)。
+- **ローカル検証**: `npm run verify` で lint → vitest → rustfmt --check → clippy → cargo test を一括実行する。
+- **CI** (`.github/workflows/ci.yml`): master への push と master 宛 PR で起動。`rust` ジョブ (windows-latest) が `cargo fmt --all --check` / `cargo clippy --lib -- -D warnings` / `cargo test --lib` を、`frontend` ジョブ (ubuntu-latest) が `npm run lint` (eslint) / `npm run test` (vitest) を実行する。Rust toolchain は `rust-toolchain.toml` で 1.93.0 + rustfmt/clippy + x86_64-pc-windows-msvc にピン留め。
 
 ---
 
