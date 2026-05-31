@@ -235,3 +235,142 @@ fn migrate_apps_unique_to_path(conn: &Connection) -> Result<()> {
     )?;
     Ok(())
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn init_main_db_creates_all_tables() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_main_db(&conn).unwrap();
+
+        let expected_tables = [
+            "sessions", "visits", "find_users", "with_users",
+            "notifications", "screenshots", "osc", "subscription", "apps",
+        ];
+        for table in expected_tables {
+            let exists: bool = conn
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1)",
+                    [table],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert!(exists, "table '{table}' should exist");
+        }
+    }
+
+    #[test]
+    fn init_main_db_creates_views() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_main_db(&conn).unwrap();
+
+        let expected_views = ["visit_summary", "with_users_detail", "screenshots_detail"];
+        for view in expected_views {
+            let exists: bool = conn
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='view' AND name=?1)",
+                    [view],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert!(exists, "view '{view}' should exist");
+        }
+    }
+
+    #[test]
+    fn init_main_db_idempotent() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_main_db(&conn).unwrap();
+        init_main_db(&conn).unwrap();
+
+        let table_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(table_count, 9);
+    }
+
+    #[test]
+    fn init_main_db_enables_wal() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_main_db(&conn).unwrap();
+
+        let mode: String = conn
+            .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+            .unwrap();
+        assert!(mode == "wal" || mode == "memory");
+    }
+
+    #[test]
+    fn init_main_db_enables_foreign_keys() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_main_db(&conn).unwrap();
+
+        let fk: i64 = conn
+            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(fk, 1);
+    }
+
+    #[test]
+    fn apps_table_has_unique_path() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_main_db(&conn).unwrap();
+
+        conn.execute(
+            "INSERT INTO apps (name, path) VALUES ('App1', '/path/to/app')",
+            [],
+        )
+        .unwrap();
+
+        let result = conn.execute(
+            "INSERT INTO apps (name, path) VALUES ('App2', '/path/to/app')",
+            [],
+        );
+        assert!(result.is_err(), "duplicate path should be rejected");
+    }
+
+    #[test]
+    fn instance_type_check_constraint() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_main_db(&conn).unwrap();
+
+        conn.execute(
+            "INSERT INTO sessions (log_name, start_time) VALUES ('test', '2025-01-01')",
+            [],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO visits (session_id, world_name, instance_id, instance_type, join_time) VALUES (1, 'World', '123', 'private', '2025-01-01')",
+            [],
+        )
+        .unwrap();
+
+        let result = conn.execute(
+            "INSERT INTO visits (session_id, world_name, instance_id, instance_type, join_time) VALUES (1, 'World', '456', 'invalid_type', '2025-01-01')",
+            [],
+        );
+        assert!(result.is_err(), "invalid instance_type should be rejected");
+    }
+
+    #[test]
+    fn drop_legacy_apps_category_noop_on_new_db() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_main_db(&conn).unwrap();
+        drop_legacy_apps_category(&conn).unwrap();
+    }
+
+    #[test]
+    fn migrate_apps_unique_noop_on_new_db() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_main_db(&conn).unwrap();
+        migrate_apps_unique_to_path(&conn).unwrap();
+    }
+}

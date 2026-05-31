@@ -923,3 +923,321 @@ where
     progress_callback("完了".to_string(), format!("{total}/{total}"));
     Ok(())
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    fn setup_test_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        db::init_main_db(&conn).unwrap();
+        conn
+    }
+
+    fn make_reader(content: &str) -> BufReader<Cursor<Vec<u8>>> {
+        BufReader::new(Cursor::new(content.as_bytes().to_vec()))
+    }
+
+    #[test]
+    fn source_name_strips_tar_zst() {
+        let path = Path::new("/data/output_log_2025-04-30.txt.tar.zst");
+        assert_eq!(
+            source_name_for_archive(path),
+            Some("output_log_2025-04-30.txt".to_string())
+        );
+    }
+
+    #[test]
+    fn source_name_plain_txt() {
+        let path = Path::new("/data/output_log_2025-04-30.txt");
+        assert_eq!(
+            source_name_for_archive(path),
+            Some("output_log_2025-04-30.txt".to_string())
+        );
+    }
+
+    #[test]
+    fn ensure_not_canceled_ok() {
+        let flag = AtomicBool::new(false);
+        assert!(ensure_not_canceled(&flag).is_ok());
+    }
+
+    #[test]
+    fn ensure_not_canceled_err() {
+        let flag = AtomicBool::new(true);
+        let err = ensure_not_canceled(&flag).unwrap_err();
+        assert_eq!(err, ANALYZE_CANCELED_MESSAGE);
+    }
+
+    #[test]
+    fn format_progress_fraction_zero() {
+        assert_eq!(format_progress_fraction(0, 10), "0/10");
+    }
+
+    #[test]
+    fn format_progress_fraction_done() {
+        assert_eq!(format_progress_fraction(5, 5), "5/5");
+    }
+
+    #[test]
+    fn import_session_with_auth_and_visit() {
+        let conn = setup_test_db();
+        let cancel = AtomicBool::new(false);
+        let log = "\
+2025.04.30 20:00:00 Log        -  VRChat starting
+2025.04.30 20:01:00 Log        -  User Authenticated: TestUser (usr_aaaa-bbbb-cccc-dddd-eeeeeeeeeeee)
+2025.04.30 20:02:00 Log        -  [Behaviour] Entering Room: My Cool World
+2025.04.30 20:02:01 Log        -  [Behaviour] Joining wrld_abc123:99999~private(usr_owner-1234)~region(jp)
+2025.04.30 20:03:00 Log        -  [Behaviour] OnPlayerJoined FriendUser (usr_1111-2222-3333-4444-555555555555)
+2025.04.30 20:04:00 Log        -  [Behaviour] Initialized PlayerAPI \"TestUser\" is local
+2025.04.30 20:10:00 Log        -  [Behaviour] OnPlayerLeft FriendUser (usr_1111-2222-3333-4444-555555555555)
+2025.04.30 20:15:00 Log        -  [Behaviour] OnLeftRoom
+";
+        let reader = make_reader(log);
+        let mut progress_calls = Vec::new();
+        parse_and_import_reader(
+            &conn,
+            reader,
+            "test_log.txt",
+            &cancel,
+            &mut |status: String, progress: String| {
+                progress_calls.push((status, progress));
+            },
+        )
+        .unwrap();
+
+        let (account_id, account_name): (Option<String>, Option<String>) = conn
+            .query_row(
+                "SELECT account_id, account_name FROM sessions WHERE log_name = 'test_log.txt'",
+                [],
+                |row| Ok((row.get(0).ok(), row.get(1).ok())),
+            )
+            .unwrap();
+        assert_eq!(account_id.as_deref(), Some("usr_aaaa-bbbb-cccc-dddd-eeeeeeeeeeee"));
+        assert_eq!(account_name.as_deref(), Some("TestUser"));
+
+        let world_name: String = conn
+            .query_row("SELECT world_name FROM visits LIMIT 1", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(world_name, "My Cool World");
+
+        let leave_time: Option<String> = conn
+            .query_row("SELECT leave_time FROM visits LIMIT 1", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert!(leave_time.is_some());
+
+        let player_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM find_users", [], |row| row.get(0))
+            .unwrap();
+        assert!(player_count >= 1);
+
+        let with_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM with_users", [], |row| row.get(0))
+            .unwrap();
+        assert!(with_count >= 1);
+    }
+
+    #[test]
+    fn import_screenshot_event() {
+        let conn = setup_test_db();
+        let cancel = AtomicBool::new(false);
+        let log = "\
+2025.04.30 20:00:00 Log        -  VRChat starting
+2025.04.30 20:05:00 Log        -  [VRC Camera] Took screenshot to: C:\\Users\\test\\VRChat_2025-04-30_20-05-00.000_3840x2160.png
+";
+        let reader = make_reader(log);
+        parse_and_import_reader(
+            &conn,
+            reader,
+            "screenshot_test.txt",
+            &cancel,
+            &mut |_: String, _: String| {},
+        )
+        .unwrap();
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM screenshots", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+
+        let (width, height): (Option<i64>, Option<i64>) = conn
+            .query_row(
+                "SELECT resolution_width, resolution_height FROM screenshots LIMIT 1",
+                [],
+                |row| Ok((row.get(0).ok(), row.get(1).ok())),
+            )
+            .unwrap();
+        assert_eq!(width, Some(3840));
+        assert_eq!(height, Some(2160));
+    }
+
+    #[test]
+    fn import_osc_event() {
+        let conn = setup_test_db();
+        let cancel = AtomicBool::new(false);
+        let log = "\
+2025.04.30 20:00:00 Log        -  VRChat starting
+2025.04.30 20:01:00 Log        -  Found new OSC Service: OyasumiVR at 127.0.0.1:61080
+";
+        let reader = make_reader(log);
+        parse_and_import_reader(
+            &conn,
+            reader,
+            "osc_test.txt",
+            &cancel,
+            &mut |_: String, _: String| {},
+        )
+        .unwrap();
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM osc", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+
+        let service_name: String = conn
+            .query_row("SELECT service_name FROM osc LIMIT 1", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(service_name, "OyasumiVR");
+    }
+
+    #[test]
+    fn import_subscription_status() {
+        let conn = setup_test_db();
+        let cancel = AtomicBool::new(false);
+        let log = "\
+2025.04.30 20:00:00 Log        -  VRChat starting
+2025.04.30 20:01:00 Log        -  Get VRChat Subscription Details! Subscription Id:sub_12345 active:True desc:VRChat Plus
+";
+        let reader = make_reader(log);
+        parse_and_import_reader(
+            &conn,
+            reader,
+            "sub_test.txt",
+            &cancel,
+            &mut |_: String, _: String| {},
+        )
+        .unwrap();
+
+        let (is_active, desc): (bool, Option<String>) = conn
+            .query_row(
+                "SELECT is_active, description FROM subscription LIMIT 1",
+                [],
+                |row| Ok((row.get(0).unwrap(), row.get(1).ok())),
+            )
+            .unwrap();
+        assert!(is_active);
+        assert_eq!(desc.as_deref(), Some("VRChat Plus"));
+    }
+
+    #[test]
+    fn import_cancellation_rolls_back() {
+        let conn = setup_test_db();
+        let cancel = AtomicBool::new(true);
+        let log = "2025.04.30 20:00:00 Log        -  VRChat starting\n";
+        let reader = make_reader(log);
+        let result = parse_and_import_reader(
+            &conn,
+            reader,
+            "cancel_test.txt",
+            &cancel,
+            &mut |_: String, _: String| {},
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn import_single_line_notification() {
+        let conn = setup_test_db();
+        let cancel = AtomicBool::new(false);
+        let log = r#"2025.04.30 20:00:00 Log        -  VRChat starting
+2025.04.30 20:01:00 Log        -  Received Notification: <Notification from username:SomeUser, sender user id:usr_aaaa-bbbb-cccc-dddd-eeeeeeeeeeee to usr_self of type: invite, id: not_1234-5678-abcd-ef01-234567890abc, created at: 04/30/2025 11:01:00 UTC, expires: 04/30/2025 12:01:00 UTC, message: "Come join me!">
+"#;
+        let reader = make_reader(log);
+        parse_and_import_reader(
+            &conn,
+            reader,
+            "notif_test.txt",
+            &cancel,
+            &mut |_: String, _: String| {},
+        )
+        .unwrap();
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM notifications", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+
+        let notif_type: String = conn
+            .query_row(
+                "SELECT notif_type FROM notifications LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(notif_type, "invite");
+    }
+
+    #[test]
+    fn import_empty_log_creates_session() {
+        let conn = setup_test_db();
+        let cancel = AtomicBool::new(false);
+        let reader = make_reader("");
+        parse_and_import_reader(
+            &conn,
+            reader,
+            "empty_test.txt",
+            &cancel,
+            &mut |_: String, _: String| {},
+        )
+        .unwrap();
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn import_multiple_visits_closes_previous() {
+        let conn = setup_test_db();
+        let cancel = AtomicBool::new(false);
+        let log = "\
+2025.04.30 20:00:00 Log        -  [Behaviour] Entering Room: World A
+2025.04.30 20:00:01 Log        -  [Behaviour] Joining wrld_aaa:111~public~region(jp)
+2025.04.30 20:10:00 Log        -  [Behaviour] Entering Room: World B
+2025.04.30 20:10:01 Log        -  [Behaviour] Joining wrld_bbb:222~public~region(us)
+2025.04.30 20:20:00 Log        -  [Behaviour] OnLeftRoom
+";
+        let reader = make_reader(log);
+        parse_and_import_reader(
+            &conn,
+            reader,
+            "multi_visit.txt",
+            &cancel,
+            &mut |_: String, _: String| {},
+        )
+        .unwrap();
+
+        let visit_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM visits", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(visit_count, 2);
+
+        let first_leave: Option<String> = conn
+            .query_row(
+                "SELECT leave_time FROM visits ORDER BY id LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(first_leave.is_some());
+    }
+}

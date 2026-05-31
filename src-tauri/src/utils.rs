@@ -218,3 +218,46 @@ pub fn emit_event_warn<T: serde::Serialize + Clone>(app: &AppHandle, event_name:
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn command_err_formats_context_and_error() {
+        let msg = command_err("操作に失敗しました", "disk full");
+        assert_eq!(msg, "操作に失敗しました: disk full");
+    }
+
+    #[test]
+    fn command_open_err_includes_path() {
+        let path = std::path::Path::new("/some/file.db");
+        let msg = command_open_err(path, "permission denied");
+        assert!(msg.contains("/some/file.db"));
+        assert!(msg.contains("permission denied"));
+    }
+
+    #[test]
+    fn command_read_err_includes_path() {
+        let path = std::path::Path::new("/data/archive.tar.zst");
+        let msg = command_read_err(path, "corrupt archive");
+        assert!(msg.contains("/data/archive.tar.zst"));
+        assert!(msg.contains("corrupt archive"));
+    }
+
+    #[test]
+    fn command_create_err_includes_path() {
+        let path = std::path::Path::new("/new/dir");
+        let msg = command_create_err(path, "no space");
+        assert!(msg.contains("/new/dir"));
+        assert!(msg.contains("no space"));
+    }
+
+    #[test]
+    fn command_remove_err_includes_path() {
+        let path = std::path::Path::new("/old/file.log");
+        let msg = command_remove_err(path, "in use");
+        assert!(msg.contains("/old/file.log"));
+        assert!(msg.contains("in use"));
+    }
+}
+
