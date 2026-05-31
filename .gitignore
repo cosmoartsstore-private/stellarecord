@@ -1,6 +1,10 @@
 # Build artifacts
 target/
 
+# Test coverage output
+coverage/
+src-tauri/coverage/
+
 # Secrets
 .env
 .env.*

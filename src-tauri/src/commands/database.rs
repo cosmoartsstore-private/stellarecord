@@ -32,142 +32,572 @@ struct TableComment {
 }
 
 const SESSIONS_COLUMNS: &[ColumnComment] = &[
-    ColumnComment { name: "id", label: "ID", description: "解析セッションの内部ID" },
-    ColumnComment { name: "log_name", label: "元ログ名", description: "解析元になった VRChat ログのファイル名" },
-    ColumnComment { name: "account_id", label: "アカウントID", description: "ログに記録された自分の VRChat ユーザーID" },
-    ColumnComment { name: "account_name", label: "アカウント名", description: "ログ時点での自分の表示名" },
-    ColumnComment { name: "start_time", label: "開始時刻", description: "このログセッションの開始時刻" },
-    ColumnComment { name: "end_time", label: "終了時刻", description: "このログセッションの終了時刻" },
+    ColumnComment {
+        name: "id",
+        label: "ID",
+        description: "解析セッションの内部ID",
+    },
+    ColumnComment {
+        name: "log_name",
+        label: "元ログ名",
+        description: "解析元になった VRChat ログのファイル名",
+    },
+    ColumnComment {
+        name: "account_id",
+        label: "アカウントID",
+        description: "ログに記録された自分の VRChat ユーザーID",
+    },
+    ColumnComment {
+        name: "account_name",
+        label: "アカウント名",
+        description: "ログ時点での自分の表示名",
+    },
+    ColumnComment {
+        name: "start_time",
+        label: "開始時刻",
+        description: "このログセッションの開始時刻",
+    },
+    ColumnComment {
+        name: "end_time",
+        label: "終了時刻",
+        description: "このログセッションの終了時刻",
+    },
 ];
 
 const VISITS_COLUMNS: &[ColumnComment] = &[
-    ColumnComment { name: "id", label: "ID", description: "ワールド訪問レコードの内部ID" },
-    ColumnComment { name: "session_id", label: "セッション", description: "親の解析セッション" },
-    ColumnComment { name: "world_name", label: "ワールド名", description: "訪問先ワールドの表示名" },
-    ColumnComment { name: "instance_id", label: "インスタンスID", description: "訪問先インスタンスの識別子" },
-    ColumnComment { name: "instance_type", label: "インスタンスタイプ", description: "公開区分" },
-    ColumnComment { name: "region", label: "リージョン", description: "ワールドサーバーのリージョン情報" },
-    ColumnComment { name: "join_time", label: "Join時刻", description: "ワールドへ入った時刻" },
-    ColumnComment { name: "leave_time", label: "Leave時刻", description: "ワールドを離れた時刻" },
+    ColumnComment {
+        name: "id",
+        label: "ID",
+        description: "ワールド訪問レコードの内部ID",
+    },
+    ColumnComment {
+        name: "session_id",
+        label: "セッション",
+        description: "親の解析セッション",
+    },
+    ColumnComment {
+        name: "world_name",
+        label: "ワールド名",
+        description: "訪問先ワールドの表示名",
+    },
+    ColumnComment {
+        name: "instance_id",
+        label: "インスタンスID",
+        description: "訪問先インスタンスの識別子",
+    },
+    ColumnComment {
+        name: "instance_type",
+        label: "インスタンスタイプ",
+        description: "公開区分",
+    },
+    ColumnComment {
+        name: "region",
+        label: "リージョン",
+        description: "ワールドサーバーのリージョン情報",
+    },
+    ColumnComment {
+        name: "join_time",
+        label: "Join時刻",
+        description: "ワールドへ入った時刻",
+    },
+    ColumnComment {
+        name: "leave_time",
+        label: "Leave時刻",
+        description: "ワールドを離れた時刻",
+    },
 ];
 
 const FIND_USERS_COLUMNS: &[ColumnComment] = &[
-    ColumnComment { name: "vrchat_id", label: "ユーザーID", description: "VRChat の usr_xxx 識別子" },
-    ColumnComment { name: "account_name", label: "ユーザー名", description: "観測時点のプレイヤー表示名" },
+    ColumnComment {
+        name: "vrchat_id",
+        label: "ユーザーID",
+        description: "VRChat の usr_xxx 識別子",
+    },
+    ColumnComment {
+        name: "account_name",
+        label: "ユーザー名",
+        description: "観測時点のプレイヤー表示名",
+    },
 ];
 
 const WITH_USERS_COLUMNS: &[ColumnComment] = &[
-    ColumnComment { name: "id", label: "ID", description: "同席レコードの内部ID" },
-    ColumnComment { name: "visit_id", label: "Join", description: "どのワールド訪問中の記録か" },
-    ColumnComment { name: "vrchat_id", label: "ユーザーID", description: "プレイヤーの VRChat ID" },
-    ColumnComment { name: "is_self", label: "is_self", description: "自分自身の入室記録かどうか" },
-    ColumnComment { name: "join_time", label: "Join時刻", description: "そのプレイヤーを観測した開始時刻" },
-    ColumnComment { name: "leave_time", label: "Leave時刻", description: "そのプレイヤーを観測しなくなった時刻" },
+    ColumnComment {
+        name: "id",
+        label: "ID",
+        description: "同席レコードの内部ID",
+    },
+    ColumnComment {
+        name: "visit_id",
+        label: "Join",
+        description: "どのワールド訪問中の記録か",
+    },
+    ColumnComment {
+        name: "vrchat_id",
+        label: "ユーザーID",
+        description: "プレイヤーの VRChat ID",
+    },
+    ColumnComment {
+        name: "is_self",
+        label: "is_self",
+        description: "自分自身の入室記録かどうか",
+    },
+    ColumnComment {
+        name: "join_time",
+        label: "Join時刻",
+        description: "そのプレイヤーを観測した開始時刻",
+    },
+    ColumnComment {
+        name: "leave_time",
+        label: "Leave時刻",
+        description: "そのプレイヤーを観測しなくなった時刻",
+    },
 ];
 
 const WITH_USERS_DETAIL_COLUMNS: &[ColumnComment] = &[
-    ColumnComment { name: "id", label: "ID", description: "同席レコードの内部ID" },
-    ColumnComment { name: "visit_id", label: "Join", description: "どのワールド訪問中の記録か" },
-    ColumnComment { name: "world_name", label: "ワールド名", description: "同席していたワールド" },
-    ColumnComment { name: "vrchat_id", label: "ユーザーID", description: "プレイヤーの VRChat ID" },
-    ColumnComment { name: "user_name", label: "ユーザー名", description: "プレイヤーの表示名" },
-    ColumnComment { name: "is_self", label: "is_self", description: "自分自身の入室記録かどうか" },
-    ColumnComment { name: "join_time", label: "Join時刻", description: "そのプレイヤーを観測した開始時刻" },
-    ColumnComment { name: "leave_time", label: "Leave時刻", description: "そのプレイヤーを観測しなくなった時刻" },
+    ColumnComment {
+        name: "id",
+        label: "ID",
+        description: "同席レコードの内部ID",
+    },
+    ColumnComment {
+        name: "visit_id",
+        label: "Join",
+        description: "どのワールド訪問中の記録か",
+    },
+    ColumnComment {
+        name: "world_name",
+        label: "ワールド名",
+        description: "同席していたワールド",
+    },
+    ColumnComment {
+        name: "vrchat_id",
+        label: "ユーザーID",
+        description: "プレイヤーの VRChat ID",
+    },
+    ColumnComment {
+        name: "user_name",
+        label: "ユーザー名",
+        description: "プレイヤーの表示名",
+    },
+    ColumnComment {
+        name: "is_self",
+        label: "is_self",
+        description: "自分自身の入室記録かどうか",
+    },
+    ColumnComment {
+        name: "join_time",
+        label: "Join時刻",
+        description: "そのプレイヤーを観測した開始時刻",
+    },
+    ColumnComment {
+        name: "leave_time",
+        label: "Leave時刻",
+        description: "そのプレイヤーを観測しなくなった時刻",
+    },
 ];
 
 const VISIT_SUMMARY_COLUMNS: &[ColumnComment] = &[
-    ColumnComment { name: "visit_id", label: "ID", description: "ワールド訪問の内部ID" },
-    ColumnComment { name: "world_name", label: "ワールド名", description: "訪問先ワールドの表示名" },
-    ColumnComment { name: "instance_id", label: "インスタンスID", description: "インスタンスの識別子" },
-    ColumnComment { name: "instance_type", label: "インスタンスタイプ", description: "公開区分" },
-    ColumnComment { name: "region", label: "リージョン", description: "サーバーリージョン" },
-    ColumnComment { name: "join_time", label: "Join時刻", description: "入室時刻" },
-    ColumnComment { name: "leave_time", label: "Leave時刻", description: "退室時刻" },
-    ColumnComment { name: "duration_sec", label: "滞在秒数", description: "滞在時間（秒）" },
-    ColumnComment { name: "other_player_count", label: "他プレイヤー数", description: "同室していた他プレイヤーの数" },
+    ColumnComment {
+        name: "visit_id",
+        label: "ID",
+        description: "ワールド訪問の内部ID",
+    },
+    ColumnComment {
+        name: "world_name",
+        label: "ワールド名",
+        description: "訪問先ワールドの表示名",
+    },
+    ColumnComment {
+        name: "instance_id",
+        label: "インスタンスID",
+        description: "インスタンスの識別子",
+    },
+    ColumnComment {
+        name: "instance_type",
+        label: "インスタンスタイプ",
+        description: "公開区分",
+    },
+    ColumnComment {
+        name: "region",
+        label: "リージョン",
+        description: "サーバーリージョン",
+    },
+    ColumnComment {
+        name: "join_time",
+        label: "Join時刻",
+        description: "入室時刻",
+    },
+    ColumnComment {
+        name: "leave_time",
+        label: "Leave時刻",
+        description: "退室時刻",
+    },
+    ColumnComment {
+        name: "duration_sec",
+        label: "滞在秒数",
+        description: "滞在時間（秒）",
+    },
+    ColumnComment {
+        name: "other_player_count",
+        label: "他プレイヤー数",
+        description: "同室していた他プレイヤーの数",
+    },
 ];
 
-
 const NOTIFICATIONS_COLUMNS: &[ColumnComment] = &[
-    ColumnComment { name: "id", label: "ID", description: "通知履歴の内部ID" },
-    ColumnComment { name: "notif_type", label: "通知種別", description: "通知タイプ" },
-    ColumnComment { name: "message", label: "本文", description: "通知メッセージ本文" },
-    ColumnComment { name: "sender_name", label: "送信者名", description: "通知送信者の表示名" },
-    ColumnComment { name: "sender_user_id", label: "送信者ID", description: "通知送信者のユーザーID" },
-    ColumnComment { name: "notif_id", label: "VRC通知ID", description: "VRChat 側の通知識別子" },
-    ColumnComment { name: "session_id", label: "セッション", description: "通知を受けた解析セッション" },
-    ColumnComment { name: "created_at", label: "作成時刻", description: "通知側での作成時刻" },
-    ColumnComment { name: "received_at", label: "受信時刻", description: "STELLA RECORD が受け取った時刻" },
-    ColumnComment { name: "target_world_name", label: "遷移先ワールド名", description: "通知から推定した遷移先ワールド名" },
-    ColumnComment { name: "target_instance_id", label: "遷移先インスタンスID", description: "通知から推定したインスタンス識別子" },
-    ColumnComment { name: "target_instance_type", label: "遷移先インスタンスタイプ", description: "通知から推定した公開区分" },
-    ColumnComment { name: "target_owner", label: "遷移先オーナー", description: "通知から推定したインスタンス所有者" },
-    ColumnComment { name: "target_region", label: "遷移先リージョン", description: "通知から推定したリージョン情報" },
+    ColumnComment {
+        name: "id",
+        label: "ID",
+        description: "通知履歴の内部ID",
+    },
+    ColumnComment {
+        name: "notif_type",
+        label: "通知種別",
+        description: "通知タイプ",
+    },
+    ColumnComment {
+        name: "message",
+        label: "本文",
+        description: "通知メッセージ本文",
+    },
+    ColumnComment {
+        name: "sender_name",
+        label: "送信者名",
+        description: "通知送信者の表示名",
+    },
+    ColumnComment {
+        name: "sender_user_id",
+        label: "送信者ID",
+        description: "通知送信者のユーザーID",
+    },
+    ColumnComment {
+        name: "notif_id",
+        label: "VRC通知ID",
+        description: "VRChat 側の通知識別子",
+    },
+    ColumnComment {
+        name: "session_id",
+        label: "セッション",
+        description: "通知を受けた解析セッション",
+    },
+    ColumnComment {
+        name: "created_at",
+        label: "作成時刻",
+        description: "通知側での作成時刻",
+    },
+    ColumnComment {
+        name: "received_at",
+        label: "受信時刻",
+        description: "STELLA RECORD が受け取った時刻",
+    },
+    ColumnComment {
+        name: "target_world_name",
+        label: "遷移先ワールド名",
+        description: "通知から推定した遷移先ワールド名",
+    },
+    ColumnComment {
+        name: "target_instance_id",
+        label: "遷移先インスタンスID",
+        description: "通知から推定したインスタンス識別子",
+    },
+    ColumnComment {
+        name: "target_instance_type",
+        label: "遷移先インスタンスタイプ",
+        description: "通知から推定した公開区分",
+    },
+    ColumnComment {
+        name: "target_owner",
+        label: "遷移先オーナー",
+        description: "通知から推定したインスタンス所有者",
+    },
+    ColumnComment {
+        name: "target_region",
+        label: "遷移先リージョン",
+        description: "通知から推定したリージョン情報",
+    },
 ];
 
 const SCREENSHOTS_COLUMNS: &[ColumnComment] = &[
-    ColumnComment { name: "id", label: "ID", description: "撮影イベントの内部ID" },
-    ColumnComment { name: "visit_id", label: "Join", description: "撮影時に滞在していたワールド訪問" },
-    ColumnComment { name: "file_path", label: "ファイルパス", description: "スクリーンショットの保存先フルパス" },
-    ColumnComment { name: "resolution_width", label: "幅", description: "撮影解像度の幅 (px)" },
-    ColumnComment { name: "resolution_height", label: "高さ", description: "撮影解像度の高さ (px)" },
-    ColumnComment { name: "timestamp", label: "撮影時刻", description: "スクリーンショットを撮影した時刻" },
+    ColumnComment {
+        name: "id",
+        label: "ID",
+        description: "撮影イベントの内部ID",
+    },
+    ColumnComment {
+        name: "visit_id",
+        label: "Join",
+        description: "撮影時に滞在していたワールド訪問",
+    },
+    ColumnComment {
+        name: "file_path",
+        label: "ファイルパス",
+        description: "スクリーンショットの保存先フルパス",
+    },
+    ColumnComment {
+        name: "resolution_width",
+        label: "幅",
+        description: "撮影解像度の幅 (px)",
+    },
+    ColumnComment {
+        name: "resolution_height",
+        label: "高さ",
+        description: "撮影解像度の高さ (px)",
+    },
+    ColumnComment {
+        name: "timestamp",
+        label: "撮影時刻",
+        description: "スクリーンショットを撮影した時刻",
+    },
 ];
 
 const SCREENSHOTS_DETAIL_COLUMNS: &[ColumnComment] = &[
-    ColumnComment { name: "id", label: "ID", description: "撮影イベントの内部ID" },
-    ColumnComment { name: "visit_id", label: "Join", description: "撮影時に滞在していたワールド訪問" },
-    ColumnComment { name: "world_name", label: "ワールド名", description: "撮影時に滞在していたワールド" },
-    ColumnComment { name: "file_path", label: "ファイルパス", description: "スクリーンショットの保存先フルパス" },
-    ColumnComment { name: "resolution_width", label: "幅", description: "撮影解像度の幅 (px)" },
-    ColumnComment { name: "resolution_height", label: "高さ", description: "撮影解像度の高さ (px)" },
-    ColumnComment { name: "timestamp", label: "撮影時刻", description: "スクリーンショットを撮影した時刻" },
+    ColumnComment {
+        name: "id",
+        label: "ID",
+        description: "撮影イベントの内部ID",
+    },
+    ColumnComment {
+        name: "visit_id",
+        label: "Join",
+        description: "撮影時に滞在していたワールド訪問",
+    },
+    ColumnComment {
+        name: "world_name",
+        label: "ワールド名",
+        description: "撮影時に滞在していたワールド",
+    },
+    ColumnComment {
+        name: "file_path",
+        label: "ファイルパス",
+        description: "スクリーンショットの保存先フルパス",
+    },
+    ColumnComment {
+        name: "resolution_width",
+        label: "幅",
+        description: "撮影解像度の幅 (px)",
+    },
+    ColumnComment {
+        name: "resolution_height",
+        label: "高さ",
+        description: "撮影解像度の高さ (px)",
+    },
+    ColumnComment {
+        name: "timestamp",
+        label: "撮影時刻",
+        description: "スクリーンショットを撮影した時刻",
+    },
 ];
 
 const OSC_COLUMNS: &[ColumnComment] = &[
-    ColumnComment { name: "id", label: "ID", description: "OSCサービスイベントの内部ID" },
-    ColumnComment { name: "session_id", label: "セッション", description: "イベントが発生した解析セッション" },
-    ColumnComment { name: "event_type", label: "イベント種別", description: "found (外部ツール検出)" },
-    ColumnComment { name: "service_name", label: "サービス名", description: "OSCサービスの識別名 (例: OyasumiVR)" },
-    ColumnComment { name: "service_type", label: "サービス種別", description: "OSC / OSCQuery の区別" },
-    ColumnComment { name: "ip_address", label: "IPアドレス", description: "検出時の接続先IPアドレス" },
-    ColumnComment { name: "port", label: "ポート番号", description: "OSCサービスのポート番号" },
-    ColumnComment { name: "timestamp", label: "検出時刻", description: "OSCサービスを検出または告知した時刻" },
+    ColumnComment {
+        name: "id",
+        label: "ID",
+        description: "OSCサービスイベントの内部ID",
+    },
+    ColumnComment {
+        name: "session_id",
+        label: "セッション",
+        description: "イベントが発生した解析セッション",
+    },
+    ColumnComment {
+        name: "event_type",
+        label: "イベント種別",
+        description: "found (外部ツール検出)",
+    },
+    ColumnComment {
+        name: "service_name",
+        label: "サービス名",
+        description: "OSCサービスの識別名 (例: OyasumiVR)",
+    },
+    ColumnComment {
+        name: "service_type",
+        label: "サービス種別",
+        description: "OSC / OSCQuery の区別",
+    },
+    ColumnComment {
+        name: "ip_address",
+        label: "IPアドレス",
+        description: "検出時の接続先IPアドレス",
+    },
+    ColumnComment {
+        name: "port",
+        label: "ポート番号",
+        description: "OSCサービスのポート番号",
+    },
+    ColumnComment {
+        name: "timestamp",
+        label: "検出時刻",
+        description: "OSCサービスを検出または告知した時刻",
+    },
 ];
 
-
 const SUBSCRIPTION_COLUMNS: &[ColumnComment] = &[
-    ColumnComment { name: "id", label: "ID", description: "サブスクリプション状態の内部ID" },
-    ColumnComment { name: "session_id", label: "セッション", description: "確認が発生した解析セッション" },
-    ColumnComment { name: "is_active", label: "有効フラグ", description: "VRChat+ が有効かどうか" },
-    ColumnComment { name: "subscription_id", label: "VRC契約ID", description: "VRChat 側のサブスクリプション識別子 (NULL=無効)" },
-    ColumnComment { name: "description", label: "説明", description: "サブスクリプション種別の説明テキスト" },
-    ColumnComment { name: "checked_at", label: "確認時刻", description: "サブスクリプション状態を確認した時刻" },
+    ColumnComment {
+        name: "id",
+        label: "ID",
+        description: "サブスクリプション状態の内部ID",
+    },
+    ColumnComment {
+        name: "session_id",
+        label: "セッション",
+        description: "確認が発生した解析セッション",
+    },
+    ColumnComment {
+        name: "is_active",
+        label: "有効フラグ",
+        description: "VRChat+ が有効かどうか",
+    },
+    ColumnComment {
+        name: "subscription_id",
+        label: "VRC契約ID",
+        description: "VRChat 側のサブスクリプション識別子 (NULL=無効)",
+    },
+    ColumnComment {
+        name: "description",
+        label: "説明",
+        description: "サブスクリプション種別の説明テキスト",
+    },
+    ColumnComment {
+        name: "checked_at",
+        label: "確認時刻",
+        description: "サブスクリプション状態を確認した時刻",
+    },
 ];
 
 const APPS_COLUMNS: &[ColumnComment] = &[
-    ColumnComment { name: "name", label: "アプリ名", description: "連携アプリの表示名" },
-    ColumnComment { name: "description", label: "説明", description: "連携アプリの説明文" },
-    ColumnComment { name: "path", label: "パス", description: "実行ファイルのパス" },
-    ColumnComment { name: "icon", label: "アイコン", description: "アイコン画像データ (BLOB)" },
+    ColumnComment {
+        name: "name",
+        label: "アプリ名",
+        description: "連携アプリの表示名",
+    },
+    ColumnComment {
+        name: "description",
+        label: "説明",
+        description: "連携アプリの説明文",
+    },
+    ColumnComment {
+        name: "path",
+        label: "パス",
+        description: "実行ファイルのパス",
+    },
+    ColumnComment {
+        name: "icon",
+        label: "アイコン",
+        description: "アイコン画像データ (BLOB)",
+    },
 ];
 
 const TABLE_COMMENTS: &[TableComment] = &[
     // ── テーブル ──
-    TableComment { name: "sessions", label: "セッション", description: "ログファイルに記録されたログイン～ログアウトのセッション情報テーブル", storage: "Main DB", columns: SESSIONS_COLUMNS, default_sort: Some(("start_time", "DESC")), is_view: false },
-    TableComment { name: "visits", label: "Join履歴", description: "Joinしたインスタンスに紐づくデータテーブル", storage: "Main DB", columns: VISITS_COLUMNS, default_sort: Some(("join_time", "DESC")), is_view: false },
-    TableComment { name: "with_users", label: "遭遇ユーザー", description: "インスタンスごとに出会ったユーザー記録テーブル", storage: "Main DB", columns: WITH_USERS_COLUMNS, default_sort: Some(("join_time", "DESC")), is_view: false },
-    TableComment { name: "find_users", label: "ユーザー一覧", description: "ログから検出したユーザーの一覧テーブル", storage: "Main DB", columns: FIND_USERS_COLUMNS, default_sort: None, is_view: false },
-    TableComment { name: "notifications", label: "通知", description: "インバイトやboop、グループ通知などの履歴テーブル", storage: "Main DB", columns: NOTIFICATIONS_COLUMNS, default_sort: Some(("received_at", "DESC")), is_view: false },
-    TableComment { name: "screenshots", label: "写真", description: "撮影した写真に紐づく関連情報テーブル", storage: "Main DB", columns: SCREENSHOTS_COLUMNS, default_sort: Some(("timestamp", "DESC")), is_view: false },
-    TableComment { name: "osc", label: "OSC", description: "OSCアプリケーションの関連情報テーブル", storage: "Main DB", columns: OSC_COLUMNS, default_sort: Some(("timestamp", "DESC")), is_view: false },
-    TableComment { name: "subscription", label: "VRChat+加入状態", description: "セッションごとのVRChat+加入状態の記録テーブル", storage: "Main DB", columns: SUBSCRIPTION_COLUMNS, default_sort: Some(("checked_at", "DESC")), is_view: false },
-    TableComment { name: "apps", label: "連携アプリ", description: "ランチャーに登録されたアプリ情報テーブル", storage: "Main DB", columns: APPS_COLUMNS, default_sort: None, is_view: false },
+    TableComment {
+        name: "sessions",
+        label: "セッション",
+        description: "ログファイルに記録されたログイン～ログアウトのセッション情報テーブル",
+        storage: "Main DB",
+        columns: SESSIONS_COLUMNS,
+        default_sort: Some(("start_time", "DESC")),
+        is_view: false,
+    },
+    TableComment {
+        name: "visits",
+        label: "Join履歴",
+        description: "Joinしたインスタンスに紐づくデータテーブル",
+        storage: "Main DB",
+        columns: VISITS_COLUMNS,
+        default_sort: Some(("join_time", "DESC")),
+        is_view: false,
+    },
+    TableComment {
+        name: "with_users",
+        label: "遭遇ユーザー",
+        description: "インスタンスごとに出会ったユーザー記録テーブル",
+        storage: "Main DB",
+        columns: WITH_USERS_COLUMNS,
+        default_sort: Some(("join_time", "DESC")),
+        is_view: false,
+    },
+    TableComment {
+        name: "find_users",
+        label: "ユーザー一覧",
+        description: "ログから検出したユーザーの一覧テーブル",
+        storage: "Main DB",
+        columns: FIND_USERS_COLUMNS,
+        default_sort: None,
+        is_view: false,
+    },
+    TableComment {
+        name: "notifications",
+        label: "通知",
+        description: "インバイトやboop、グループ通知などの履歴テーブル",
+        storage: "Main DB",
+        columns: NOTIFICATIONS_COLUMNS,
+        default_sort: Some(("received_at", "DESC")),
+        is_view: false,
+    },
+    TableComment {
+        name: "screenshots",
+        label: "写真",
+        description: "撮影した写真に紐づく関連情報テーブル",
+        storage: "Main DB",
+        columns: SCREENSHOTS_COLUMNS,
+        default_sort: Some(("timestamp", "DESC")),
+        is_view: false,
+    },
+    TableComment {
+        name: "osc",
+        label: "OSC",
+        description: "OSCアプリケーションの関連情報テーブル",
+        storage: "Main DB",
+        columns: OSC_COLUMNS,
+        default_sort: Some(("timestamp", "DESC")),
+        is_view: false,
+    },
+    TableComment {
+        name: "subscription",
+        label: "VRChat+加入状態",
+        description: "セッションごとのVRChat+加入状態の記録テーブル",
+        storage: "Main DB",
+        columns: SUBSCRIPTION_COLUMNS,
+        default_sort: Some(("checked_at", "DESC")),
+        is_view: false,
+    },
+    TableComment {
+        name: "apps",
+        label: "連携アプリ",
+        description: "ランチャーに登録されたアプリ情報テーブル",
+        storage: "Main DB",
+        columns: APPS_COLUMNS,
+        default_sort: None,
+        is_view: false,
+    },
     // ── ビュー ──
-    TableComment { name: "visit_summary", label: "Join履歴詳細", description: "Join履歴テーブル+ワールド名・滞在時間補完ビュー", storage: "Main DB", columns: VISIT_SUMMARY_COLUMNS, default_sort: Some(("join_time", "DESC")), is_view: true },
-    TableComment { name: "with_users_detail", label: "遭遇ユーザー詳細", description: "遭遇ユーザーテーブル+ワールド名・ユーザー名補完ビュー", storage: "Main DB", columns: WITH_USERS_DETAIL_COLUMNS, default_sort: Some(("join_time", "DESC")), is_view: true },
-    TableComment { name: "screenshots_detail", label: "写真詳細", description: "写真テーブル+ワールド名補完ビュー", storage: "Main DB", columns: SCREENSHOTS_DETAIL_COLUMNS, default_sort: Some(("timestamp", "DESC")), is_view: true },
+    TableComment {
+        name: "visit_summary",
+        label: "Join履歴詳細",
+        description: "Join履歴テーブル+ワールド名・滞在時間補完ビュー",
+        storage: "Main DB",
+        columns: VISIT_SUMMARY_COLUMNS,
+        default_sort: Some(("join_time", "DESC")),
+        is_view: true,
+    },
+    TableComment {
+        name: "with_users_detail",
+        label: "遭遇ユーザー詳細",
+        description: "遭遇ユーザーテーブル+ワールド名・ユーザー名補完ビュー",
+        storage: "Main DB",
+        columns: WITH_USERS_DETAIL_COLUMNS,
+        default_sort: Some(("join_time", "DESC")),
+        is_view: true,
+    },
+    TableComment {
+        name: "screenshots_detail",
+        label: "写真詳細",
+        description: "写真テーブル+ワールド名補完ビュー",
+        storage: "Main DB",
+        columns: SCREENSHOTS_DETAIL_COLUMNS,
+        default_sort: Some(("timestamp", "DESC")),
+        is_view: true,
+    },
 ];
 
 /// SQL に補間する前にテーブル名を検証する。
@@ -325,7 +755,14 @@ pub fn get_db_table_data(
 ) -> Result<TableData, String> {
     let table_name = sanitize_table_name(table_name)?;
     let (conn, storage_label) = open_preview_database(table_name)?;
-    fetch_table_data(&conn, table_name, &storage_label, page, sort_column, sort_dir)
+    fetch_table_data(
+        &conn,
+        table_name,
+        &storage_label,
+        page,
+        sort_column,
+        sort_dir,
+    )
 }
 
 /// 開かれた接続から1テーブルのページネーション付きデータを取得する。
@@ -341,16 +778,16 @@ fn fetch_table_data(
     sort_dir: Option<String>,
 ) -> Result<TableData, String> {
     let total_rows: u32 = conn
-        .query_row(
-            &format!("SELECT COUNT(*) FROM {table_name}"),
-            [],
-            |row| row.get(0),
-        )
+        .query_row(&format!("SELECT COUNT(*) FROM {table_name}"), [], |row| {
+            row.get(0)
+        })
         .map_err(|err| utils::command_err("行数カウントに失敗しました", err))?;
 
     let offset = page.unwrap_or(0) * PAGE_SIZE;
     let order_clause = match sort_column {
-        Some(ref col) if !col.is_empty() && col.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') => {
+        Some(ref col)
+            if !col.is_empty() && col.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') =>
+        {
             let dir = match sort_dir.as_deref() {
                 Some("asc") => "ASC",
                 _ => "DESC",
@@ -361,7 +798,8 @@ fn fetch_table_data(
             .and_then(|tc| tc.default_sort)
             .map_or_else(String::new, |(col, dir)| format!("ORDER BY {col} {dir}")),
     };
-    let sql = format!("SELECT * FROM {table_name} {order_clause} LIMIT {PAGE_SIZE} OFFSET {offset}");
+    let sql =
+        format!("SELECT * FROM {table_name} {order_clause} LIMIT {PAGE_SIZE} OFFSET {offset}");
     let mut stmt = conn
         .prepare(&sql)
         .map_err(|err| utils::command_err(&format!("クエリを準備できませんでした [{sql}]"), err))?;
@@ -417,8 +855,10 @@ fn fetch_table_data(
             || "テーブル説明は未登録です。".to_string(),
             |value| value.description.to_string(),
         ),
-        storage: table_comment
-            .map_or_else(|| storage_label.to_string(), |value| value.storage.to_string()),
+        storage: table_comment.map_or_else(
+            || storage_label.to_string(),
+            |value| value.storage.to_string(),
+        ),
         columns,
         rows: result_rows,
         total_rows,
@@ -436,7 +876,10 @@ mod tests {
     #[test]
     fn sanitize_accepts_valid_names() {
         assert_eq!(sanitize_table_name("sessions").unwrap(), "sessions");
-        assert_eq!(sanitize_table_name("with_users_detail").unwrap(), "with_users_detail");
+        assert_eq!(
+            sanitize_table_name("with_users_detail").unwrap(),
+            "with_users_detail"
+        );
         assert_eq!(sanitize_table_name("table1").unwrap(), "table1");
     }
 
@@ -536,10 +979,19 @@ mod tests {
         seed_sessions(&conn);
 
         let data = fetch_table_data(
-            &conn, "sessions", "Main DB", None,
-            Some("account_name".to_string()), Some("asc".to_string()),
-        ).unwrap();
-        let name_idx = data.columns.iter().position(|c| c.name == "account_name").unwrap();
+            &conn,
+            "sessions",
+            "Main DB",
+            None,
+            Some("account_name".to_string()),
+            Some("asc".to_string()),
+        )
+        .unwrap();
+        let name_idx = data
+            .columns
+            .iter()
+            .position(|c| c.name == "account_name")
+            .unwrap();
         assert_eq!(data.rows[0][name_idx], "User1");
         assert_eq!(data.rows[2][name_idx], "User3");
     }
@@ -550,10 +1002,19 @@ mod tests {
         seed_sessions(&conn);
 
         let data = fetch_table_data(
-            &conn, "sessions", "Main DB", None,
-            Some("account_name".to_string()), Some("desc".to_string()),
-        ).unwrap();
-        let name_idx = data.columns.iter().position(|c| c.name == "account_name").unwrap();
+            &conn,
+            "sessions",
+            "Main DB",
+            None,
+            Some("account_name".to_string()),
+            Some("desc".to_string()),
+        )
+        .unwrap();
+        let name_idx = data
+            .columns
+            .iter()
+            .position(|c| c.name == "account_name")
+            .unwrap();
         assert_eq!(data.rows[0][name_idx], "User3");
     }
 
@@ -567,7 +1028,11 @@ mod tests {
         .unwrap();
 
         let data = fetch_table_data(&conn, "apps", "Main DB", None, None, None).unwrap();
-        let desc_idx = data.columns.iter().position(|c| c.name == "description").unwrap();
+        let desc_idx = data
+            .columns
+            .iter()
+            .position(|c| c.name == "description")
+            .unwrap();
         let icon_idx = data.columns.iter().position(|c| c.name == "icon").unwrap();
         assert_eq!(data.rows[0][desc_idx], "NULL");
         assert_eq!(data.rows[0][icon_idx], "<BLOB>");
@@ -581,7 +1046,8 @@ mod tests {
             conn.execute(
                 "INSERT INTO apps (name, path) VALUES (?1, ?2)",
                 rusqlite::params![format!("App{i}"), format!("/p{i}")],
-            ).unwrap();
+            )
+            .unwrap();
         }
 
         let page0 = fetch_table_data(&conn, "apps", "Main DB", Some(0), None, None).unwrap();
@@ -596,11 +1062,11 @@ mod tests {
     #[test]
     fn fetch_uses_storage_label_for_unregistered_table() {
         let conn = Connection::open_in_memory().unwrap();
-        conn.execute("CREATE TABLE custom (id INTEGER PRIMARY KEY)", []).unwrap();
+        conn.execute("CREATE TABLE custom (id INTEGER PRIMARY KEY)", [])
+            .unwrap();
 
         let data = fetch_table_data(&conn, "custom", "Custom Store", None, None, None).unwrap();
         assert_eq!(data.storage, "Custom Store");
         assert_eq!(data.label, "custom");
     }
 }
-

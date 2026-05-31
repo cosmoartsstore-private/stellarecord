@@ -88,8 +88,14 @@ mod tests {
         // 300 MB ちょうど
         assert_eq!(bytes_to_archive_limit_mb(300 * ONE_MB_BYTES), 300);
         // 端数は四捨五入（0.5 MB 以上で切り上げ）
-        assert_eq!(bytes_to_archive_limit_mb(300 * ONE_MB_BYTES + ONE_MB_BYTES / 2), 301);
-        assert_eq!(bytes_to_archive_limit_mb(300 * ONE_MB_BYTES + ONE_MB_BYTES / 2 - 1), 300);
+        assert_eq!(
+            bytes_to_archive_limit_mb(300 * ONE_MB_BYTES + ONE_MB_BYTES / 2),
+            301
+        );
+        assert_eq!(
+            bytes_to_archive_limit_mb(300 * ONE_MB_BYTES + ONE_MB_BYTES / 2 - 1),
+            300
+        );
     }
 
     #[test]

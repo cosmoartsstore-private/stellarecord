@@ -20,7 +20,12 @@ fn create_key(path: &str) -> Result<RegKey, String> {
     RegKey::predef(HKEY_CURRENT_USER)
         .create_subkey(path)
         .map(|(key, _)| key)
-        .map_err(|err| utils::command_err(&format!("レジストリキーを作成できませんでした [{path}]"), err))
+        .map_err(|err| {
+            utils::command_err(
+                &format!("レジストリキーを作成できませんでした [{path}]"),
+                err,
+            )
+        })
 }
 
 /// レジストリから文字列値を読み取る。失敗時は空文字列を返す。
@@ -149,7 +154,10 @@ pub fn save_stellarecord_setting(setting: &StellaRecordSetting) -> Result<(), St
 }
 
 /// 指定されたレジストリキーパスに `StellaRecord` 設定を保存する。
-fn save_stellarecord_setting_to(key_path: &str, setting: &StellaRecordSetting) -> Result<(), String> {
+fn save_stellarecord_setting_to(
+    key_path: &str,
+    setting: &StellaRecordSetting,
+) -> Result<(), String> {
     let key = create_key(key_path)?;
     key.set_value("ArchivePath", &setting.archive_path)
         .map_err(|e| utils::command_err("ArchivePath の書き込みに失敗しました", e))?;
@@ -157,8 +165,11 @@ fn save_stellarecord_setting_to(key_path: &str, setting: &StellaRecordSetting) -
         .map_err(|e| utils::command_err("DbPath の書き込みに失敗しました", e))?;
     key.set_value("EnableStartup", &u32::from(setting.enable_startup))
         .map_err(|e| utils::command_err("EnableStartup の書き込みに失敗しました", e))?;
-    key.set_value("StartupPreferenceSet", &u32::from(setting.startup_preference_set))
-        .map_err(|e| utils::command_err("StartupPreferenceSet の書き込みに失敗しました", e))?;
+    key.set_value(
+        "StartupPreferenceSet",
+        &u32::from(setting.startup_preference_set),
+    )
+    .map_err(|e| utils::command_err("StartupPreferenceSet の書き込みに失敗しました", e))?;
     Ok(())
 }
 
@@ -207,15 +218,14 @@ fn load_catalog_from_db(db_path: &std::path::Path) -> RegistryCatalog {
         return RegistryCatalog::default();
     }
 
-    let mut stmt = match conn.prepare(
-        "SELECT name, description, path, icon FROM apps ORDER BY name",
-    ) {
-        Ok(s) => s,
-        Err(err) => {
-            utils::log_warn(&format!("レジストリクエリの準備に失敗しました: {err}"));
-            return RegistryCatalog::default();
-        }
-    };
+    let mut stmt =
+        match conn.prepare("SELECT name, description, path, icon FROM apps ORDER BY name") {
+            Ok(s) => s,
+            Err(err) => {
+                utils::log_warn(&format!("レジストリクエリの準備に失敗しました: {err}"));
+                return RegistryCatalog::default();
+            }
+        };
 
     let rows = match stmt.query_map([], |row| {
         let name: String = row.get(0)?;
@@ -446,7 +456,9 @@ mod tests {
         };
         assert_eq!(
             setting.get_effective_archive_dir(),
-            Some(PathBuf::from(r"F:\planetes-atelier\software\AppTest\archive"))
+            Some(PathBuf::from(
+                r"F:\planetes-atelier\software\AppTest\archive"
+            ))
         );
     }
 
@@ -458,7 +470,9 @@ mod tests {
         };
         assert_eq!(
             setting.get_effective_db_path(),
-            Some(PathBuf::from(r"F:\planetes-atelier\software\AppTest\db\test.db"))
+            Some(PathBuf::from(
+                r"F:\planetes-atelier\software\AppTest\db\test.db"
+            ))
         );
     }
 }

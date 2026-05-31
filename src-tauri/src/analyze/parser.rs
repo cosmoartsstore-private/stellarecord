@@ -155,7 +155,10 @@ mod tests {
     fn re_time_captures_standard_timestamp() {
         let caps = RE_TIME.captures("2025.04.30 20:15:00 Log        -  some message");
         assert!(caps.is_some());
-        assert_eq!(caps.as_ref().and_then(|c| c.get(1)).map(|m| m.as_str()), Some("2025.04.30 20:15:00"));
+        assert_eq!(
+            caps.as_ref().and_then(|c| c.get(1)).map(|m| m.as_str()),
+            Some("2025.04.30 20:15:00")
+        );
     }
 
     #[test]
@@ -171,7 +174,10 @@ mod tests {
         let line = "User Authenticated: TestUser (usr_abcdef12-3456-7890-abcd-ef1234567890)";
         let caps = RE_USER_AUTH.captures(line).unwrap();
         assert_eq!(caps.get(1).unwrap().as_str(), "TestUser");
-        assert_eq!(caps.get(2).unwrap().as_str(), "usr_abcdef12-3456-7890-abcd-ef1234567890");
+        assert_eq!(
+            caps.get(2).unwrap().as_str(),
+            "usr_abcdef12-3456-7890-abcd-ef1234567890"
+        );
     }
 
     #[test]
@@ -196,7 +202,10 @@ mod tests {
     fn re_joining_captures_full_location() {
         let line = "[Behaviour] Joining wrld_abc123:12345~private(usr_owner)~region(jp)";
         let caps = RE_JOINING.captures(line).unwrap();
-        assert_eq!(caps.get(1).unwrap().as_str(), "wrld_abc123:12345~private(usr_owner)~region(jp)");
+        assert_eq!(
+            caps.get(1).unwrap().as_str(),
+            "wrld_abc123:12345~private(usr_owner)~region(jp)"
+        );
     }
 
     // ── RE_LEFT_ROOM ──
@@ -218,7 +227,10 @@ mod tests {
         let line = "[Behaviour] OnPlayerJoined TestPlayer (usr_aaaa-bbbb-cccc-dddd-eeeeeeeeeeee)";
         let caps = RE_PLAYER_JOIN.captures(line).unwrap();
         assert_eq!(caps.get(1).unwrap().as_str(), "TestPlayer");
-        assert_eq!(caps.get(2).unwrap().as_str(), "usr_aaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+        assert_eq!(
+            caps.get(2).unwrap().as_str(),
+            "usr_aaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        );
     }
 
     #[test]
@@ -226,7 +238,10 @@ mod tests {
         let line = "[Behaviour] OnPlayerLeft TestPlayer (usr_aaaa-bbbb-cccc-dddd-eeeeeeeeeeee)";
         let caps = RE_PLAYER_LEFT.captures(line).unwrap();
         assert_eq!(caps.get(1).unwrap().as_str(), "TestPlayer");
-        assert_eq!(caps.get(2).unwrap().as_str(), "usr_aaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+        assert_eq!(
+            caps.get(2).unwrap().as_str(),
+            "usr_aaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        );
     }
 
     // ── RE_IS_LOCAL ──
@@ -366,7 +381,8 @@ mod tests {
 
     #[test]
     fn parse_location_group_with_extra_segments() {
-        let loc = parse_location("wrld_abc123:12345~group(usr_grp)~groupAccessType(public)~region(eu)");
+        let loc =
+            parse_location("wrld_abc123:12345~group(usr_grp)~groupAccessType(public)~region(eu)");
         assert_eq!(loc.instance_id.as_deref(), Some("12345"));
         assert_eq!(loc.access_type.as_deref(), Some("group"));
         assert_eq!(loc.region.as_deref(), Some("eu"));

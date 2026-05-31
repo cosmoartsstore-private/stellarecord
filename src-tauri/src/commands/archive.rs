@@ -205,12 +205,11 @@ fn build_archive_sync_plan(
             archive_path.display()
         ));
     };
-    let mut entry =
-        entry_result.map_err(|err| utils::command_err("zst エントリを読み取れませんでした", err))?;
-    let archived_size = entry
-        .header()
-        .size()
-        .map_err(|err| utils::command_err("アーカイブエントリのサイズを取得できませんでした", err))?;
+    let mut entry = entry_result
+        .map_err(|err| utils::command_err("zst エントリを読み取れませんでした", err))?;
+    let archived_size = entry.header().size().map_err(|err| {
+        utils::command_err("アーカイブエントリのサイズを取得できませんでした", err)
+    })?;
 
     let mut source_file = open_source_log_for_read(source_path)?;
     let source_size = source_file
@@ -518,24 +517,26 @@ fn collect_db_log_categories(
          WHERE session_id IN (SELECT id FROM sessions WHERE log_name = ?1)
     ";
 
-    let mut stmt = conn
-        .prepare(sql)
-        .map_err(|err| utils::command_err("ログビューア用カテゴリクエリを準備できませんでした", err))?;
+    let mut stmt = conn.prepare(sql).map_err(|err| {
+        utils::command_err("ログビューア用カテゴリクエリを準備できませんでした", err)
+    })?;
 
     let rows = stmt
         .query_map([source_name], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })
-        .map_err(|err| utils::command_err("ログビューア用カテゴリクエリを実行できませんでした", err))?;
+        .map_err(|err| {
+            utils::command_err("ログビューア用カテゴリクエリを実行できませんでした", err)
+        })?;
 
     for row in rows {
         match row {
             Ok((timestamp, category)) => {
                 categories.entry(timestamp).or_default().push(category);
             }
-            Err(err) => utils::log_warn(&format!(
-                "ログビューア行をデコードできませんでした: {err}"
-            )),
+            Err(err) => {
+                utils::log_warn(&format!("ログビューア行をデコードできませんでした: {err}"));
+            }
         }
     }
 
@@ -755,7 +756,8 @@ fn emit_log_viewer_chunks(
                  rl: &mut Vec<String>,
                  hl: &mut Vec<Option<String>>,
                  sid: &str,
-                 app: &AppHandle| -> bool {
+                 app: &AppHandle|
+     -> bool {
         app.emit(
             "log_viewer_chunk",
             &LogViewerChunk {
@@ -1015,8 +1017,9 @@ fn spawn_compressed_log_stream(
         let result: Result<(), String> = (|| {
             let file = fs::File::open(&archive_path)
                 .map_err(|err| utils::command_open_err(&archive_path, err))?;
-            let decoder = zstd::stream::Decoder::new(file)
-                .map_err(|err| utils::command_err("zstd デコーダーを初期化できませんでした", err))?;
+            let decoder = zstd::stream::Decoder::new(file).map_err(|err| {
+                utils::command_err("zstd デコーダーを初期化できませんでした", err)
+            })?;
             let mut archive = tar::Archive::new(decoder);
             let mut entries = archive
                 .entries()
@@ -1166,7 +1169,10 @@ pub fn get_deletable_source_logs() -> Result<Vec<DeletableLogInfo>, String> {
                 return None;
             }
             let size_bytes = path.metadata().map(|m| m.len()).unwrap_or(0);
-            Some(DeletableLogInfo { file_name: name, size_bytes })
+            Some(DeletableLogInfo {
+                file_name: name,
+                size_bytes,
+            })
         })
         .collect();
 
@@ -1299,26 +1305,44 @@ mod tests {
 
     #[test]
     fn classify_plain_line() {
-        assert_eq!(classify_log_level("2025.04.30 20:00:00 Log        -  some message"), "plain");
+        assert_eq!(
+            classify_log_level("2025.04.30 20:00:00 Log        -  some message"),
+            "plain"
+        );
     }
 
     #[test]
     fn classify_error_line() {
-        assert_eq!(classify_log_level("2025.04.30 20:00:00 Error      -  something broke"), "error");
+        assert_eq!(
+            classify_log_level("2025.04.30 20:00:00 Error      -  something broke"),
+            "error"
+        );
         assert_eq!(classify_log_level("some Error in the line"), "error");
     }
 
     #[test]
     fn classify_warning_line() {
-        assert_eq!(classify_log_level("2025.04.30 20:00:00 Warning    -  degraded"), "warning");
+        assert_eq!(
+            classify_log_level("2025.04.30 20:00:00 Warning    -  degraded"),
+            "warning"
+        );
         assert_eq!(classify_log_level("some Warning about X"), "warning");
     }
 
     #[test]
     fn classify_debug_line() {
-        assert_eq!(classify_log_level("2025.04.30 20:00:00 Debug      -  internal"), "debug");
-        assert_eq!(classify_log_level("[UserInfoLogger] Environment Info: stuff"), "debug");
-        assert_eq!(classify_log_level("[UserInfoLogger] User Settings Info: stuff"), "debug");
+        assert_eq!(
+            classify_log_level("2025.04.30 20:00:00 Debug      -  internal"),
+            "debug"
+        );
+        assert_eq!(
+            classify_log_level("[UserInfoLogger] Environment Info: stuff"),
+            "debug"
+        );
+        assert_eq!(
+            classify_log_level("[UserInfoLogger] User Settings Info: stuff"),
+            "debug"
+        );
         assert_eq!(classify_log_level("Microphones installed (3)"), "debug");
     }
 
@@ -1334,8 +1358,18 @@ mod tests {
 
         let logs = collect_source_logs(dir.path()).unwrap();
         assert_eq!(logs.len(), 2);
-        assert!(logs[0].file_name().unwrap().to_str().unwrap().contains("04-30"));
-        assert!(logs[1].file_name().unwrap().to_str().unwrap().contains("05-01"));
+        assert!(logs[0]
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("04-30"));
+        assert!(logs[1]
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("05-01"));
     }
 
     #[test]
@@ -1346,12 +1380,18 @@ mod tests {
         fs::write(dir.path().join("output_log_2025-05-02.txt"), b"b").unwrap();
 
         let logs = collect_source_logs(dir.path()).unwrap();
-        let names: Vec<_> = logs.iter().map(|p| p.file_name().unwrap().to_str().unwrap().to_string()).collect();
-        assert_eq!(names, vec![
-            "output_log_2025-05-01.txt",
-            "output_log_2025-05-02.txt",
-            "output_log_2025-05-03.txt",
-        ]);
+        let names: Vec<_> = logs
+            .iter()
+            .map(|p| p.file_name().unwrap().to_str().unwrap().to_string())
+            .collect();
+        assert_eq!(
+            names,
+            vec![
+                "output_log_2025-05-01.txt",
+                "output_log_2025-05-02.txt",
+                "output_log_2025-05-03.txt",
+            ]
+        );
     }
 
     // ── compress_single_file ──
@@ -1375,7 +1415,10 @@ mod tests {
         let mut entries = archive.entries().unwrap();
         let entry = entries.next().unwrap().unwrap();
 
-        assert_eq!(entry.header().size().unwrap(), original_content.len() as u64);
+        assert_eq!(
+            entry.header().size().unwrap(),
+            original_content.len() as u64
+        );
         let entry_path = entry.path().unwrap();
         assert_eq!(entry_path.to_str().unwrap(), "output_log_2025-04-30.txt");
     }
@@ -1443,7 +1486,10 @@ mod tests {
         fs::write(&src, "short").unwrap();
 
         let plan = build_archive_sync_plan(&src, &archive_dir).unwrap();
-        assert!(plan.is_none(), "shorter source should be skipped for safety");
+        assert!(
+            plan.is_none(),
+            "shorter source should be skipped for safety"
+        );
     }
 
     // ── encode_log_level_u8 / encode_log_category_u8 (純粋: フロントエンド定数と同期) ──
@@ -1473,7 +1519,8 @@ mod tests {
 
     #[test]
     fn detect_range_block_debug_system() {
-        let block = detect_range_block_start("2025.04.30 [UserInfoLogger] Environment Info:").unwrap();
+        let block =
+            detect_range_block_start("2025.04.30 [UserInfoLogger] Environment Info:").unwrap();
         assert!(matches!(block.kind, RangeBlockKind::DebugSystem));
         assert_eq!(block.category, "debug-system");
     }
@@ -1481,7 +1528,8 @@ mod tests {
     #[test]
     fn detect_range_block_multiline_notification() {
         // 終端 '>' を含まない通知行は複数行ブロック開始
-        let block = detect_range_block_start("Received Notification: <Notification from x").unwrap();
+        let block =
+            detect_range_block_start("Received Notification: <Notification from x").unwrap();
         assert!(matches!(block.kind, RangeBlockKind::Notification));
     }
 
@@ -1501,8 +1549,14 @@ mod tests {
     #[test]
     fn keyword_marker_finds_substring() {
         let markers = vec![
-            DbKeywordMarker { category: "world".to_string(), text: "Cozy Lounge".to_string() },
-            DbKeywordMarker { category: "player_join".to_string(), text: "StarGazer".to_string() },
+            DbKeywordMarker {
+                category: "world".to_string(),
+                text: "Cozy Lounge".to_string(),
+            },
+            DbKeywordMarker {
+                category: "player_join".to_string(),
+                text: "StarGazer".to_string(),
+            },
         ];
         let found = resolve_db_keyword_marker("Entering Room: Cozy Lounge", &markers).unwrap();
         assert_eq!(found.category, "world");
@@ -1514,7 +1568,10 @@ mod tests {
     #[test]
     fn resolve_category_prefers_matching_kind() {
         let mut db = std::collections::HashMap::new();
-        db.insert("2025.04.30 20:15:35".to_string(), vec!["player_join".to_string()]);
+        db.insert(
+            "2025.04.30 20:15:35".to_string(),
+            vec!["player_join".to_string()],
+        );
 
         let line = "[Behaviour] OnPlayerJoined StarGazer (usr_def456)";
         let category = resolve_db_category(line, "2025.04.30 20:15:35", &db);
@@ -1572,7 +1629,10 @@ mod tests {
 
         assert_eq!(fs::read(&target).unwrap(), b"new content");
         assert!(!temp.exists(), "一時ファイルは消費されている");
-        assert!(!target.with_extension("bak").exists(), "バックアップは削除されている");
+        assert!(
+            !target.with_extension("bak").exists(),
+            "バックアップは削除されている"
+        );
     }
 
     // ── read_archive_source_name (実圧縮ファイル: tar ヘッダー読み取り) ──
@@ -1645,10 +1705,22 @@ mod tests {
         let cats = collect_db_log_categories(&conn, "log.txt").unwrap();
 
         // visit join/leave → world、player join/leave → player_*
-        assert!(cats.get("2025.04.30 20:15:30").unwrap().contains(&"world".to_string()));
-        assert!(cats.get("2025.04.30 20:20:10").unwrap().contains(&"world".to_string()));
-        assert!(cats.get("2025.04.30 20:15:35").unwrap().contains(&"player_join".to_string()));
-        assert!(cats.get("2025.04.30 20:18:45").unwrap().contains(&"player_left".to_string()));
+        assert!(cats
+            .get("2025.04.30 20:15:30")
+            .unwrap()
+            .contains(&"world".to_string()));
+        assert!(cats
+            .get("2025.04.30 20:20:10")
+            .unwrap()
+            .contains(&"world".to_string()));
+        assert!(cats
+            .get("2025.04.30 20:15:35")
+            .unwrap()
+            .contains(&"player_join".to_string()));
+        assert!(cats
+            .get("2025.04.30 20:18:45")
+            .unwrap()
+            .contains(&"player_left".to_string()));
     }
 
     #[test]
@@ -1657,7 +1729,9 @@ mod tests {
         let markers = collect_db_keyword_markers(&conn, "log.txt").unwrap();
 
         // ワールド名とユーザー名が収集される
-        assert!(markers.iter().any(|m| m.text == "Cozy Lounge" && m.category == "world"));
+        assert!(markers
+            .iter()
+            .any(|m| m.text == "Cozy Lounge" && m.category == "world"));
         assert!(markers.iter().any(|m| m.text == "StarGazer"));
         // 最長優先ソート: 先頭は後続以上の長さ
         for pair in markers.windows(2) {

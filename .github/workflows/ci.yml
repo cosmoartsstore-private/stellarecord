@@ -1,0 +1,66 @@
+name: CI
+
+# クリーンな環境で全テスト・lint を実行する回帰ゲート。
+# master への push と、master 宛 PR で自動実行される。
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+# 同一ブランチで新しい push があれば実行中のジョブをキャンセルする。
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Rust バックエンド: レジストリ/ファイル I/O テストが Windows を必要とするため windows-latest ──
+  rust:
+    name: Rust (Windows)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@v4
+
+      # rust-toolchain.toml で 1.93.0 + clippy/rustfmt + MSVC target がピン留めされている。
+      # rustup が自動でその toolchain を導入する。
+      - name: Show toolchain
+        run: rustup show
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Format check
+        run: cargo fmt --all --check
+
+      - name: Clippy (deny warnings)
+        run: cargo clippy --lib -- -D warnings
+
+      - name: Unit tests
+        run: cargo test --lib
+
+  # ── フロントエンド: vitest と eslint はプラットフォーム非依存のため軽量な ubuntu-latest ──
+  frontend:
+    name: Frontend (Node)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm run test

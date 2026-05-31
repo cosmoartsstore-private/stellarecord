@@ -121,7 +121,11 @@ mod tests {
     #[test]
     fn ensure_parent_dir_creates_missing_parent() {
         let dir = tempfile::tempdir().unwrap();
-        let db_path = dir.path().join("nested").join("sub").join("stellarecord.db");
+        let db_path = dir
+            .path()
+            .join("nested")
+            .join("sub")
+            .join("stellarecord.db");
         assert!(!db_path.parent().unwrap().exists());
 
         ensure_parent_dir(&db_path).unwrap();

@@ -247,8 +247,15 @@ mod tests {
         init_main_db(&conn).unwrap();
 
         let expected_tables = [
-            "sessions", "visits", "find_users", "with_users",
-            "notifications", "screenshots", "osc", "subscription", "apps",
+            "sessions",
+            "visits",
+            "find_users",
+            "with_users",
+            "notifications",
+            "screenshots",
+            "osc",
+            "subscription",
+            "apps",
         ];
         for table in expected_tables {
             let exists: bool = conn
@@ -399,7 +406,9 @@ mod tests {
         assert!(!has_category, "category column should be removed");
 
         let name: String = conn
-            .query_row("SELECT name FROM apps WHERE path = '/test'", [], |row| row.get(0))
+            .query_row("SELECT name FROM apps WHERE path = '/test'", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         assert_eq!(name, "TestApp", "existing data should survive migration");
     }
@@ -421,14 +430,19 @@ mod tests {
         migrate_apps_unique_to_path(&conn).unwrap();
 
         let dup_name = conn.execute(
-            "INSERT INTO apps (name, path) VALUES ('App1', '/path/c')", [],
+            "INSERT INTO apps (name, path) VALUES ('App1', '/path/c')",
+            [],
         );
         assert!(dup_name.is_ok(), "duplicate name should now be allowed");
 
         let dup_path = conn.execute(
-            "INSERT INTO apps (name, path) VALUES ('App3', '/path/a')", [],
+            "INSERT INTO apps (name, path) VALUES ('App3', '/path/a')",
+            [],
         );
-        assert!(dup_path.is_err(), "duplicate path should be rejected after migration");
+        assert!(
+            dup_path.is_err(),
+            "duplicate path should be rejected after migration"
+        );
 
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM apps", [], |row| row.get(0))

@@ -12,11 +12,10 @@ mod parser;
 
 pub use db::init_main_db;
 pub use parser::{
-    parse_access_type, parse_location, is_collectible_notification, ParsedLocation,
-    RE_ENTERING, RE_IS_LOCAL, RE_JOINING, RE_LEFT_ROOM, RE_NOTIFICATION,
-    RE_NOTIFICATION_WORLD_ID, RE_NOTIFICATION_WORLD_NAME, RE_OSC_FOUND,
-    RE_PLAYER_JOIN, RE_PLAYER_JOIN_COMPLETE, RE_PLAYER_LEFT, RE_SCREENSHOT,
-    RE_SUBSCRIPTION_STATUS, RE_TIME, RE_USER_AUTH,
+    is_collectible_notification, parse_access_type, parse_location, ParsedLocation, RE_ENTERING,
+    RE_IS_LOCAL, RE_JOINING, RE_LEFT_ROOM, RE_NOTIFICATION, RE_NOTIFICATION_WORLD_ID,
+    RE_NOTIFICATION_WORLD_NAME, RE_OSC_FOUND, RE_PLAYER_JOIN, RE_PLAYER_JOIN_COMPLETE,
+    RE_PLAYER_LEFT, RE_SCREENSHOT, RE_SUBSCRIPTION_STATUS, RE_TIME, RE_USER_AUTH,
 };
 
 use chrono::NaiveDateTime;
@@ -107,7 +106,6 @@ fn format_progress_fraction(completed: usize, total: usize) -> String {
     format!("{completed}/{total}")
 }
 
-
 /// インポート命名規則に合致する圧縮アーカイブログを一覧取得する。
 ///
 /// # 引数
@@ -195,11 +193,18 @@ fn insert_osc_event(
         "INSERT INTO osc
          (session_id, event_type, service_name, service_type, ip_address, port, timestamp)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![session_id, event_type, service_name, service_type, ip_address, port, timestamp],
+        params![
+            session_id,
+            event_type,
+            service_name,
+            service_type,
+            ip_address,
+            port,
+            timestamp
+        ],
     )?;
     Ok(())
 }
-
 
 /// `VRChat`+ サブスクリプション状態のスナップショットをメインデータベースに挿入する。
 ///
@@ -216,7 +221,13 @@ fn insert_subscription_status(
         "INSERT OR IGNORE INTO subscription
          (session_id, is_active, subscription_id, description, checked_at)
          VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![session_id, is_active, subscription_id, description, checked_at],
+        params![
+            session_id,
+            is_active,
+            subscription_id,
+            description,
+            checked_at
+        ],
     )?;
     Ok(())
 }
@@ -408,7 +419,10 @@ where
         .commit()
         .map_err(|e| analyze_err("メイン DB 反映を確定できませんでした", e))?;
 
-    progress_callback("処理完了".to_string(), format_progress_fraction(total, total));
+    progress_callback(
+        "処理完了".to_string(),
+        format_progress_fraction(total, total),
+    );
     Ok(())
 }
 
@@ -572,7 +586,9 @@ where
                 }
                 end_time = Some(formatted);
             } else {
-                crate::utils::log_warn(&format!("タイムスタンプのパースをスキップしました [{filename}]: {ts_str}"));
+                crate::utils::log_warn(&format!(
+                    "タイムスタンプのパースをスキップしました [{filename}]: {ts_str}"
+                ));
             }
         }
         let ts_str = current_ts
@@ -718,12 +734,8 @@ where
         // --- スクリーンショット撮影イベント ---
         if let Some(caps) = RE_SCREENSHOT.captures(&line) {
             if let Some(path_match) = caps.get(1) {
-                let width = caps
-                    .get(2)
-                    .and_then(|m| m.as_str().parse::<i64>().ok());
-                let height = caps
-                    .get(3)
-                    .and_then(|m| m.as_str().parse::<i64>().ok());
+                let width = caps.get(2).and_then(|m| m.as_str().parse::<i64>().ok());
+                let height = caps.get(3).and_then(|m| m.as_str().parse::<i64>().ok());
                 insert_screenshot(
                     main_tx,
                     current_visit_id,
@@ -740,9 +752,7 @@ where
         if let Some(caps) = RE_OSC_FOUND.captures(&line) {
             let service_name = caps.get(1).map(|m| m.as_str());
             let ip_address = caps.get(2).map(|m| m.as_str());
-            let port = caps
-                .get(3)
-                .and_then(|m| m.as_str().parse::<i64>().ok());
+            let port = caps.get(3).and_then(|m| m.as_str().parse::<i64>().ok());
             insert_osc_event(
                 main_tx,
                 session_id,
@@ -755,7 +765,6 @@ where
             )?;
             continue;
         }
-
 
         // --- 通知（招待、フレンドリクエスト、boop、グループ） ---
         // 1行で完結する通知 (行末が `">`) はその場で確定処理する。
@@ -783,12 +792,7 @@ where
             };
             let desc_opt = if desc.is_empty() { None } else { Some(desc) };
             insert_subscription_status(
-                main_tx,
-                session_id,
-                is_active,
-                sub_id_opt,
-                desc_opt,
-                &ts_str,
+                main_tx, session_id, is_active, sub_id_opt, desc_opt, &ts_str,
             )?;
         }
     }
@@ -1032,7 +1036,10 @@ mod tests {
                 |row| Ok((row.get(0).ok(), row.get(1).ok())),
             )
             .unwrap();
-        assert_eq!(account_id.as_deref(), Some("usr_aaaa-bbbb-cccc-dddd-eeeeeeeeeeee"));
+        assert_eq!(
+            account_id.as_deref(),
+            Some("usr_aaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+        );
         assert_eq!(account_name.as_deref(), Some("TestUser"));
 
         let world_name: String = conn
@@ -1118,9 +1125,7 @@ mod tests {
         assert_eq!(count, 1);
 
         let service_name: String = conn
-            .query_row("SELECT service_name FROM osc LIMIT 1", [], |row| {
-                row.get(0)
-            })
+            .query_row("SELECT service_name FROM osc LIMIT 1", [], |row| row.get(0))
             .unwrap();
         assert_eq!(service_name, "OyasumiVR");
     }
@@ -1193,11 +1198,9 @@ mod tests {
         assert_eq!(count, 1);
 
         let notif_type: String = conn
-            .query_row(
-                "SELECT notif_type FROM notifications LIMIT 1",
-                [],
-                |row| row.get(0),
-            )
+            .query_row("SELECT notif_type FROM notifications LIMIT 1", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         assert_eq!(notif_type, "invite");
     }
@@ -1261,15 +1264,33 @@ mod tests {
     #[test]
     fn collect_log_files_finds_matching_archives() {
         let dir = tempfile::tempdir().unwrap();
-        fs::write(dir.path().join("output_log_2025-04-30.txt.tar.zst"), b"dummy").unwrap();
-        fs::write(dir.path().join("output_log_2025-05-01.txt.tar.zst"), b"dummy").unwrap();
+        fs::write(
+            dir.path().join("output_log_2025-04-30.txt.tar.zst"),
+            b"dummy",
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("output_log_2025-05-01.txt.tar.zst"),
+            b"dummy",
+        )
+        .unwrap();
         fs::write(dir.path().join("random_file.tar.zst"), b"dummy").unwrap();
         fs::write(dir.path().join("output_log_2025-05-02.txt"), b"dummy").unwrap();
 
         let files = collect_log_files(dir.path());
         assert_eq!(files.len(), 2);
-        assert!(files[0].file_name().unwrap().to_str().unwrap().contains("04-30"));
-        assert!(files[1].file_name().unwrap().to_str().unwrap().contains("05-01"));
+        assert!(files[0]
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("04-30"));
+        assert!(files[1]
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("05-01"));
     }
 
     #[test]

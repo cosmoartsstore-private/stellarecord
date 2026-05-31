@@ -135,6 +135,8 @@ export default tseslint.config(
     ignores: [
       'dist/**',
       'target/**',
+      'coverage/**',
+      '.claude/**',
       'src-tauri/gen/**',
       'src-tauri/tauri.conf.json',
       'tauri.conf.json',

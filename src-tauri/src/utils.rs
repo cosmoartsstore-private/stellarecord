@@ -95,7 +95,9 @@ pub fn get_component_install_dir(component_name: &str) -> Option<PathBuf> {
     let path: String = match key.get_value("InstallLocation") {
         Ok(path) => path,
         Err(err) => {
-            eprintln!("[WARN] レジストリ値を読み取れませんでした [{key_path}\\InstallLocation]: {err}");
+            eprintln!(
+                "[WARN] レジストリ値を読み取れませんでした [{key_path}\\InstallLocation]: {err}"
+            );
             return None;
         }
     };
@@ -306,7 +308,8 @@ mod tests {
     #[test]
     fn component_install_dir_returns_none_for_nonexistent_path() {
         let (key, _guard) = create_test_key("install_nodir");
-        key.set_value("InstallLocation", &r"Z:\does\not\exist\at\all").unwrap();
+        key.set_value("InstallLocation", &r"Z:\does\not\exist\at\all")
+            .unwrap();
 
         let result = get_component_install_dir("_Test_install_nodir");
         assert!(result.is_none());
@@ -343,7 +346,8 @@ mod tests {
         append_log_to(dir.path(), "ERROR", "2行目").unwrap();
 
         let month = Local::now().format("%Y-%m");
-        let content = std::fs::read_to_string(dir.path().join(format!("info-{month}.log"))).unwrap();
+        let content =
+            std::fs::read_to_string(dir.path().join(format!("info-{month}.log"))).unwrap();
         let lines: Vec<&str> = content.lines().collect();
         assert_eq!(lines.len(), 2);
         assert!(lines[0].contains("1行目"));
@@ -356,4 +360,3 @@ mod tests {
         assert!(result.is_err());
     }
 }
-

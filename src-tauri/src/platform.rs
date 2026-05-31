@@ -146,7 +146,9 @@ fn extract_icon_jumbo(exe_path: &Path) -> Option<Vec<u8>> {
     use windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES;
     use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
     use windows::Win32::UI::Controls::IImageList;
-    use windows::Win32::UI::Shell::{SHGetFileInfoW, SHGetImageList, SHFILEINFOW, SHGFI_SYSICONINDEX};
+    use windows::Win32::UI::Shell::{
+        SHGetFileInfoW, SHGetImageList, SHFILEINFOW, SHGFI_SYSICONINDEX,
+    };
     use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, HICON};
 
     let wide_path: Vec<u16> = exe_path
@@ -185,7 +187,9 @@ fn extract_icon_jumbo(exe_path: &Path) -> Option<Vec<u8>> {
     })();
 
     if com_ok {
-        unsafe { CoUninitialize(); }
+        unsafe {
+            CoUninitialize();
+        }
     }
     result
 }
@@ -392,9 +396,8 @@ pub fn read_exe_display_name(exe_path: &Path) -> Option<String> {
         if !result.as_bool() || value_ptr.is_null() || value_len == 0 {
             return None;
         }
-        let slice = unsafe {
-            std::slice::from_raw_parts(value_ptr.cast::<u16>(), value_len as usize)
-        };
+        let slice =
+            unsafe { std::slice::from_raw_parts(value_ptr.cast::<u16>(), value_len as usize) };
         // 末尾の NUL を除去
         let trimmed = match slice.iter().position(|c| *c == 0) {
             Some(pos) => &slice[..pos],
@@ -450,10 +453,9 @@ pub fn pick_exe_file_dialog() -> Result<Option<String>, String> {
     }
 
     let result = (|| -> Result<Option<String>, String> {
-        let dialog: IFileOpenDialog = unsafe {
-            CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER)
-        }
-        .map_err(|e| format!("ファイルダイアログを作成できませんでした: {e}"))?;
+        let dialog: IFileOpenDialog =
+            unsafe { CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER) }
+                .map_err(|e| format!("ファイルダイアログを作成できませんでした: {e}"))?;
 
         let filter_name = HSTRING::from("実行ファイル (*.exe)");
         let filter_spec = HSTRING::from("*.exe");
@@ -548,9 +550,7 @@ pub fn pick_log_files_dialog() -> Result<Vec<String>, String> {
                     .SetFileTypes(&filters)
                     .map_err(|e| format!("フィルター設定に失敗しました: {e}"))?;
                 dialog
-                    .SetOptions(
-                        FOS_ALLOWMULTISELECT | FOS_FILEMUSTEXIST | FOS_PATHMUSTEXIST,
-                    )
+                    .SetOptions(FOS_ALLOWMULTISELECT | FOS_FILEMUSTEXIST | FOS_PATHMUSTEXIST)
                     .map_err(|e| format!("オプション設定に失敗しました: {e}"))?;
             }
 
@@ -630,7 +630,8 @@ mod tests {
     #[test]
     fn apply_startup_value_removes_existing() {
         let (key, _guard) = create_test_run_key("remove");
-        key.set_value("StellaRecordTest", &"\"C:\\app\\test.exe\"").unwrap();
+        key.set_value("StellaRecordTest", &"\"C:\\app\\test.exe\"")
+            .unwrap();
 
         apply_startup_value(&key, "StellaRecordTest", None).unwrap();
 
