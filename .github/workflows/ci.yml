@@ -22,7 +22,7 @@ jobs:
       run:
         working-directory: src-tauri
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # rust-toolchain.toml で 1.93.0 + clippy/rustfmt + MSVC target がピン留めされている。
       # rustup が自動でその toolchain を導入する。
@@ -48,10 +48,10 @@ jobs:
     name: Frontend (Node)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm
