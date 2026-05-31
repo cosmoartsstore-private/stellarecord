@@ -1257,4 +1257,30 @@ mod tests {
             .unwrap();
         assert!(first_leave.is_some());
     }
+
+    #[test]
+    fn collect_log_files_finds_matching_archives() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("output_log_2025-04-30.txt.tar.zst"), b"dummy").unwrap();
+        fs::write(dir.path().join("output_log_2025-05-01.txt.tar.zst"), b"dummy").unwrap();
+        fs::write(dir.path().join("random_file.tar.zst"), b"dummy").unwrap();
+        fs::write(dir.path().join("output_log_2025-05-02.txt"), b"dummy").unwrap();
+
+        let files = collect_log_files(dir.path());
+        assert_eq!(files.len(), 2);
+        assert!(files[0].file_name().unwrap().to_str().unwrap().contains("04-30"));
+        assert!(files[1].file_name().unwrap().to_str().unwrap().contains("05-01"));
+    }
+
+    #[test]
+    fn collect_log_files_empty_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(collect_log_files(dir.path()).is_empty());
+    }
+
+    #[test]
+    fn collect_log_files_nonexistent_dir() {
+        let path = Path::new("/nonexistent/stellarecord/test/dir");
+        assert!(collect_log_files(path).is_empty());
+    }
 }

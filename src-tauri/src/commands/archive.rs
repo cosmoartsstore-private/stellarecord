@@ -1289,3 +1289,160 @@ pub fn delete_source_logs(file_names: Vec<String>) -> Result<usize, String> {
 
     Ok(deleted_count)
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    // ── classify_log_level ──
+
+    #[test]
+    fn classify_plain_line() {
+        assert_eq!(classify_log_level("2025.04.30 20:00:00 Log        -  some message"), "plain");
+    }
+
+    #[test]
+    fn classify_error_line() {
+        assert_eq!(classify_log_level("2025.04.30 20:00:00 Error      -  something broke"), "error");
+        assert_eq!(classify_log_level("some Error in the line"), "error");
+    }
+
+    #[test]
+    fn classify_warning_line() {
+        assert_eq!(classify_log_level("2025.04.30 20:00:00 Warning    -  degraded"), "warning");
+        assert_eq!(classify_log_level("some Warning about X"), "warning");
+    }
+
+    #[test]
+    fn classify_debug_line() {
+        assert_eq!(classify_log_level("2025.04.30 20:00:00 Debug      -  internal"), "debug");
+        assert_eq!(classify_log_level("[UserInfoLogger] Environment Info: stuff"), "debug");
+        assert_eq!(classify_log_level("[UserInfoLogger] User Settings Info: stuff"), "debug");
+        assert_eq!(classify_log_level("Microphones installed (3)"), "debug");
+    }
+
+    // ── collect_source_logs ──
+
+    #[test]
+    fn collect_source_logs_filters_correctly() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("output_log_2025-04-30.txt"), b"log1").unwrap();
+        fs::write(dir.path().join("output_log_2025-05-01.txt"), b"log2").unwrap();
+        fs::write(dir.path().join("other_file.txt"), b"nope").unwrap();
+        fs::write(dir.path().join("output_log_2025-05-02.log"), b"wrong ext").unwrap();
+
+        let logs = collect_source_logs(dir.path()).unwrap();
+        assert_eq!(logs.len(), 2);
+        assert!(logs[0].file_name().unwrap().to_str().unwrap().contains("04-30"));
+        assert!(logs[1].file_name().unwrap().to_str().unwrap().contains("05-01"));
+    }
+
+    #[test]
+    fn collect_source_logs_returns_sorted() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("output_log_2025-05-03.txt"), b"c").unwrap();
+        fs::write(dir.path().join("output_log_2025-05-01.txt"), b"a").unwrap();
+        fs::write(dir.path().join("output_log_2025-05-02.txt"), b"b").unwrap();
+
+        let logs = collect_source_logs(dir.path()).unwrap();
+        let names: Vec<_> = logs.iter().map(|p| p.file_name().unwrap().to_str().unwrap().to_string()).collect();
+        assert_eq!(names, vec![
+            "output_log_2025-05-01.txt",
+            "output_log_2025-05-02.txt",
+            "output_log_2025-05-03.txt",
+        ]);
+    }
+
+    // ── compress_single_file ──
+
+    #[test]
+    fn compress_and_verify_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("output_log_2025-04-30.txt");
+        let dst = dir.path().join("output_log_2025-04-30.txt.tar.zst");
+
+        let original_content = "2025.04.30 20:00:00 Log - VRChat starting\n2025.04.30 20:01:00 Log - User Authenticated\n";
+        fs::write(&src, original_content).unwrap();
+
+        compress_single_file(&src, &dst).unwrap();
+        assert!(dst.exists());
+        assert!(dst.metadata().unwrap().len() > 0);
+
+        let archive_file = fs::File::open(&dst).unwrap();
+        let decoder = zstd::stream::Decoder::new(archive_file).unwrap();
+        let mut archive = tar::Archive::new(decoder);
+        let mut entries = archive.entries().unwrap();
+        let entry = entries.next().unwrap().unwrap();
+
+        assert_eq!(entry.header().size().unwrap(), original_content.len() as u64);
+        let entry_path = entry.path().unwrap();
+        assert_eq!(entry_path.to_str().unwrap(), "output_log_2025-04-30.txt");
+    }
+
+    // ── build_archive_sync_plan ──
+
+    #[test]
+    fn sync_plan_create_when_no_archive_exists() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("output_log_2025-04-30.txt");
+        let archive_dir = dir.path().join("archive");
+        fs::create_dir(&archive_dir).unwrap();
+        fs::write(&src, "log content").unwrap();
+
+        let plan = build_archive_sync_plan(&src, &archive_dir).unwrap();
+        assert!(plan.is_some());
+        assert!(matches!(plan.unwrap().mode, ArchiveSyncMode::Create));
+    }
+
+    #[test]
+    fn sync_plan_skip_when_source_unchanged() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("output_log_2025-04-30.txt");
+        let archive_dir = dir.path().join("archive");
+        fs::create_dir(&archive_dir).unwrap();
+
+        let content = "same content in both";
+        fs::write(&src, content).unwrap();
+        compress_single_file(&src, &archive_dir.join("output_log_2025-04-30.txt.tar.zst")).unwrap();
+
+        let plan = build_archive_sync_plan(&src, &archive_dir).unwrap();
+        assert!(plan.is_none(), "identical source and archive should skip");
+    }
+
+    #[test]
+    fn sync_plan_replace_when_source_extended() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("output_log_2025-04-30.txt");
+        let archive_dir = dir.path().join("archive");
+        fs::create_dir(&archive_dir).unwrap();
+
+        let short_content = "first line\n";
+        fs::write(&src, short_content).unwrap();
+        compress_single_file(&src, &archive_dir.join("output_log_2025-04-30.txt.tar.zst")).unwrap();
+
+        let extended_content = "first line\nsecond line\n";
+        fs::write(&src, extended_content).unwrap();
+
+        let plan = build_archive_sync_plan(&src, &archive_dir).unwrap();
+        assert!(plan.is_some());
+        assert!(matches!(plan.unwrap().mode, ArchiveSyncMode::Replace));
+    }
+
+    #[test]
+    fn sync_plan_skip_when_source_shorter() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("output_log_2025-04-30.txt");
+        let archive_dir = dir.path().join("archive");
+        fs::create_dir(&archive_dir).unwrap();
+
+        let long_content = "long content here\n";
+        fs::write(&src, long_content).unwrap();
+        compress_single_file(&src, &archive_dir.join("output_log_2025-04-30.txt.tar.zst")).unwrap();
+
+        fs::write(&src, "short").unwrap();
+
+        let plan = build_archive_sync_plan(&src, &archive_dir).unwrap();
+        assert!(plan.is_none(), "shorter source should be skipped for safety");
+    }
+}
