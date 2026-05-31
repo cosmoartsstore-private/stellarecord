@@ -215,6 +215,162 @@ pub fn load_registry_catalog() -> RegistryCatalog {
     catalog
 }
 
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    /// テスト終了時にレジストリキーを自動削除する RAII ガード。
+    struct TestRegGuard(String);
+    impl Drop for TestRegGuard {
+        fn drop(&mut self) {
+            let _ = RegKey::predef(HKEY_CURRENT_USER).delete_subkey_all(&self.0);
+        }
+    }
+
+    fn create_test_key(suffix: &str) -> (RegKey, TestRegGuard) {
+        let path = format!("Software\\CosmoArtsStore\\_Test_{suffix}");
+        let root = RegKey::predef(HKEY_CURRENT_USER);
+        let (key, _) = root.create_subkey(&path).unwrap();
+        (key, TestRegGuard(path))
+    }
+
+    // ── open_key / create_key ──
+
+    #[test]
+    fn open_key_returns_none_for_missing() {
+        assert!(open_key("Software\\CosmoArtsStore\\_Test_missing_99999").is_none());
+    }
+
+    #[test]
+    fn create_key_and_open_key_roundtrip() {
+        let path = "Software\\CosmoArtsStore\\_Test_create_open";
+        let _guard = TestRegGuard(path.to_string());
+
+        let key = create_key(path).unwrap();
+        key.set_value("Marker", &"ok").unwrap();
+
+        let opened = open_key(path);
+        assert!(opened.is_some());
+        let val: String = opened.unwrap().get_value("Marker").unwrap();
+        assert_eq!(val, "ok");
+    }
+
+    // ── read_str / read_u64 / read_bool ──
+
+    #[test]
+    fn read_str_returns_value() {
+        let (key, _guard) = create_test_key("read_str");
+        key.set_value("Name", &"hello").unwrap();
+        assert_eq!(read_str(&key, "Name"), "hello");
+    }
+
+    #[test]
+    fn read_str_returns_empty_when_missing() {
+        let (key, _guard) = create_test_key("read_str_miss");
+        assert_eq!(read_str(&key, "NoSuchValue"), "");
+    }
+
+    #[test]
+    fn read_u64_returns_value() {
+        let (key, _guard) = create_test_key("read_u64");
+        key.set_value("Capacity", &314_572_800u64).unwrap();
+        assert_eq!(read_u64(&key, "Capacity", 0), 314_572_800);
+    }
+
+    #[test]
+    fn read_u64_returns_default_when_missing() {
+        let (key, _guard) = create_test_key("read_u64_miss");
+        assert_eq!(read_u64(&key, "NoSuchValue", 42), 42);
+    }
+
+    #[test]
+    fn read_bool_true() {
+        let (key, _guard) = create_test_key("read_bool_t");
+        key.set_value("Flag", &1u32).unwrap();
+        assert!(read_bool(&key, "Flag", false));
+    }
+
+    #[test]
+    fn read_bool_false() {
+        let (key, _guard) = create_test_key("read_bool_f");
+        key.set_value("Flag", &0u32).unwrap();
+        assert!(!read_bool(&key, "Flag", true));
+    }
+
+    #[test]
+    fn read_bool_default_when_missing() {
+        let (key, _guard) = create_test_key("read_bool_miss");
+        assert!(read_bool(&key, "NoSuchValue", true));
+        assert!(!read_bool(&key, "NoSuchValue", false));
+    }
+
+    // ── save/load roundtrip (テスト専用キーパスで実行) ──
+
+    #[test]
+    fn polaris_setting_save_load_roundtrip() {
+        let test_path = "Software\\CosmoArtsStore\\_Test_Polaris_RT";
+        let _guard = TestRegGuard(test_path.to_string());
+
+        let setting = PolarisSetting {
+            archive_path: r"F:\planetes-atelier\software\AppTest\archive".to_string(),
+            capacity_threshold_bytes: 1_073_741_824,
+        };
+
+        let key = create_key(test_path).unwrap();
+        key.set_value("ArchivePath", &setting.archive_path).unwrap();
+        key.set_value("CapacityThresholdBytes", &setting.capacity_threshold_bytes).unwrap();
+
+        let loaded_path: String = key.get_value("ArchivePath").unwrap();
+        let loaded_cap: u64 = key.get_value("CapacityThresholdBytes").unwrap();
+        assert_eq!(loaded_path, setting.archive_path);
+        assert_eq!(loaded_cap, 1_073_741_824);
+    }
+
+    #[test]
+    fn stellarecord_setting_save_load_roundtrip() {
+        let test_path = "Software\\CosmoArtsStore\\_Test_SR_RT";
+        let _guard = TestRegGuard(test_path.to_string());
+
+        let key = create_key(test_path).unwrap();
+        key.set_value("ArchivePath", &r"F:\planetes-atelier\software\AppTest\archive").unwrap();
+        key.set_value("DbPath", &r"F:\planetes-atelier\software\AppTest\db\test.db").unwrap();
+        key.set_value("EnableStartup", &1u32).unwrap();
+        key.set_value("StartupPreferenceSet", &1u32).unwrap();
+
+        assert_eq!(read_str(&key, "ArchivePath"), r"F:\planetes-atelier\software\AppTest\archive");
+        assert_eq!(read_str(&key, "DbPath"), r"F:\planetes-atelier\software\AppTest\db\test.db");
+        assert!(read_bool(&key, "EnableStartup", false));
+        assert!(read_bool(&key, "StartupPreferenceSet", false));
+    }
+
+    // ── StellaRecordSetting パス解決 ──
+
+    #[test]
+    fn effective_archive_dir_uses_explicit_path() {
+        let setting = StellaRecordSetting {
+            archive_path: r"F:\planetes-atelier\software\AppTest\archive".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(
+            setting.get_effective_archive_dir(),
+            Some(PathBuf::from(r"F:\planetes-atelier\software\AppTest\archive"))
+        );
+    }
+
+    #[test]
+    fn effective_db_path_uses_explicit_path() {
+        let setting = StellaRecordSetting {
+            db_path: r"F:\planetes-atelier\software\AppTest\db\test.db".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(
+            setting.get_effective_db_path(),
+            Some(PathBuf::from(r"F:\planetes-atelier\software\AppTest\db\test.db"))
+        );
+    }
+}
+
 impl StellaRecordSetting {
     /// `StellaRecord` が管理する圧縮ログアーカイブのディレクトリを解決する。
     pub fn get_effective_archive_dir(&self) -> Option<PathBuf> {

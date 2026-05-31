@@ -219,8 +219,11 @@ pub fn emit_event_warn<T: serde::Serialize + Clone>(app: &AppHandle, event_name:
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+
+    // ── エラーフォーマッター ──
 
     #[test]
     fn command_err_formats_context_and_error() {
@@ -258,6 +261,56 @@ mod tests {
         let msg = command_remove_err(path, "in use");
         assert!(msg.contains("/old/file.log"));
         assert!(msg.contains("in use"));
+    }
+
+    // ── レジストリ: get_component_install_dir ──
+
+    /// テスト終了時にレジストリキーを自動削除する RAII ガード。
+    struct TestRegGuard(String);
+    impl Drop for TestRegGuard {
+        fn drop(&mut self) {
+            let _ = RegKey::predef(HKEY_CURRENT_USER).delete_subkey_all(&self.0);
+        }
+    }
+
+    fn create_test_key(suffix: &str) -> (RegKey, TestRegGuard) {
+        let path = format!("Software\\CosmoArtsStore\\_Test_{suffix}");
+        let root = RegKey::predef(HKEY_CURRENT_USER);
+        let (key, _) = root.create_subkey(&path).unwrap();
+        (key, TestRegGuard(path))
+    }
+
+    #[test]
+    fn component_install_dir_returns_path_when_valid() {
+        let (key, _guard) = create_test_key("install_valid");
+        let test_dir = r"F:\planetes-atelier\software\AppTest";
+        key.set_value("InstallLocation", &test_dir).unwrap();
+
+        let result = get_component_install_dir("_Test_install_valid");
+        assert_eq!(result, Some(PathBuf::from(test_dir)));
+    }
+
+    #[test]
+    fn component_install_dir_returns_none_for_missing_key() {
+        let result = get_component_install_dir("_Test_nonexistent_key_12345");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn component_install_dir_returns_none_for_nonexistent_path() {
+        let (key, _guard) = create_test_key("install_nodir");
+        key.set_value("InstallLocation", &r"Z:\does\not\exist\at\all").unwrap();
+
+        let result = get_component_install_dir("_Test_install_nodir");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn component_install_dir_returns_none_when_value_missing() {
+        let (_key, _guard) = create_test_key("install_noval");
+
+        let result = get_component_install_dir("_Test_install_noval");
+        assert!(result.is_none());
     }
 }
 
