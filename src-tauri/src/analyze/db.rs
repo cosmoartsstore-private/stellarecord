@@ -373,4 +373,66 @@ mod tests {
         init_main_db(&conn).unwrap();
         migrate_apps_unique_to_path(&conn).unwrap();
     }
+
+    #[test]
+    fn drop_legacy_apps_category_removes_column() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE apps (
+                id INTEGER PRIMARY KEY, name TEXT, description TEXT DEFAULT '',
+                path TEXT UNIQUE, icon BLOB, category TEXT,
+                registered_at DATETIME DEFAULT (datetime('now','localtime'))
+            );
+            INSERT INTO apps (name, path, category) VALUES ('TestApp', '/test', 'thirdparty');",
+        )
+        .unwrap();
+
+        drop_legacy_apps_category(&conn).unwrap();
+
+        let has_category: bool = conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM pragma_table_info('apps') WHERE name = 'category')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(!has_category, "category column should be removed");
+
+        let name: String = conn
+            .query_row("SELECT name FROM apps WHERE path = '/test'", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(name, "TestApp", "existing data should survive migration");
+    }
+
+    #[test]
+    fn migrate_apps_unique_moves_constraint_to_path() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE apps (
+                id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL,
+                description TEXT DEFAULT '', path TEXT NOT NULL, icon BLOB,
+                registered_at DATETIME DEFAULT (datetime('now','localtime'))
+            );
+            INSERT INTO apps (name, path) VALUES ('App1', '/path/a');
+            INSERT INTO apps (name, path) VALUES ('App2', '/path/b');",
+        )
+        .unwrap();
+
+        migrate_apps_unique_to_path(&conn).unwrap();
+
+        let dup_name = conn.execute(
+            "INSERT INTO apps (name, path) VALUES ('App1', '/path/c')", [],
+        );
+        assert!(dup_name.is_ok(), "duplicate name should now be allowed");
+
+        let dup_path = conn.execute(
+            "INSERT INTO apps (name, path) VALUES ('App3', '/path/a')", [],
+        );
+        assert!(dup_path.is_err(), "duplicate path should be rejected after migration");
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM apps", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 3, "original rows + new name-dup row should exist");
+    }
 }
