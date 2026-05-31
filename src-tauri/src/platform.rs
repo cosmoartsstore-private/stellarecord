@@ -674,4 +674,30 @@ mod tests {
             assert!(!result.unwrap().is_empty());
         }
     }
+
+    // ── launch_external_process ──
+
+    #[test]
+    fn launch_external_process_errors_on_missing_exe() {
+        // 存在しない実行ファイルの起動はエラーを返す（プロセスは生成されない）。
+        let result = launch_external_process("Z:\\nonexistent\\never_here.exe");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("起動に失敗しました"));
+    }
+
+    // ── extract_exe_icon_png ──
+
+    #[test]
+    fn extract_icon_produces_valid_png() {
+        // 実在するシステム exe からアイコンを抽出し、PNG として正しくエンコードされることを確認。
+        // COM/シェル API が利用できない環境では None になり得るため、取得できた場合のみ検証する。
+        let notepad = Path::new("C:\\Windows\\System32\\notepad.exe");
+        if notepad.exists() {
+            if let Some(png) = extract_exe_icon_png(notepad) {
+                // PNG シグネチャ: 89 50 4E 47 0D 0A 1A 0A
+                assert!(png.len() > 8);
+                assert_eq!(&png[..8], &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+            }
+        }
+    }
 }
