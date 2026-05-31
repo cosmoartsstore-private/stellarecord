@@ -395,7 +395,7 @@ where
         .commit()
         .map_err(|e| analyze_err("メイン DB 反映を確定できませんでした", e))?;
 
-    progress_callback("処理完了".to_string(), format!("{total}/{total}"));
+    progress_callback("処理完了".to_string(), format_progress_fraction(total, total));
     Ok(())
 }
 
@@ -868,14 +868,14 @@ where
         if already_processed {
             progress_callback(
                 format!("スキップ（DB登録済み）: {filename}"),
-                format!("{}/{}", index + 1, total),
+                format_progress_fraction(index + 1, total),
             );
             continue;
         }
 
         progress_callback(
             format!("処理中: {filename}"),
-            format!("{}/{}", index + 1, total),
+            format_progress_fraction(index + 1, total),
         );
 
         let main_sp = main_tx
@@ -895,7 +895,7 @@ where
                     .map_err(|e| analyze_err("メイン DB savepoint を確定できませんでした", e))?;
                 progress_callback(
                     format!("取り込み完了: {filename}"),
-                    format!("{}/{}", index + 1, total),
+                    format_progress_fraction(index + 1, total),
                 );
             }
             Err(err) if err.to_string() == ANALYZE_CANCELED_MESSAGE => {
