@@ -11,7 +11,7 @@ use rusqlite::{Connection, Result};
 /// セッション単位のイベントストリームを所有する。`apps` テーブルは
 /// `VRChat` とは無関係で、STELLA エコシステム内の外部アプリがランチャー UI に
 /// 自己登録するエントリを格納する。
-pub const MAIN_SCHEMA: &str = "
+const MAIN_SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS sessions (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     log_name        TEXT UNIQUE NOT NULL,
@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS apps (
 /// `visit_summary` はワールド訪問ごとの滞在時間とプレイヤー数を算出し、
 /// フロントエンドでの再計算を不要にする。
 /// `with_users_detail` / `screenshots_detail` は関連テーブルを結合した詳細ビュー。
-pub const MAIN_VIEWS: &str = "
+const MAIN_VIEWS: &str = "
 CREATE VIEW IF NOT EXISTS visit_summary AS
 SELECT
     v.id               AS visit_id,

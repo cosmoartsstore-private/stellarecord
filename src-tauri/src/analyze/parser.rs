@@ -141,9 +141,8 @@ pub static RE_OSC_FOUND: LazyLock<Regex> = LazyLock::new(|| {
     )
 });
 
-
 /// 括弧で囲まれた汎用 `usr_...` 識別子にマッチする。
-pub static RE_USR: LazyLock<Regex> = LazyLock::new(|| compile_regex(r"\((usr_[^)]+)\)", "RE_USR"));
+static RE_USR: LazyLock<Regex> = LazyLock::new(|| compile_regex(r"\((usr_[^)]+)\)", "RE_USR"));
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]

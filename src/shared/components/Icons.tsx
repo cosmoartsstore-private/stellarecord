@@ -42,7 +42,6 @@ type StellaIconName = (typeof stellaIconNames)[keyof typeof stellaIconNames];
 /** アイコンサイズ用の共有CSSクラスプリセット */
 const stellaIconClassNames = {
   base: 'icon-svg',
-  small: 'icon-svg',
 } as const;
 
 /** 名前をキーとするアイコン定義の完全レジストリ */

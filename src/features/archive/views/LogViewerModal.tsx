@@ -154,7 +154,6 @@ export function LogViewerModal({
     virtualizer.measure();
   }, [zoomLevel, virtualizer]);
 
-
   const zoomFontSize = `${(0.8 * zoomLevel).toFixed(2)}rem`;
 
   /** カテゴリ/レベル色分けとキーワードハイライト付きで1行を描画する */

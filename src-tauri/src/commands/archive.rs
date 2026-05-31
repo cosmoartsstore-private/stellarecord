@@ -457,27 +457,27 @@ struct DbKeywordMarker {
 }
 
 /// 生ログ行を粗いビューア重要度レベルに分類する。
-fn classify_log_level(line: &str) -> String {
+fn classify_log_level(line: &str) -> &'static str {
     if line.contains("[UserInfoLogger] Environment Info:") {
-        return "debug".to_string();
+        return "debug";
     }
     if line.contains("[UserInfoLogger] User Settings Info:") {
-        return "debug".to_string();
+        return "debug";
     }
     if line.contains("Microphones installed (") {
-        return "debug".to_string();
+        return "debug";
     }
     if line.contains(" Error ") || line.contains("Error      -") {
-        return "error".to_string();
+        return "error";
     }
     if line.contains(" Warning ") || line.contains("Warning    -") {
-        return "warning".to_string();
+        return "warning";
     }
     if line.contains(" Debug ") || line.contains("Debug      -") {
-        return "debug".to_string();
+        return "debug";
     }
 
-    "plain".to_string()
+    "plain"
 }
 
 /// 正規化されたデータベース行からタイムスタンプ→カテゴリのマッピングを収集する。
@@ -820,7 +820,7 @@ fn emit_log_viewer_chunks(
             active_range.as_ref().map(|b| b.kind),
             Some(RangeBlockKind::DebugSystem)
         ) {
-            "debug".to_string()
+            "debug"
         } else {
             classify_log_level(&line)
         };

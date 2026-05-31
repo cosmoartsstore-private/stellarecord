@@ -76,7 +76,6 @@ const WITH_USERS_DETAIL_COLUMNS: &[ColumnComment] = &[
     ColumnComment { name: "leave_time", label: "Leave時刻", description: "そのプレイヤーを観測しなくなった時刻" },
 ];
 
-
 const VISIT_SUMMARY_COLUMNS: &[ColumnComment] = &[
     ColumnComment { name: "visit_id", label: "ID", description: "ワールド訪問の内部ID" },
     ColumnComment { name: "world_name", label: "ワールド名", description: "訪問先ワールドの表示名" },
