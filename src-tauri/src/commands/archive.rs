@@ -54,6 +54,8 @@ fn open_source_log_for_read(path: &Path) -> Result<fs::File, String> {
 ///
 /// tar でラップすることで元のファイル名が保持され、圧縮後も後続の
 /// インポートやログビューアフローがソース名を使い続けられる。
+/// zstd レベル 3 は圧縮速度と圧縮率のバランスに優れ、テキストログに対して
+/// 十分な圧縮率を達成しつつリアルタイム同期を妨げない。
 fn compress_single_file(src: &Path, dst: &Path) -> Result<(), String> {
     let output = fs::File::create(dst).map_err(|err| utils::command_create_err(dst, err))?;
     let encoder = zstd::stream::Encoder::new(output, 3)
@@ -163,7 +165,8 @@ fn streaming_prefix_equal(
 /// ソースログ1件に新規または更新 `.tar.zst` アーカイブが必要か計画する。
 ///
 /// 既存アーカイブはソースログがアーカイブ済みバイト列を厳密に拡張している
-/// 場合のみ置き換える。履歴が乖離している場合は警告をログに記録しスキップする。
+/// 場合のみ置き換える。ログの先頭が書き換わっている場合はデータ破損の
+/// 可能性があるため安全側に倒してスキップし、警告をログに記録する。
 fn build_archive_sync_plan(
     source_path: &Path,
     archive_store_dir: &Path,

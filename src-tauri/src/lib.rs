@@ -24,6 +24,10 @@ use std::sync::Arc;
 use tauri::{WebviewUrl, WebviewWindowBuilder};
 
 /// 長時間実行される解析タスクで共有するキャンセルフラグ。
+///
+/// フロントエンドのキャンセルボタンとワーカースレッドの間を `AtomicBool` で
+/// 橋渡しする。チャネルや非同期ランタイムを介さずに済む最もシンプルな
+/// クロススレッドキャンセルパターン。
 pub struct AnalyzeCancelStatus(pub Arc<AtomicBool>);
 
 /// `StellaRecord` Tauri アプリケーションを構築し実行する。

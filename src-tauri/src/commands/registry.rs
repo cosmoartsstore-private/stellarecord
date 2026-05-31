@@ -38,6 +38,9 @@ pub fn extract_exe_display_name(path: String) -> Result<String, String> {
 }
 
 /// 任意の exe をランチャーに登録する。
+///
+/// exe のアイコンを自動抽出して DB に保存し、ランチャー一覧に表示する。
+/// `path` の UNIQUE 制約で同一 exe の重複登録を防ぐ。
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
 pub fn register_app(path: String, name: String, description: String) -> Result<(), String> {

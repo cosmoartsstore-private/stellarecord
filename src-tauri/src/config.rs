@@ -140,6 +140,10 @@ pub fn save_stellarecord_setting(setting: &StellaRecordSetting) -> Result<(), St
 }
 
 /// メインデータベースの `apps` テーブルからランチャーカタログを読み込む。
+///
+/// DB が存在しない場合やテーブル未作成の場合は空のカタログを返す。
+/// アイコン BLOB は Base64 にエンコードし、フロントエンドが `<img src>` で
+/// 直接使用できる形にする。
 pub fn load_registry_catalog() -> RegistryCatalog {
     let setting = load_stellarecord_setting();
     let Some(db_path) = setting.get_effective_db_path() else {
