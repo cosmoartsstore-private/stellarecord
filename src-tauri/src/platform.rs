@@ -94,13 +94,33 @@ pub fn set_startup_enabled(value_name: &str, enabled: bool) -> Result<(), String
         .map_err(|err| utils::command_err("Run キーを開けませんでした", err))?
         .0;
 
-    if enabled {
+    // 登録時のみ自身の実行ファイルパスを解決する（解除時は不要）。
+    let command = if enabled {
         let executable = std::env::current_exe().map_err(|err| {
             utils::command_err("自分自身の実行ファイルパスを取得できませんでした", err)
         })?;
-        let command = format!("\"{}\"", executable.display());
+        Some(format!("\"{}\"", executable.display()))
+    } else {
+        None
+    };
+
+    apply_startup_value(&run_key, value_name, command.as_deref())
+}
+
+/// Run キーに対するスタートアップ値の登録／解除を適用する。
+///
+/// Run キーと登録コマンドを引数で受け取ることで、実際の起動キーに触れず
+/// テスト専用キーで登録・解除・「値なし解除」の各分岐を検証できる。
+/// `command` が `Some` なら登録、`None` なら解除。解除時に値が存在しない場合は
+/// 正常終了として扱う（冪等な解除）。
+fn apply_startup_value(
+    run_key: &RegKey,
+    value_name: &str,
+    command: Option<&str>,
+) -> Result<(), String> {
+    if let Some(command) = command {
         run_key
-            .set_value(value_name, &command)
+            .set_value(value_name, &command.to_string())
             .map_err(|err| utils::command_err("自動起動の登録に失敗しました", err))?;
     } else if let Err(err) = run_key.delete_value(value_name) {
         if err.kind() != std::io::ErrorKind::NotFound {
@@ -573,5 +593,85 @@ pub fn pick_log_files_dialog() -> Result<Vec<String>, String> {
     #[cfg(not(windows))]
     {
         Err("このプラットフォームではファイル選択ダイアログを利用できません。".to_string())
+    }
+}
+
+#[cfg(all(test, windows))]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    /// テスト終了時にレジストリキーを自動削除する RAII ガード。
+    struct TestRegGuard(String);
+    impl Drop for TestRegGuard {
+        fn drop(&mut self) {
+            let _ = RegKey::predef(HKEY_CURRENT_USER).delete_subkey_all(&self.0);
+        }
+    }
+
+    fn create_test_run_key(suffix: &str) -> (RegKey, TestRegGuard) {
+        let path = format!("Software\\CosmoArtsStore\\_Test_Run_{suffix}");
+        let root = RegKey::predef(HKEY_CURRENT_USER);
+        let (key, _) = root.create_subkey(&path).unwrap();
+        (key, TestRegGuard(path))
+    }
+
+    // ── apply_startup_value（テスト専用 Run キーで検証。実起動キーには触れない） ──
+
+    #[test]
+    fn apply_startup_value_registers_command() {
+        let (key, _guard) = create_test_run_key("register");
+        apply_startup_value(&key, "StellaRecordTest", Some("\"C:\\app\\test.exe\"")).unwrap();
+
+        let stored: String = key.get_value("StellaRecordTest").unwrap();
+        assert_eq!(stored, "\"C:\\app\\test.exe\"");
+    }
+
+    #[test]
+    fn apply_startup_value_removes_existing() {
+        let (key, _guard) = create_test_run_key("remove");
+        key.set_value("StellaRecordTest", &"\"C:\\app\\test.exe\"").unwrap();
+
+        apply_startup_value(&key, "StellaRecordTest", None).unwrap();
+
+        let result: std::io::Result<String> = key.get_value("StellaRecordTest");
+        assert!(result.is_err(), "値は削除されているはず");
+    }
+
+    #[test]
+    fn apply_startup_value_remove_missing_is_idempotent() {
+        let (key, _guard) = create_test_run_key("remove_missing");
+        // 値が存在しない状態での解除はエラーにならない（冪等）
+        apply_startup_value(&key, "NeverRegistered", None).unwrap();
+    }
+
+    #[test]
+    fn apply_startup_value_overwrites() {
+        let (key, _guard) = create_test_run_key("overwrite");
+        apply_startup_value(&key, "App", Some("\"C:\\v1.exe\"")).unwrap();
+        apply_startup_value(&key, "App", Some("\"C:\\v2.exe\"")).unwrap();
+
+        let stored: String = key.get_value("App").unwrap();
+        assert_eq!(stored, "\"C:\\v2.exe\"");
+    }
+
+    // ── read_exe_display_name ──
+
+    #[test]
+    fn display_name_falls_back_to_file_stem() {
+        // バージョン情報を持たない（存在しない）パスはファイル名（拡張子なし）を返す。
+        let result = read_exe_display_name(Path::new("C:\\nonexistent\\MyCoolApp.exe"));
+        assert_eq!(result, Some("MyCoolApp".to_string()));
+    }
+
+    #[test]
+    fn display_name_reads_real_system_exe() {
+        // 実在するシステム exe からは表示名（FileDescription 等）が取得できる。
+        let notepad = Path::new("C:\\Windows\\System32\\notepad.exe");
+        if notepad.exists() {
+            let result = read_exe_display_name(notepad);
+            assert!(result.is_some());
+            assert!(!result.unwrap().is_empty());
+        }
     }
 }

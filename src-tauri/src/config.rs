@@ -85,7 +85,15 @@ pub struct RegistryCatalog {
 
 /// レジストリから Polaris 設定を読み込む。キーが存在しない場合はデフォルト値を返す。
 pub fn load_polaris_setting() -> PolarisSetting {
-    let Some(key) = open_key(POLARIS_KEY) else {
+    load_polaris_setting_from(POLARIS_KEY)
+}
+
+/// 指定されたレジストリキーパスから Polaris 設定を読み込む。
+///
+/// 本番では `POLARIS_KEY` を渡す。キーパスを引数化することで、本番キーと干渉せず
+/// テスト専用キーで読み込みロジックを検証できる。
+fn load_polaris_setting_from(key_path: &str) -> PolarisSetting {
+    let Some(key) = open_key(key_path) else {
         return PolarisSetting::default();
     };
 
@@ -100,7 +108,12 @@ pub fn load_polaris_setting() -> PolarisSetting {
 /// # Errors
 /// レジストリキーへの書き込みに失敗した場合にエラーを返す。
 pub fn save_polaris_setting(setting: &PolarisSetting) -> Result<(), String> {
-    let key = create_key(POLARIS_KEY)?;
+    save_polaris_setting_to(POLARIS_KEY, setting)
+}
+
+/// 指定されたレジストリキーパスに Polaris 設定を保存する。
+fn save_polaris_setting_to(key_path: &str, setting: &PolarisSetting) -> Result<(), String> {
+    let key = create_key(key_path)?;
     key.set_value("ArchivePath", &setting.archive_path)
         .map_err(|e| utils::command_err("ArchivePath の書き込みに失敗しました", e))?;
     key.set_value("CapacityThresholdBytes", &setting.capacity_threshold_bytes)
@@ -110,7 +123,12 @@ pub fn save_polaris_setting(setting: &PolarisSetting) -> Result<(), String> {
 
 /// レジストリから `StellaRecord` 設定を読み込む。キーが存在しない場合はデフォルト値を返す。
 pub fn load_stellarecord_setting() -> StellaRecordSetting {
-    let Some(key) = open_key(STELLA_RECORD_KEY) else {
+    load_stellarecord_setting_from(STELLA_RECORD_KEY)
+}
+
+/// 指定されたレジストリキーパスから `StellaRecord` 設定を読み込む。
+fn load_stellarecord_setting_from(key_path: &str) -> StellaRecordSetting {
+    let Some(key) = open_key(key_path) else {
         return StellaRecordSetting::default();
     };
 
@@ -127,7 +145,12 @@ pub fn load_stellarecord_setting() -> StellaRecordSetting {
 /// # Errors
 /// レジストリキーへの書き込みに失敗した場合にエラーを返す。
 pub fn save_stellarecord_setting(setting: &StellaRecordSetting) -> Result<(), String> {
-    let key = create_key(STELLA_RECORD_KEY)?;
+    save_stellarecord_setting_to(STELLA_RECORD_KEY, setting)
+}
+
+/// 指定されたレジストリキーパスに `StellaRecord` 設定を保存する。
+fn save_stellarecord_setting_to(key_path: &str, setting: &StellaRecordSetting) -> Result<(), String> {
+    let key = create_key(key_path)?;
     key.set_value("ArchivePath", &setting.archive_path)
         .map_err(|e| utils::command_err("ArchivePath の書き込みに失敗しました", e))?;
     key.set_value("DbPath", &setting.db_path)
@@ -150,12 +173,19 @@ pub fn load_registry_catalog() -> RegistryCatalog {
         utils::log_warn("レジストリ読み込み時にデータベースパスを取得できませんでした");
         return RegistryCatalog::default();
     };
+    load_catalog_from_db(&db_path)
+}
 
+/// 指定された DB パスから `apps` カタログを読み込む。
+///
+/// DB パスを引数化することで、レジストリ解決を経由せず一時 DB でカタログ読み込み
+/// （存在確認・BLOB の Base64 化・行マッピング）を検証できる。
+fn load_catalog_from_db(db_path: &std::path::Path) -> RegistryCatalog {
     if !db_path.exists() {
         return RegistryCatalog::default();
     }
 
-    let conn = match Connection::open(&db_path) {
+    let conn = match Connection::open(db_path) {
         Ok(c) => c,
         Err(err) => {
             utils::log_warn(&format!(
@@ -317,14 +347,18 @@ mod tests {
             capacity_threshold_bytes: 1_073_741_824,
         };
 
-        let key = create_key(test_path).unwrap();
-        key.set_value("ArchivePath", &setting.archive_path).unwrap();
-        key.set_value("CapacityThresholdBytes", &setting.capacity_threshold_bytes).unwrap();
+        save_polaris_setting_to(test_path, &setting).unwrap();
+        let loaded = load_polaris_setting_from(test_path);
 
-        let loaded_path: String = key.get_value("ArchivePath").unwrap();
-        let loaded_cap: u64 = key.get_value("CapacityThresholdBytes").unwrap();
-        assert_eq!(loaded_path, setting.archive_path);
-        assert_eq!(loaded_cap, 1_073_741_824);
+        assert_eq!(loaded.archive_path, setting.archive_path);
+        assert_eq!(loaded.capacity_threshold_bytes, 1_073_741_824);
+    }
+
+    #[test]
+    fn polaris_setting_load_missing_returns_default() {
+        let loaded = load_polaris_setting_from("Software\\CosmoArtsStore\\_Test_Polaris_Missing");
+        assert_eq!(loaded.archive_path, "");
+        assert_eq!(loaded.capacity_threshold_bytes, DEFAULT_CAPACITY);
     }
 
     #[test]
@@ -332,16 +366,74 @@ mod tests {
         let test_path = "Software\\CosmoArtsStore\\_Test_SR_RT";
         let _guard = TestRegGuard(test_path.to_string());
 
-        let key = create_key(test_path).unwrap();
-        key.set_value("ArchivePath", &r"F:\planetes-atelier\software\AppTest\archive").unwrap();
-        key.set_value("DbPath", &r"F:\planetes-atelier\software\AppTest\db\test.db").unwrap();
-        key.set_value("EnableStartup", &1u32).unwrap();
-        key.set_value("StartupPreferenceSet", &1u32).unwrap();
+        let setting = StellaRecordSetting {
+            archive_path: r"F:\planetes-atelier\software\AppTest\archive".to_string(),
+            db_path: r"F:\planetes-atelier\software\AppTest\db\test.db".to_string(),
+            enable_startup: true,
+            startup_preference_set: true,
+        };
 
-        assert_eq!(read_str(&key, "ArchivePath"), r"F:\planetes-atelier\software\AppTest\archive");
-        assert_eq!(read_str(&key, "DbPath"), r"F:\planetes-atelier\software\AppTest\db\test.db");
-        assert!(read_bool(&key, "EnableStartup", false));
-        assert!(read_bool(&key, "StartupPreferenceSet", false));
+        save_stellarecord_setting_to(test_path, &setting).unwrap();
+        let loaded = load_stellarecord_setting_from(test_path);
+
+        assert_eq!(loaded.archive_path, setting.archive_path);
+        assert_eq!(loaded.db_path, setting.db_path);
+        assert!(loaded.enable_startup);
+        assert!(loaded.startup_preference_set);
+    }
+
+    #[test]
+    fn stellarecord_setting_load_missing_returns_default() {
+        let loaded = load_stellarecord_setting_from("Software\\CosmoArtsStore\\_Test_SR_Missing");
+        assert_eq!(loaded.archive_path, "");
+        assert_eq!(loaded.db_path, "");
+        assert!(!loaded.enable_startup);
+        assert!(!loaded.startup_preference_set);
+    }
+
+    // ── load_catalog_from_db (一時 DB で検証) ──
+
+    #[test]
+    fn catalog_from_db_returns_empty_when_db_missing() {
+        let path = std::path::Path::new("Z:\\nonexistent\\catalog.db");
+        let catalog = load_catalog_from_db(path);
+        assert!(catalog.apps.is_empty());
+    }
+
+    #[test]
+    fn catalog_from_db_returns_empty_when_no_apps_table() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("empty.db");
+        Connection::open(&db_path).unwrap();
+        let catalog = load_catalog_from_db(&db_path);
+        assert!(catalog.apps.is_empty());
+    }
+
+    #[test]
+    fn catalog_from_db_reads_apps_with_base64_icon() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("catalog.db");
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE apps (
+                id INTEGER PRIMARY KEY, name TEXT NOT NULL, description TEXT DEFAULT '',
+                path TEXT UNIQUE, icon BLOB
+            );
+            INSERT INTO apps (name, description, path, icon)
+                VALUES ('Beta', 'second', '/b', NULL);
+            INSERT INTO apps (name, description, path, icon)
+                VALUES ('Alpha', 'first', '/a', x'89504E47');",
+        )
+        .unwrap();
+        drop(conn);
+
+        let catalog = load_catalog_from_db(&db_path);
+        assert_eq!(catalog.apps.len(), 2);
+        // ORDER BY name のため Alpha が先
+        assert_eq!(catalog.apps[0].name, "Alpha");
+        assert_eq!(catalog.apps[0].icon_data.as_deref(), Some("iVBORw==")); // base64(0x89504E47)
+        assert_eq!(catalog.apps[1].name, "Beta");
+        assert!(catalog.apps[1].icon_data.is_none());
     }
 
     // ── StellaRecordSetting パス解決 ──

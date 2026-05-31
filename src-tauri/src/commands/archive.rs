@@ -863,7 +863,7 @@ fn emit_log_viewer_chunks(
         }
 
         timestamps.push(timestamp);
-        levels.push(encode_log_level_u8(&level));
+        levels.push(encode_log_level_u8(level));
         categories.push(encode_log_category_u8(&category));
         raw_lines.push(line);
         highlights.push(highlight_text);

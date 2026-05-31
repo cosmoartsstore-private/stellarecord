@@ -325,7 +325,21 @@ pub fn get_db_table_data(
 ) -> Result<TableData, String> {
     let table_name = sanitize_table_name(table_name)?;
     let (conn, storage_label) = open_preview_database(table_name)?;
+    fetch_table_data(&conn, table_name, &storage_label, page, sort_column, sort_dir)
+}
 
+/// 開かれた接続から1テーブルのページネーション付きデータを取得する。
+///
+/// 接続を引数で受け取ることで、レジストリや実 DB ファイルを経由せず
+/// インメモリ DB に対してカウント・ソート・ページング・セル整形ロジックを検証できる。
+fn fetch_table_data(
+    conn: &rusqlite::Connection,
+    table_name: &str,
+    storage_label: &str,
+    page: Option<u32>,
+    sort_column: Option<String>,
+    sort_dir: Option<String>,
+) -> Result<TableData, String> {
     let total_rows: u32 = conn
         .query_row(
             &format!("SELECT COUNT(*) FROM {table_name}"),
@@ -403,10 +417,190 @@ pub fn get_db_table_data(
             || "テーブル説明は未登録です。".to_string(),
             |value| value.description.to_string(),
         ),
-        storage: table_comment.map_or(storage_label, |value| value.storage.to_string()),
+        storage: table_comment
+            .map_or_else(|| storage_label.to_string(), |value| value.storage.to_string()),
         columns,
         rows: result_rows,
         total_rows,
     })
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    // ── sanitize_table_name ──
+
+    #[test]
+    fn sanitize_accepts_valid_names() {
+        assert_eq!(sanitize_table_name("sessions").unwrap(), "sessions");
+        assert_eq!(sanitize_table_name("with_users_detail").unwrap(), "with_users_detail");
+        assert_eq!(sanitize_table_name("table1").unwrap(), "table1");
+    }
+
+    #[test]
+    fn sanitize_rejects_injection_attempts() {
+        assert!(sanitize_table_name("").is_err());
+        assert!(sanitize_table_name("users; DROP TABLE x").is_err());
+        assert!(sanitize_table_name("users--").is_err());
+        assert!(sanitize_table_name("users WHERE 1=1").is_err());
+        assert!(sanitize_table_name("テーブル").is_err());
+    }
+
+    // ── get_table_comment / get_column_comment ──
+
+    #[test]
+    fn table_comment_lookup() {
+        assert!(get_table_comment("sessions").is_some());
+        assert!(get_table_comment("nonexistent_table").is_none());
+    }
+
+    #[test]
+    fn column_comment_lookup() {
+        assert!(get_column_comment("sessions", "log_name").is_some());
+        assert!(get_column_comment("sessions", "no_such_column").is_none());
+        assert!(get_column_comment("no_such_table", "log_name").is_none());
+    }
+
+    // ── object_exists ──
+
+    #[test]
+    fn object_exists_for_table_and_view() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE foo (id INTEGER);
+             CREATE VIEW bar AS SELECT * FROM foo;",
+        )
+        .unwrap();
+        assert!(object_exists(&conn, "foo").unwrap());
+        assert!(object_exists(&conn, "bar").unwrap());
+        assert!(!object_exists(&conn, "baz").unwrap());
+    }
+
+    // ── list_visible_objects (一時 DB ファイル) ──
+
+    #[test]
+    fn list_visible_objects_filters_to_registered() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("test.db");
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE sessions (id INTEGER);
+             CREATE TABLE visits (id INTEGER);
+             CREATE TABLE unregistered_table (id INTEGER);",
+        )
+        .unwrap();
+        drop(conn);
+
+        let visible = list_visible_objects(&db_path).unwrap();
+        // TABLE_COMMENTS 登録順で、登録済みのもののみ
+        assert!(visible.contains(&"sessions".to_string()));
+        assert!(visible.contains(&"visits".to_string()));
+        assert!(!visible.contains(&"unregistered_table".to_string()));
+    }
+
+    // ── fetch_table_data (インメモリ DB) ──
+
+    fn seed_sessions(conn: &Connection) {
+        conn.execute_batch(
+            "CREATE TABLE sessions (
+                id INTEGER PRIMARY KEY, log_name TEXT, account_id TEXT,
+                account_name TEXT, start_time DATETIME, end_time DATETIME
+            );
+            INSERT INTO sessions (log_name, account_name, start_time) VALUES ('a.txt', 'User1', '2025-05-01');
+            INSERT INTO sessions (log_name, account_name, start_time) VALUES ('b.txt', 'User2', '2025-05-02');
+            INSERT INTO sessions (log_name, account_name, start_time) VALUES ('c.txt', 'User3', '2025-05-03');",
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn fetch_returns_rows_and_metadata() {
+        let conn = Connection::open_in_memory().unwrap();
+        seed_sessions(&conn);
+
+        let data = fetch_table_data(&conn, "sessions", "Main DB", None, None, None).unwrap();
+        assert_eq!(data.total_rows, 3);
+        assert_eq!(data.rows.len(), 3);
+        assert_eq!(data.name, "sessions");
+        // 登録済みラベルが付与される
+        assert!(!data.label.is_empty());
+        assert!(data.columns.iter().any(|c| c.name == "log_name"));
+    }
+
+    #[test]
+    fn fetch_explicit_sort_ascending() {
+        let conn = Connection::open_in_memory().unwrap();
+        seed_sessions(&conn);
+
+        let data = fetch_table_data(
+            &conn, "sessions", "Main DB", None,
+            Some("account_name".to_string()), Some("asc".to_string()),
+        ).unwrap();
+        let name_idx = data.columns.iter().position(|c| c.name == "account_name").unwrap();
+        assert_eq!(data.rows[0][name_idx], "User1");
+        assert_eq!(data.rows[2][name_idx], "User3");
+    }
+
+    #[test]
+    fn fetch_explicit_sort_descending() {
+        let conn = Connection::open_in_memory().unwrap();
+        seed_sessions(&conn);
+
+        let data = fetch_table_data(
+            &conn, "sessions", "Main DB", None,
+            Some("account_name".to_string()), Some("desc".to_string()),
+        ).unwrap();
+        let name_idx = data.columns.iter().position(|c| c.name == "account_name").unwrap();
+        assert_eq!(data.rows[0][name_idx], "User3");
+    }
+
+    #[test]
+    fn fetch_formats_null_and_blob() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE apps (id INTEGER PRIMARY KEY, name TEXT, description TEXT, path TEXT, icon BLOB);
+             INSERT INTO apps (name, description, path, icon) VALUES ('App', NULL, '/p', x'0102');",
+        )
+        .unwrap();
+
+        let data = fetch_table_data(&conn, "apps", "Main DB", None, None, None).unwrap();
+        let desc_idx = data.columns.iter().position(|c| c.name == "description").unwrap();
+        let icon_idx = data.columns.iter().position(|c| c.name == "icon").unwrap();
+        assert_eq!(data.rows[0][desc_idx], "NULL");
+        assert_eq!(data.rows[0][icon_idx], "<BLOB>");
+    }
+
+    #[test]
+    fn fetch_pagination_second_page() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute("CREATE TABLE apps (id INTEGER PRIMARY KEY, name TEXT, description TEXT, path TEXT, icon BLOB)", []).unwrap();
+        for i in 0..600 {
+            conn.execute(
+                "INSERT INTO apps (name, path) VALUES (?1, ?2)",
+                rusqlite::params![format!("App{i}"), format!("/p{i}")],
+            ).unwrap();
+        }
+
+        let page0 = fetch_table_data(&conn, "apps", "Main DB", Some(0), None, None).unwrap();
+        assert_eq!(page0.total_rows, 600);
+        assert_eq!(page0.rows.len(), 500);
+
+        let page1 = fetch_table_data(&conn, "apps", "Main DB", Some(1), None, None).unwrap();
+        assert_eq!(page1.total_rows, 600);
+        assert_eq!(page1.rows.len(), 100);
+    }
+
+    #[test]
+    fn fetch_uses_storage_label_for_unregistered_table() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute("CREATE TABLE custom (id INTEGER PRIMARY KEY)", []).unwrap();
+
+        let data = fetch_table_data(&conn, "custom", "Custom Store", None, None, None).unwrap();
+        assert_eq!(data.storage, "Custom Store");
+        assert_eq!(data.label, "custom");
+    }
 }
 

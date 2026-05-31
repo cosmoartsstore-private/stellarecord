@@ -86,6 +86,15 @@ fn get_db_path() -> Result<PathBuf, String> {
     let path = setting
         .get_effective_db_path()
         .ok_or_else(|| "データベースパスが見つかりません。".to_string())?;
+    ensure_parent_dir(&path)?;
+    Ok(path)
+}
+
+/// パスの親ディレクトリが存在しない場合に再帰的に作成する。
+///
+/// パスを引数で受け取ることで、レジストリ解決を経由せず一時ディレクトリで
+/// 親ディレクトリ生成ロジックを検証できる。
+fn ensure_parent_dir(path: &std::path::Path) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         if !parent.exists() {
             fs::create_dir_all(parent).map_err(|err| {
@@ -96,10 +105,41 @@ fn get_db_path() -> Result<PathBuf, String> {
             })?;
         }
     }
-    Ok(path)
+    Ok(())
 }
 
 /// 管理対象の `.tar.zst` アーカイブを格納するディレクトリを解決する。
 fn get_archive_store_dir() -> Result<PathBuf, String> {
     get_data_dir()
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ensure_parent_dir_creates_missing_parent() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("nested").join("sub").join("stellarecord.db");
+        assert!(!db_path.parent().unwrap().exists());
+
+        ensure_parent_dir(&db_path).unwrap();
+        assert!(db_path.parent().unwrap().exists());
+    }
+
+    #[test]
+    fn ensure_parent_dir_noop_when_parent_exists() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("stellarecord.db");
+        // 親（tempdir 自体）は既に存在する
+        ensure_parent_dir(&db_path).unwrap();
+        assert!(dir.path().exists());
+    }
+
+    #[test]
+    fn ensure_parent_dir_ok_for_rootless_path() {
+        // 親を持たない相対パスでもエラーにならない
+        ensure_parent_dir(std::path::Path::new("file.db")).unwrap();
+    }
 }

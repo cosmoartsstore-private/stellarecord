@@ -157,15 +157,22 @@ pub fn get_polaris_install_dir() -> Option<PathBuf> {
 /// # 戻り値
 /// ログ行を書き込めたかどうかを表す I/O 結果。
 fn append_log(level: &str, msg: &str) -> io::Result<()> {
-    let month = Local::now().format("%Y-%m");
-    let Some(log_path) = get_stellarecord_data_dir("logs")
-        .map(|dir| dir.join(format!("info-{month}.log")))
-    else {
+    let Some(log_dir) = get_stellarecord_data_dir("logs") else {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
             "StellaRecord のインストール先が見つかりません",
         ));
     };
+    append_log_to(&log_dir, level, msg)
+}
+
+/// 指定ログディレクトリの月次ファイルに1行追記する。
+///
+/// ログディレクトリを引数化することで、レジストリ解決を経由せず一時ディレクトリで
+/// 月次ファイル名生成と追記書き込みを検証できる。
+fn append_log_to(log_dir: &std::path::Path, level: &str, msg: &str) -> io::Result<()> {
+    let month = Local::now().format("%Y-%m");
+    let log_path = log_dir.join(format!("info-{month}.log"));
 
     let mut file = OpenOptions::new()
         .create(true)
@@ -311,6 +318,42 @@ mod tests {
 
         let result = get_component_install_dir("_Test_install_noval");
         assert!(result.is_none());
+    }
+
+    // ── append_log_to (一時ディレクトリで検証) ──
+
+    #[test]
+    fn append_log_to_writes_monthly_file() {
+        let dir = tempfile::tempdir().unwrap();
+        append_log_to(dir.path(), "WARN", "テストメッセージ").unwrap();
+
+        let month = Local::now().format("%Y-%m");
+        let log_path = dir.path().join(format!("info-{month}.log"));
+        assert!(log_path.exists());
+
+        let content = std::fs::read_to_string(&log_path).unwrap();
+        assert!(content.contains("[WARN]"));
+        assert!(content.contains("テストメッセージ"));
+    }
+
+    #[test]
+    fn append_log_to_appends_multiple_lines() {
+        let dir = tempfile::tempdir().unwrap();
+        append_log_to(dir.path(), "INFO", "1行目").unwrap();
+        append_log_to(dir.path(), "ERROR", "2行目").unwrap();
+
+        let month = Local::now().format("%Y-%m");
+        let content = std::fs::read_to_string(dir.path().join(format!("info-{month}.log"))).unwrap();
+        let lines: Vec<&str> = content.lines().collect();
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].contains("1行目"));
+        assert!(lines[1].contains("2行目"));
+    }
+
+    #[test]
+    fn append_log_to_fails_on_invalid_dir() {
+        let result = append_log_to(std::path::Path::new("Z:\\no\\such\\dir"), "WARN", "x");
+        assert!(result.is_err());
     }
 }
 
