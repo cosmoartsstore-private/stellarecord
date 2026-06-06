@@ -11,12 +11,17 @@ const zoomMax = 2.5;
 
 /** フィルタチップ定義 — クリックで仮想リストを該当行に絞り込む */
 const CHIPS: { key: string; label: string; colorClass: string; matchKeys?: string[] }[] = [
-  { key: 'world',        label: 'ワールド', colorClass: styles.legendWorld },
-  { key: 'notification', label: '通知',     colorClass: styles.legendNotification },
-  { key: 'player',       label: '入退室',   colorClass: styles.legendPlayerJoin, matchKeys: ['player-join', 'player-ready', 'player-left'] },
-  { key: 'warning',      label: '警告',     colorClass: styles.legendWarning },
-  { key: 'error',        label: 'エラー',   colorClass: styles.legendError },
-  { key: 'debug',        label: 'デバッグ', colorClass: styles.legendDebug },
+  { key: 'world', label: 'ワールド', colorClass: styles.legendWorld },
+  { key: 'notification', label: '通知', colorClass: styles.legendNotification },
+  {
+    key: 'player',
+    label: '入退室',
+    colorClass: styles.legendPlayerJoin,
+    matchKeys: ['player-join', 'player-ready', 'player-left'],
+  },
+  { key: 'warning', label: '警告', colorClass: styles.legendWarning },
+  { key: 'error', label: 'エラー', colorClass: styles.legendError },
+  { key: 'debug', label: 'デバッグ', colorClass: styles.legendDebug },
 ];
 
 const categoryClassMap: Record<string, string> = {
@@ -45,8 +50,12 @@ const levelKeys = ['plain', 'info', 'warning', 'error', 'debug'] as const;
  * Rust 側 `encode_log_category_u8` の番号と必ず一致させること。
  */
 const categoryKeys = [
-  'plain', 'world', 'notification',
-  'player-join', 'player-ready', 'player-left',
+  'plain',
+  'world',
+  'notification',
+  'player-join',
+  'player-ready',
+  'player-left',
   'debug-system',
 ] as const;
 
@@ -90,6 +99,17 @@ export function LogViewerModal({
   const [zoomLevel, setZoomLevel] = useState(1);
 
   const hasExternalFiles = externalFiles.length > 0;
+
+  // 他のモーダルと同じく Escape で閉じられるようにする。
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
 
   // ファイル切替時にスクロール位置のみリセット（フィルタは維持）
   useEffect(() => {
@@ -179,8 +199,13 @@ export function LogViewerModal({
 
   return (
     <div className={`${styles.root} ${shared.modalOverlay} ${shared.fullscreen}`}>
+      <button
+        type="button"
+        className={shared.modalBackdrop}
+        onClick={onClose}
+        aria-label="ログビューアを閉じる"
+      />
       <div className={`${styles.content} ${shared.modalContent}`}>
-
         {/* ── サイドバー ── */}
         <aside className={styles.sidebar}>
           <div className={styles.sidebarHeader}>
@@ -249,7 +274,9 @@ export function LogViewerModal({
                     disabled={isLoading && !isActive}
                   >
                     <span className={styles.sidebarItemDate}>{date ?? file.name}</span>
-                    <span className={styles.sidebarItemSize}>{formatArchiveSize(file.size_bytes)}</span>
+                    <span className={styles.sidebarItemSize}>
+                      {formatArchiveSize(file.size_bytes)}
+                    </span>
                   </button>
                 );
               })
@@ -299,7 +326,13 @@ export function LogViewerModal({
               </div>
             )}
 
-            <div style={{ height: `${String(virtualizer.getTotalSize())}px`, minWidth: '100%', position: 'relative' }}>
+            <div
+              style={{
+                height: `${String(virtualizer.getTotalSize())}px`,
+                minWidth: '100%',
+                position: 'relative',
+              }}
+            >
               {virtualizer.getVirtualItems().map((virtualItem) => {
                 const actualIndex = filteredIndices
                   ? (filteredIndices[virtualItem.index] ?? virtualItem.index)
@@ -317,10 +350,11 @@ export function LogViewerModal({
           </div>
 
           <div className={shared.modalActions}>
-            <button className={shared.btn} onClick={onClose}>閉じる</button>
+            <button className={shared.btn} onClick={onClose}>
+              閉じる
+            </button>
           </div>
         </div>
-
       </div>
     </div>
   );

@@ -639,6 +639,25 @@ fn get_column_comment(table_name: &str, column_name: &str) -> Option<&'static Co
     })
 }
 
+/// `ORDER BY` に補間できるカラム名か確認する。
+///
+/// カラム名は値バインドできないため、文字種だけでなく登録済みメタデータ上に
+/// 存在することも確認する。IPC から未知カラムを直接渡された場合は
+/// SQL エラーに落とさず、明示的な入力エラーとして返す。
+fn sanitize_sort_column(table_name: &str, column_name: &str) -> Result<&'static str, String> {
+    if column_name.is_empty()
+        || !column_name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '_')
+    {
+        return Err("ソートカラム名が不正です".to_string());
+    }
+
+    get_column_comment(table_name, column_name)
+        .map(|column_comment| column_comment.name)
+        .ok_or_else(|| format!("ソートカラムが見つかりません: {column_name}"))
+}
+
 /// ビューアに表示するテーブル・ビューを `TABLE_COMMENTS` の登録順で返す。
 ///
 /// `TABLE_COMMENTS` に登録されたもののみ表示し、未登録のテーブル/ビューは非表示。
@@ -691,6 +710,10 @@ fn object_exists(conn: &rusqlite::Connection, name: &str) -> Result<bool, String
 
 /// 要求されたプレビューテーブルを所有するデータベースを開く。
 fn open_preview_database(table_name: &str) -> Result<(rusqlite::Connection, String), String> {
+    if get_table_comment(table_name).is_none() {
+        return Err(format!("プレビュー未登録のテーブルです: {table_name}"));
+    }
+
     let db_path = get_db_path()?;
     if db_path.exists() {
         let conn = rusqlite::Connection::open(&db_path)
@@ -783,11 +806,10 @@ fn fetch_table_data(
         })
         .map_err(|err| utils::command_err("行数カウントに失敗しました", err))?;
 
-    let offset = page.unwrap_or(0) * PAGE_SIZE;
+    let offset = page.unwrap_or(0).saturating_mul(PAGE_SIZE);
     let order_clause = match sort_column {
-        Some(ref col)
-            if !col.is_empty() && col.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') =>
-        {
+        Some(ref col) => {
+            let col = sanitize_sort_column(table_name, col)?;
             let dir = match sort_dir.as_deref() {
                 Some("asc") => "ASC",
                 _ => "DESC",
@@ -907,6 +929,21 @@ mod tests {
         assert!(get_column_comment("no_such_table", "log_name").is_none());
     }
 
+    #[test]
+    fn sanitize_sort_column_accepts_registered_column() {
+        assert_eq!(
+            sanitize_sort_column("sessions", "log_name").unwrap(),
+            "log_name"
+        );
+    }
+
+    #[test]
+    fn sanitize_sort_column_rejects_unknown_or_injected_column() {
+        assert!(sanitize_sort_column("sessions", "no_such_column").is_err());
+        assert!(sanitize_sort_column("sessions", "log_name DESC").is_err());
+        assert!(sanitize_sort_column("sessions", "名前").is_err());
+    }
+
     // ── object_exists ──
 
     #[test]
@@ -1016,6 +1053,23 @@ mod tests {
             .position(|c| c.name == "account_name")
             .unwrap();
         assert_eq!(data.rows[0][name_idx], "User3");
+    }
+
+    #[test]
+    fn fetch_rejects_unknown_sort_column() {
+        let conn = Connection::open_in_memory().unwrap();
+        seed_sessions(&conn);
+
+        let err = fetch_table_data(
+            &conn,
+            "sessions",
+            "Main DB",
+            None,
+            Some("missing_column".to_string()),
+            Some("asc".to_string()),
+        )
+        .unwrap_err();
+        assert!(err.contains("ソートカラムが見つかりません"));
     }
 
     #[test]

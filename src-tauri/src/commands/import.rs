@@ -14,7 +14,10 @@ use crate::analyze;
 use crate::utils;
 use crate::AnalyzeCancelStatus;
 
-use super::archive::{collect_pending_archive_sync_plans, sync_source_logs_into_archive_store};
+use super::archive::{
+    collect_pending_archive_sync_plans, resolve_managed_archive_path,
+    sync_source_logs_into_archive_store,
+};
 use super::{emit_analyze_progress, get_archive_store_dir, get_db_path, get_source_log_dir};
 
 /// ユーザー選択のアーカイブログをバックグラウンドスレッドでインポート開始する。
@@ -40,7 +43,7 @@ pub fn launch_enhanced_import(
     let mut target_paths = Vec::new();
     let total = file_names.len();
     for file_name in file_names {
-        let archive_path = zst_dir.join(&file_name);
+        let archive_path = resolve_managed_archive_path(&zst_dir, &file_name)?;
         if !archive_path.exists() {
             return Err(format!("ファイルが見つかりません: {file_name}"));
         }

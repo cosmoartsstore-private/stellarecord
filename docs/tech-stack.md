@@ -28,66 +28,66 @@
 
 ### Frontend
 
-| Layer | Technology | Version | License |
-| ----- | ---------- | ------- | ------- |
-| Language | [TypeScript](https://www.typescriptlang.org/) | 5.9 | Apache-2.0 |
-| UI Framework | [React](https://react.dev/) | 19.2 | MIT |
-| Build Tool | [Vite](https://vitejs.dev/) | 7.3 | MIT |
-| Vite React Plugin | [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react) | 5.1 | MIT |
-| Virtual Scroll | [@tanstack/react-virtual](https://tanstack.com/virtual) | 3.13 | MIT |
-| Tauri SDK | [@tauri-apps/api](https://tauri.app/) | 2.10 | Apache-2.0 / MIT |
-| Tauri Shell Plugin | [@tauri-apps/plugin-shell](https://tauri.app/plugin/shell/) | 2.3.5 | Apache-2.0 / MIT |
-| Font (UI) | [@fontsource-variable/m-plus-1](https://fontsource.org/) | 5.2 | OFL |
-| Font (Mono) | [@fontsource/jetbrains-mono](https://fontsource.org/) | 5.2 | OFL |
-| Styling | CSS Modules (built-in to Vite) | - | - |
+| Layer              | Technology                                                          | Version | License          |
+| ------------------ | ------------------------------------------------------------------- | ------- | ---------------- |
+| Language           | [TypeScript](https://www.typescriptlang.org/)                       | 5.9     | Apache-2.0       |
+| UI Framework       | [React](https://react.dev/)                                         | 19.2    | MIT              |
+| Build Tool         | [Vite](https://vitejs.dev/)                                         | 7.3     | MIT              |
+| Vite React Plugin  | [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react) | 5.1     | MIT              |
+| Virtual Scroll     | [@tanstack/react-virtual](https://tanstack.com/virtual)             | 3.13    | MIT              |
+| Tauri SDK          | [@tauri-apps/api](https://tauri.app/)                               | 2.10    | Apache-2.0 / MIT |
+| Tauri Shell Plugin | [@tauri-apps/plugin-shell](https://tauri.app/plugin/shell/)         | 2.3.5   | Apache-2.0 / MIT |
+| Font (UI)          | [@fontsource-variable/m-plus-1](https://fontsource.org/)            | 5.2     | OFL              |
+| Font (Mono)        | [@fontsource/jetbrains-mono](https://fontsource.org/)               | 5.2     | OFL              |
+| Styling            | CSS Modules (built-in to Vite)                                      | -       | -                |
 
 ### Backend
 
-| Layer | Technology | Version | License |
-| ----- | ---------- | ------- | ------- |
-| Language | [Rust](https://www.rust-lang.org/) | Edition 2021 | Apache-2.0 / MIT |
-| Application Framework | [tauri](https://crates.io/crates/tauri) | 2.2.4 | Apache-2.0 / MIT |
-| Tauri Build | [tauri-build](https://crates.io/crates/tauri-build) | 2.0.5 | Apache-2.0 / MIT |
-| Tauri Shell Plugin | [tauri-plugin-shell](https://crates.io/crates/tauri-plugin-shell) | 2.3.5 | Apache-2.0 / MIT |
-| Database | [rusqlite](https://crates.io/crates/rusqlite) (`bundled` feature) | 0.38 | MIT |
-| Date/Time | [chrono](https://crates.io/crates/chrono) | 0.4 | Apache-2.0 / MIT |
-| Regex | [regex](https://crates.io/crates/regex) | 1.x | Apache-2.0 / MIT |
-| Compression | [zstd](https://crates.io/crates/zstd) | 0.13 | MIT |
-| Archive | [tar](https://crates.io/crates/tar) | 0.4 | Apache-2.0 / MIT |
-| Win32 API | [windows](https://crates.io/crates/windows) | 0.58 | Apache-2.0 / MIT |
-| Registry I/O | [winreg](https://crates.io/crates/winreg) | 0.52 | MIT |
-| Shell Integration | [opener](https://crates.io/crates/opener) | 0.8 | Apache-2.0 / MIT |
-| Image Encoding | [image](https://crates.io/crates/image) (PNG only) | 0.25 | Apache-2.0 / MIT |
-| Base64 | [base64](https://crates.io/crates/base64) | 0.22 | Apache-2.0 / MIT |
-| Serialization | [serde](https://crates.io/crates/serde) (with `derive`) | 1.0 | Apache-2.0 / MIT |
+| Layer                 | Technology                                                        | Version      | License          |
+| --------------------- | ----------------------------------------------------------------- | ------------ | ---------------- |
+| Language              | [Rust](https://www.rust-lang.org/)                                | Edition 2021 | Apache-2.0 / MIT |
+| Application Framework | [tauri](https://crates.io/crates/tauri)                           | 2.2.4        | Apache-2.0 / MIT |
+| Tauri Build           | [tauri-build](https://crates.io/crates/tauri-build)               | 2.0.5        | Apache-2.0 / MIT |
+| Tauri Shell Plugin    | [tauri-plugin-shell](https://crates.io/crates/tauri-plugin-shell) | 2.3.5        | Apache-2.0 / MIT |
+| Database              | [rusqlite](https://crates.io/crates/rusqlite) (`bundled` feature) | 0.38         | MIT              |
+| Date/Time             | [chrono](https://crates.io/crates/chrono)                         | 0.4          | Apache-2.0 / MIT |
+| Regex                 | [regex](https://crates.io/crates/regex)                           | 1.x          | Apache-2.0 / MIT |
+| Compression           | [zstd](https://crates.io/crates/zstd)                             | 0.13         | MIT              |
+| Archive               | [tar](https://crates.io/crates/tar)                               | 0.4          | Apache-2.0 / MIT |
+| Win32 API             | [windows](https://crates.io/crates/windows)                       | 0.58         | Apache-2.0 / MIT |
+| Registry I/O          | [winreg](https://crates.io/crates/winreg)                         | 0.52         | MIT              |
+| Shell Integration     | [opener](https://crates.io/crates/opener)                         | 0.8          | Apache-2.0 / MIT |
+| Image Encoding        | [image](https://crates.io/crates/image) (PNG only)                | 0.25         | Apache-2.0 / MIT |
+| Base64                | [base64](https://crates.io/crates/base64)                         | 0.22         | Apache-2.0 / MIT |
+| Serialization         | [serde](https://crates.io/crates/serde) (with `derive`)           | 1.0          | Apache-2.0 / MIT |
 
 ### Build and Distribution
 
-| Layer | Technology | Configuration |
-| ----- | ---------- | ------------- |
-| Bundler | Tauri Bundler (NSIS target) | `src-tauri/tauri.conf.json` |
-| Installer Script | NSIS | `src-tauri/windows/installer.nsi`, `hooks.nsi` |
-| Install Mode | currentUser | `%LOCALAPPDATA%\Programs\StellaRecord` |
-| Languages | Japanese | - |
-| Release Profile | LTO + strip + 1 codegen-unit | `Cargo.toml [profile.release]` |
+| Layer            | Technology                   | Configuration                                  |
+| ---------------- | ---------------------------- | ---------------------------------------------- |
+| Bundler          | Tauri Bundler (NSIS target)  | `src-tauri/tauri.conf.json`                    |
+| Installer Script | NSIS                         | `src-tauri/windows/installer.nsi`, `hooks.nsi` |
+| Install Mode     | currentUser                  | `%LOCALAPPDATA%\Programs\StellaRecord`         |
+| Languages        | Japanese                     | -                                              |
+| Release Profile  | LTO + strip + 1 codegen-unit | `Cargo.toml [profile.release]`                 |
 
 ### Quality and Tooling
 
-| Layer | Technology | Version |
-| ----- | ---------- | ------- |
-| TS Linter | [ESLint](https://eslint.org/) (flat config) | 9.39 |
-| TS Type-Aware Linter | [typescript-eslint](https://typescript-eslint.io/) | 8.48 |
-| React Linter | [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) | 7.37 |
-| React Hooks Linter | [eslint-plugin-react-hooks](https://www.npmjs.com/package/eslint-plugin-react-hooks) | 7.0 |
-| A11y Linter | [eslint-plugin-jsx-a11y](https://www.npmjs.com/package/eslint-plugin-jsx-a11y) | 6.10 |
-| Code Quality Linter | [eslint-plugin-unicorn](https://github.com/sindresorhus/eslint-plugin-unicorn) | 61.0 |
-| CSS Linter | [Stylelint](https://stylelint.io/) (`stylelint-config-standard`) | 16.25 |
-| Formatter | [Prettier](https://prettier.io/) | 3.6 |
-| Rust Linter | clippy (workspace lints) | bundled |
-| TS Test Runner | [Vitest](https://vitest.dev/) | 4.1 |
-| TS Coverage | [@vitest/coverage-v8](https://www.npmjs.com/package/@vitest/coverage-v8) | 4.1 |
-| Rust Test | `cargo test --lib` (組み込み `#[cfg(test)]`) + [tempfile](https://crates.io/crates/tempfile) (dev) | 3.x |
-| CI | GitHub Actions (`.github/workflows/ci.yml`) | - |
+| Layer                | Technology                                                                                         | Version |
+| -------------------- | -------------------------------------------------------------------------------------------------- | ------- |
+| TS Linter            | [ESLint](https://eslint.org/) (flat config)                                                        | 9.39    |
+| TS Type-Aware Linter | [typescript-eslint](https://typescript-eslint.io/)                                                 | 8.48    |
+| React Linter         | [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react)                           | 7.37    |
+| React Hooks Linter   | [eslint-plugin-react-hooks](https://www.npmjs.com/package/eslint-plugin-react-hooks)               | 7.0     |
+| A11y Linter          | [eslint-plugin-jsx-a11y](https://www.npmjs.com/package/eslint-plugin-jsx-a11y)                     | 6.10    |
+| Code Quality Linter  | [eslint-plugin-unicorn](https://github.com/sindresorhus/eslint-plugin-unicorn)                     | 61.0    |
+| CSS Linter           | [Stylelint](https://stylelint.io/) (`stylelint-config-standard`)                                   | 16.25   |
+| Formatter            | [Prettier](https://prettier.io/)                                                                   | 3.6     |
+| Rust Linter          | clippy (workspace lints)                                                                           | bundled |
+| TS Test Runner       | [Vitest](https://vitest.dev/)                                                                      | 4.1     |
+| TS Coverage          | [@vitest/coverage-v8](https://www.npmjs.com/package/@vitest/coverage-v8)                           | 4.1     |
+| Rust Test            | `cargo test --lib` (組み込み `#[cfg(test)]`) + [tempfile](https://crates.io/crates/tempfile) (dev) | 3.x     |
+| CI                   | GitHub Actions (`.github/workflows/ci.yml`)                                                        | -       |
 
 ### Testing and CI
 
@@ -141,11 +141,11 @@ Tauri v2 を採用する。フロントエンドは WebView2 上の React、バ�
 
 **Alternatives Considered**
 
-| Option | Rejected Reason |
-| ------ | --------------- |
-| Electron | バイナリ約 150 MB、メモリ約 200 MB、Node.js ランタイム同梱必須 |
-| WPF (.NET) | TypeScript / React のフロントエンドエコシステムを活用できない |
-| Flutter Desktop | Win32 API 連携が Platform Channel 経由で煩雑、Dart の人材確保 |
+| Option                 | Rejected Reason                                                 |
+| ---------------------- | --------------------------------------------------------------- |
+| Electron               | バイナリ約 150 MB、メモリ約 200 MB、Node.js ランタイム同梱必須  |
+| WPF (.NET)             | TypeScript / React のフロントエンドエコシステムを活用できない   |
+| Flutter Desktop        | Win32 API 連携が Platform Channel 経由で煩雑、Dart の人材確保   |
 | ネイティブ Win32 (C++) | UI 開発コストが高い、テーマ切替・仮想スクロールの自前実装が必要 |
 
 **Consequences**
@@ -180,12 +180,12 @@ React 標準の Hooks（`useState`, `useReducer`, `useCallback`, `useRef`, `useE
 
 **Alternatives Considered**
 
-| Option | Rejected Reason |
-| ------ | --------------- |
-| Redux Toolkit | 規模に対してボイラープレート過多 |
-| Zustand | 採用しても問題ないが、Hooks のみで成立しているため追加メリットなし |
-| Jotai / Recoil | アトミック設計が活きるほど状態が細分化されていない |
-| MobX | reactive プログラミング学習コスト |
+| Option         | Rejected Reason                                                    |
+| -------------- | ------------------------------------------------------------------ |
+| Redux Toolkit  | 規模に対してボイラープレート過多                                   |
+| Zustand        | 採用しても問題ないが、Hooks のみで成立しているため追加メリットなし |
+| Jotai / Recoil | アトミック設計が活きるほど状態が細分化されていない                 |
+| MobX           | reactive プログラミング学習コスト                                  |
 
 **Consequences**
 
@@ -217,11 +217,11 @@ React 標準の Hooks（`useState`, `useReducer`, `useCallback`, `useRef`, `useE
 
 **Alternatives Considered**
 
-| Option | Rejected Reason |
-| ------ | --------------- |
-| react-window | 動的サイズ対応が HOC 必要、TypeScript 型情報が後付け |
+| Option         | Rejected Reason                                       |
+| -------------- | ----------------------------------------------------- |
+| react-window   | 動的サイズ対応が HOC 必要、TypeScript 型情報が後付け  |
 | react-virtuoso | バンドルサイズ約 30 KB と大きい、水平スクロール非対応 |
-| 自前実装 | 開発・保守コスト過大 |
+| 自前実装       | 開発・保守コスト過大                                  |
 
 **Consequences**
 
@@ -253,12 +253,12 @@ CSS Modules + CSS Variables によるテーマ切替を採用する。`<html>` �
 
 **Alternatives Considered**
 
-| Option | Rejected Reason |
-| ------ | --------------- |
-| styled-components | CSP `unsafe-inline` 必須 |
-| Emotion | 同上 |
-| Tailwind CSS | `dark:` variant では 3 値テーマ（Midnight）を扱いにくい |
-| Vanilla CSS | スコープ衝突リスク |
+| Option            | Rejected Reason                                         |
+| ----------------- | ------------------------------------------------------- |
+| styled-components | CSP `unsafe-inline` 必須                                |
+| Emotion           | 同上                                                    |
+| Tailwind CSS      | `dark:` variant では 3 値テーマ（Midnight）を扱いにくい |
+| Vanilla CSS       | スコープ衝突リスク                                      |
 
 **Consequences**
 
@@ -292,12 +292,12 @@ VRChat ログ（数十 MB × 数百ファイル）を構造化保管し、横断
 
 **Alternatives Considered**
 
-| Option | Rejected Reason |
-| ------ | --------------- |
-| IndexedDB | WebView 内のみで完結、Rust バックエンドから操作できない |
-| sled (Rust 製 KVS) | SQL 不可、ビュー・JOIN 不可 |
-| ファイル + JSON | スキーマ進化・検索効率が劣る |
-| 外部 DB (PostgreSQL 等) | サーバ起動が必要、ローカルアプリの要件に反する |
+| Option                  | Rejected Reason                                         |
+| ----------------------- | ------------------------------------------------------- |
+| IndexedDB               | WebView 内のみで完結、Rust バックエンドから操作できない |
+| sled (Rust 製 KVS)      | SQL 不可、ビュー・JOIN 不可                             |
+| ファイル + JSON         | スキーマ進化・検索効率が劣る                            |
+| 外部 DB (PostgreSQL 等) | サーバ起動が必要、ローカルアプリの要件に反する          |
 
 **Consequences**
 
@@ -331,12 +331,12 @@ VRChat の生ログ（数十〜数百 MB）を恒久保管する。圧縮率と�
 
 **Alternatives Considered**
 
-| Option | Rejected Reason |
-| ------ | --------------- |
-| zip | 圧縮率約 80%、tar+zstd より 10pt 程度劣る |
-| gzip | 単一ファイルのみ、ファイル名保持不可 |
+| Option     | Rejected Reason                                 |
+| ---------- | ----------------------------------------------- |
+| zip        | 圧縮率約 80%、tar+zstd より 10pt 程度劣る       |
+| gzip       | 単一ファイルのみ、ファイル名保持不可            |
 | 7z (LZMA2) | 圧縮率約 95% だが速度が遅く、取り込み時間が数倍 |
-| 無圧縮 | ストレージ容量を圧迫 |
+| 無圧縮     | ストレージ容量を圧迫                            |
 
 **Consequences**
 
@@ -369,18 +369,18 @@ VRChat ログは非構造化テキスト。10 種類のイベント（Joining, O
 
 **Alternatives Considered**
 
-| Option | Rejected Reason |
-| ------ | --------------- |
-| nom (パーサコンビネータ) | コードが冗長になる、デバッグ困難 |
-| BNF / lex+yacc | 文法定義の保守コスト過大 |
-| LLM ベースのパース | 確率的で再現性なし、レイテンシ過大 |
+| Option                   | Rejected Reason                    |
+| ------------------------ | ---------------------------------- |
+| nom (パーサコンビネータ) | コードが冗長になる、デバッグ困難   |
+| BNF / lex+yacc           | 文法定義の保守コスト過大           |
+| LLM ベースのパース       | 確率的で再現性なし、レイテンシ過大 |
 
 **Consequences**
 
 - (+) 取り込み速度約 100k 行/秒 を達成
 - (+) 新イベント追加は正規表現 1 個と if 分岐 1 個を追加するだけ
 - (−) VRChat 側でログ形式が変更されたら正規表現の手動修正が必要
-- (−) 非 UTF-8 バイトを含む行は skip される
+- (−) 取り込みパーサーでは非 UTF-8 バイトを含む行は skip される
 
 ---
 
@@ -415,10 +415,10 @@ print_stdout = "warn"
 
 **Alternatives Considered**
 
-| Option | Rejected Reason |
-| ------ | --------------- |
-| デフォルトのみ | unwrap が混入しやすい |
-| `clippy::all = warn` のみ | 警告は無視されがち |
+| Option                    | Rejected Reason       |
+| ------------------------- | --------------------- |
+| デフォルトのみ            | unwrap が混入しやすい |
+| `clippy::all = warn` のみ | 警告は無視されがち    |
 
 **Consequences**
 
@@ -461,10 +461,10 @@ ESLint の `no-restricted-imports` ルールで feature 間の相互 import を�
 
 **Alternatives Considered**
 
-| Option | Rejected Reason |
-| ------ | --------------- |
-| 規約のみ（リント無し） | 守られない |
-| Nx 等のモノレポツール | 規模に対して過剰 |
+| Option                 | Rejected Reason  |
+| ---------------------- | ---------------- |
+| 規約のみ（リント無し） | 守られない       |
+| Nx 等のモノレポツール  | 規模に対して過剰 |
 
 **Consequences**
 
@@ -496,11 +496,11 @@ Tauri Bundler の NSIS ターゲットを採用し、`installer.nsi` / `hooks.ns
 
 **Alternatives Considered**
 
-| Option | Rejected Reason |
-| ------ | --------------- |
-| MSI (WiX) | Tauri 標準サポートなし、カスタマイズコスト高 |
-| MSIX | Microsoft Store 配布前提、現状はサイドロード配布 |
-| Portable EXE | レジストリ書き込み・自動起動登録ができない |
+| Option       | Rejected Reason                                  |
+| ------------ | ------------------------------------------------ |
+| MSI (WiX)    | Tauri 標準サポートなし、カスタマイズコスト高     |
+| MSIX         | Microsoft Store 配布前提、現状はサイドロード配布 |
+| Portable EXE | レジストリ書き込み・自動起動登録ができない       |
 
 **Consequences**
 
@@ -516,17 +516,17 @@ Tauri Bundler の NSIS ターゲットを採用し、`installer.nsi` / `hooks.ns
 
 主要な検討の中で意図的に採用しなかった技術と却下理由の一覧。
 
-| Technology | Reason for Rejection |
-| ---------- | -------------------- |
-| Electron | バイナリサイズ約 10 倍、メモリ約 4 倍 |
-| Redux / Zustand / Jotai | アプリ規模で過剰、Hooks のみで成立 |
-| Tailwind CSS | 3 値テーマ（Midnight）と相性が悪い |
-| TanStack Query | サーバ通信ゼロ、ローカル DB にキャッシュ層不要 |
-| ORM (Diesel / SeaORM) | スキーマが小規模で生 SQL が読みやすい |
-| MSI / MSIX インストーラ | Tauri 標準サポートなし、または用途違い |
-| Tauri Updater | v1.0 ではスコープ外、インストーラ再実行で運用 |
-| Sentry / Telemetry | ローカル完結ポリシーに反する |
-| tracing / log crate | 月次ファイル append で十分 |
-| i18next | 日本語固定、要件発生時に導入 |
-| Storybook | コンポーネント数十個規模で過剰 |
-| GraphQL | フロント↔バック間は Tauri invoke で完結 |
+| Technology              | Reason for Rejection                           |
+| ----------------------- | ---------------------------------------------- |
+| Electron                | バイナリサイズ約 10 倍、メモリ約 4 倍          |
+| Redux / Zustand / Jotai | アプリ規模で過剰、Hooks のみで成立             |
+| Tailwind CSS            | 3 値テーマ（Midnight）と相性が悪い             |
+| TanStack Query          | サーバ通信ゼロ、ローカル DB にキャッシュ層不要 |
+| ORM (Diesel / SeaORM)   | スキーマが小規模で生 SQL が読みやすい          |
+| MSI / MSIX インストーラ | Tauri 標準サポートなし、または用途違い         |
+| Tauri Updater           | v1.0 ではスコープ外、インストーラ再実行で運用  |
+| Sentry / Telemetry      | ローカル完結ポリシーに反する                   |
+| tracing / log crate     | 月次ファイル append で十分                     |
+| i18next                 | 日本語固定、要件発生時に導入                   |
+| Storybook               | コンポーネント数十個規模で過剰                 |
+| GraphQL                 | フロント↔バック間は Tauri invoke で完結        |

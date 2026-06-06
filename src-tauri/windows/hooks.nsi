@@ -1,7 +1,7 @@
+; Running-app handling is delegated to CheckIfAppIsRunning in installer.nsi.
+; Do not force-kill the application from installer hooks.
 !macro NSIS_HOOK_PREINSTALL
-    nsExec::ExecToLog 'taskkill /F /IM "${MAINBINARYNAME}.exe"'
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
-    nsExec::ExecToLog 'taskkill /F /IM "${MAINBINARYNAME}.exe"'
 !macroend

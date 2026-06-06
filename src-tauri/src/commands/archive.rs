@@ -25,6 +25,45 @@ use super::{get_archive_store_dir, get_db_path, get_source_log_dir};
 /// 外部フォルダ閲覧で受け入れるログ拡張子。
 const EXTERNAL_LOG_EXTENSIONS: &[&str] = &[".txt", ".tar.zst"];
 
+/// パス区切りやドライブ指定を含まない単一ファイル名だけを受け入れる。
+fn is_plain_file_name(file_name: &str) -> bool {
+    !file_name.is_empty()
+        && file_name != "."
+        && file_name != ".."
+        && !file_name.contains('/')
+        && !file_name.contains('\\')
+        && !file_name.contains(':')
+}
+
+/// `StellaRecord` 管理下のアーカイブストアで扱うファイル名か判定する。
+pub(crate) fn matches_managed_archive_name(file_name: &str) -> bool {
+    is_plain_file_name(file_name)
+        && file_name.starts_with("output_log_")
+        && file_name.ends_with(".txt.tar.zst")
+}
+
+/// Polaris 側の削除対象として扱えるソースログファイル名か判定する。
+fn matches_source_log_file_name(file_name: &str) -> bool {
+    is_plain_file_name(file_name)
+        && file_name.starts_with("output_log_")
+        && file_name.ends_with(".txt")
+}
+
+/// 管理アーカイブストア内のファイル名を絶対パスへ解決する。
+///
+/// IPC 引数はフロントエンドの一覧選択経由が通常だが、コマンド境界では
+/// 文字列を信用せず、単一ファイル名だけを許可して archive dir 外への脱出を防ぐ。
+pub(crate) fn resolve_managed_archive_path(
+    archive_store_dir: &Path,
+    file_name: &str,
+) -> Result<PathBuf, String> {
+    if matches_managed_archive_name(file_name) {
+        Ok(archive_store_dir.join(file_name))
+    } else {
+        Err(format!("不正なアーカイブファイル名です: {file_name}"))
+    }
+}
+
 /// ライブ `VRChat` ファイルに必要な共有フラグでソースログを1件開く。
 ///
 /// 元ログは変更してはならないため、`StellaRecord` は許可的な共有で読み取りのみ行い、
@@ -418,6 +457,16 @@ fn encode_log_category_u8(category: &str) -> u8 {
     }
 }
 
+/// ログビューア用に 1 行分のバイト列を UTF-8 として表示文字列へ変換する。
+///
+/// `VRChat` ログは UTF-8 前提だが、破損バイトを含む古いログでビューア全体が
+/// 途中終了しないよう、無効バイトだけを U+FFFD に置換して後続行を表示し続ける。
+fn decode_log_line_lossy(bytes: &[u8]) -> String {
+    let line = bytes.strip_suffix(b"\n").unwrap_or(bytes);
+    let line = line.strip_suffix(b"\r").unwrap_or(line);
+    String::from_utf8_lossy(line).into_owned()
+}
+
 /// `.tar.zst` アーカイブの最初の tar エントリのソースファイル名だけを取得する。
 ///
 /// アーカイブ内容は展開せず、ヘッダーのみ読み取る。
@@ -763,7 +812,7 @@ fn detect_range_block_start(line: &str) -> Option<RangeBlock> {
 /// 範囲全体に同一カテゴリを付与し、フィルタチップで一括選択できるようにする。
 #[allow(clippy::too_many_lines)]
 fn emit_log_viewer_chunks(
-    reader: impl BufRead,
+    mut reader: impl BufRead,
     session_id: String,
     db_categories: Option<HashMap<String, Vec<String>>>,
     db_keyword_markers: Option<Vec<DbKeywordMarker>>,
@@ -801,7 +850,19 @@ fn emit_log_viewer_chunks(
     };
 
     let mut active_range: Option<RangeBlock> = None;
-    for line in reader.lines().map_while(Result::ok) {
+    let mut line_buffer = Vec::new();
+    loop {
+        line_buffer.clear();
+        match reader.read_until(b'\n', &mut line_buffer) {
+            Ok(0) => break,
+            Ok(_) => {}
+            Err(err) => {
+                utils::log_warn(&format!("ログビューア行を読み取れませんでした: {err}"));
+                break;
+            }
+        }
+
+        let line = decode_log_line_lossy(&line_buffer);
         // 既存の範囲ブロックの終了判定。終了行は範囲外扱いで、終了が成立した時点で
         // 範囲を解除してから当該行を分類する（インデント解除した行は範囲に含めない）。
         if let Some(block) = active_range.as_ref() {
@@ -957,7 +1018,7 @@ pub fn list_archive_files() -> Result<Vec<ArchiveFileItem>, String> {
 
         let path = entry.path();
         if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
-            if path.is_file() && name.ends_with(".tar.zst") {
+            if path.is_file() && matches_managed_archive_name(name) {
                 let size_bytes = match entry.metadata() {
                     Ok(metadata) => metadata.len(),
                     Err(err) => {
@@ -1122,7 +1183,7 @@ pub fn read_archive_log_viewer(
     session_id: String,
     app: AppHandle,
 ) -> Result<LogViewerMeta, String> {
-    let archive_path = get_archive_store_dir()?.join(&file_name);
+    let archive_path = resolve_managed_archive_path(&get_archive_store_dir()?, &file_name)?;
     if !archive_path.exists() {
         return Err(format!("ファイルが見つかりません: {file_name}"));
     }
@@ -1308,7 +1369,7 @@ pub fn delete_source_logs(file_names: Vec<String>) -> Result<usize, String> {
     let mut deleted_count: usize = 0;
 
     for file_name in &file_names {
-        if !file_name.starts_with("output_log_") || !file_name.ends_with(".txt") {
+        if !matches_source_log_file_name(file_name) {
             return Err(format!("不正なファイル名です: {file_name}"));
         }
         let archive_path = archive_dir.join(format!("{file_name}.tar.zst"));
@@ -1468,6 +1529,55 @@ mod tests {
             .contains("05-01"));
     }
 
+    // ── file name validation (IPC 境界: パストラバーサル防止) ──
+
+    #[test]
+    fn managed_archive_name_rejects_path_traversal() {
+        assert!(matches_managed_archive_name(
+            "output_log_2025-04-30.txt.tar.zst"
+        ));
+        assert!(!matches_managed_archive_name(
+            "../output_log_2025-04-30.txt.tar.zst"
+        ));
+        assert!(!matches_managed_archive_name(
+            "output_log_..\\..\\secret.txt.tar.zst"
+        ));
+        assert!(!matches_managed_archive_name(
+            "C:\\temp\\output_log_a.txt.tar.zst"
+        ));
+        assert!(!matches_managed_archive_name(
+            "output_log_2025-04-30.tar.zst"
+        ));
+    }
+
+    #[test]
+    fn source_log_name_rejects_path_traversal() {
+        assert!(matches_source_log_file_name("output_log_2025-04-30.txt"));
+        assert!(!matches_source_log_file_name(
+            "../output_log_2025-04-30.txt"
+        ));
+        assert!(!matches_source_log_file_name(
+            "output_log_..\\..\\secret.txt"
+        ));
+        assert!(!matches_source_log_file_name("C:\\temp\\output_log_a.txt"));
+        assert!(!matches_source_log_file_name("output_log_2025-04-30.log"));
+    }
+
+    #[test]
+    fn resolve_managed_archive_path_keeps_path_inside_archive_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let resolved =
+            resolve_managed_archive_path(dir.path(), "output_log_2025-04-30.txt.tar.zst").unwrap();
+        assert_eq!(
+            resolved,
+            dir.path().join("output_log_2025-04-30.txt.tar.zst")
+        );
+        assert!(
+            resolve_managed_archive_path(dir.path(), "output_log_..\\..\\secret.txt.tar.zst")
+                .is_err()
+        );
+    }
+
     #[test]
     fn collect_source_logs_returns_sorted() {
         let dir = tempfile::tempdir().unwrap();
@@ -1609,6 +1719,14 @@ mod tests {
         assert_eq!(encode_log_category_u8("player_left"), 5);
         assert_eq!(encode_log_category_u8("debug-system"), 6);
         assert_eq!(encode_log_category_u8("plain"), 0);
+    }
+
+    // ── decode_log_line_lossy (ビューア: invalid UTF-8 行で停止しない) ──
+
+    #[test]
+    fn decode_log_line_lossy_replaces_invalid_utf8_and_trims_newline() {
+        let line = decode_log_line_lossy(b"ok\xffnext\r\n");
+        assert_eq!(line, "ok\u{fffd}next");
     }
 
     // ── detect_range_block_start (純粋: 複数行ブロック検出) ──
