@@ -136,7 +136,7 @@ fn apply_startup_value(
 /// シェルの Jumbo イメージリスト (256×256) から高解像度アイコンの取得を試み、
 /// 失敗した場合は `ExtractIconExW` (32×32) にフォールバックする。
 pub fn extract_exe_icon_png(exe_path: &Path) -> Option<Vec<u8>> {
-    extract_icon_jumbo(exe_path).or_else(|| extract_icon_legacy(exe_path))
+    extract_icon_jumbo(exe_path).or_else(|| extract_icon_fallback(exe_path))
 }
 
 /// `SHGetImageList(SHIL_JUMBO)` 経由で 256×256 アイコンを取得する。
@@ -195,7 +195,7 @@ fn extract_icon_jumbo(exe_path: &Path) -> Option<Vec<u8>> {
 }
 
 /// `ExtractIconExW` による 32×32 フォールバック。
-fn extract_icon_legacy(exe_path: &Path) -> Option<Vec<u8>> {
+fn extract_icon_fallback(exe_path: &Path) -> Option<Vec<u8>> {
     use std::os::windows::ffi::OsStrExt;
 
     use windows::Win32::UI::Shell::ExtractIconExW;

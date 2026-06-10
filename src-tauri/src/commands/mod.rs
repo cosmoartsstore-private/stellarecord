@@ -12,9 +12,11 @@ pub(crate) mod settings;
 use std::fs;
 use std::path::PathBuf;
 
+use rusqlite::Connection;
 use serde::Serialize;
 use tauri::AppHandle;
 
+use crate::analyze;
 use crate::config;
 use crate::models::AnalyzePayload;
 use crate::utils;
@@ -88,6 +90,17 @@ fn get_db_path() -> Result<PathBuf, String> {
         .ok_or_else(|| "データベースパスが見つかりません。".to_string())?;
     ensure_parent_dir(&path)?;
     Ok(path)
+}
+
+/// メイン DB を開き、現行スキーマを初期化してから返す。
+///
+/// ランチャー登録など、取り込み前にも DB テーブルを必要とするコマンドで使用する。
+fn open_initialized_main_db() -> Result<Connection, String> {
+    let db_path = get_db_path()?;
+    let conn = Connection::open(&db_path).map_err(|err| utils::command_open_err(&db_path, err))?;
+    analyze::init_main_db(&conn)
+        .map_err(|err| utils::command_err("メイン DB を初期化できませんでした", err))?;
+    Ok(conn)
 }
 
 /// パスの親ディレクトリが存在しない場合に再帰的に作成する。

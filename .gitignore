@@ -11,16 +11,16 @@ src-tauri/coverage/
 *.pem
 *.key
 
-# Claude Code
-.claude/
+# Claude/Codex shared notes
+.claude/*
+!.claude/
+!.claude/*.md
+!.claude/manual.html
+.claude/worktrees/
 memory/
 
 # Design/planning tools (not part of the app)
 tools/
-
-# Internal investigation notes (not for public distribution)
-fix-task.md
-task-fix.md
 
 # Logs
 logs

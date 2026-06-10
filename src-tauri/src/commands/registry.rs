@@ -6,7 +6,7 @@ use rusqlite::params;
 
 use crate::{platform, utils};
 
-use super::get_db_path;
+use super::open_initialized_main_db;
 
 /// 登録済み外部アプリを起動する。
 ///
@@ -56,9 +56,7 @@ pub fn register_app(path: String, name: String, description: String) -> Result<(
 
     let icon_png = platform::extract_exe_icon_png(exe_path);
 
-    let db_path = get_db_path()?;
-    let conn =
-        rusqlite::Connection::open(&db_path).map_err(|e| utils::command_open_err(&db_path, e))?;
+    let conn = open_initialized_main_db()?;
 
     insert_app_record(&conn, &name, &description, &path, icon_png.as_deref())
 }
@@ -94,9 +92,7 @@ fn insert_app_record(
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
 pub fn unregister_app(path: String) -> Result<(), String> {
-    let db_path = get_db_path()?;
-    let conn =
-        rusqlite::Connection::open(&db_path).map_err(|e| utils::command_open_err(&db_path, e))?;
+    let conn = open_initialized_main_db()?;
 
     delete_app_record(&conn, &path)
 }

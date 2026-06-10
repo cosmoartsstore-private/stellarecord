@@ -1,31 +1,25 @@
-# Agent Notes
+# Agent Guide
 
-These notes prevent future sessions from redoing already-audited StellaRecord work.
+This file keeps durable StellaRecord engineering principles for Codex and Claude.
+Start from `.claude/README.md` for the full document index, do-not-rework notes, completed work notes, and internal notes.
+Public user-facing documents stay in root `README.md` and `docs/`; do not move them into `.claude/`.
 
-## Completed Decisions
+## Project Principles
 
-- Source and documentation files are UTF-8 readable. A byte-level UTF-8 validation pass over source/docs/config files found no invalid UTF-8 in the managed project files.
-- There is no repo-local technical reason to read or rewrite Japanese comments as Shift_JIS/CP932. Use UTF-8 for Japanese comments and docs unless a specific external tool boundary proves otherwise.
-- Comment style follows the neighboring Alpheratz project: explain module boundaries, public contracts, invariants, and non-obvious failure handling; avoid comments that merely restate simple assignments or JSX structure.
-- Managed archive IPC arguments must be treated as untrusted strings. Use `resolve_managed_archive_path` and accept only single file names matching `output_log_*.txt.tar.zst`.
-- Log viewer display is allowed to decode damaged UTF-8 lossily with U+FFFD so one broken line does not hide the rest of the log.
-
-## Known Follow-Up Work
-
-- The import parser still skips invalid UTF-8 lines. If DB import must preserve events from damaged lines, replace `BufRead::lines()` with byte-line decoding similar to the log viewer and audit parser assumptions.
-- `apps` migration uses `INSERT OR IGNORE`; old databases with duplicate `path` rows can drop duplicates without an explicit count log. Add migration telemetry before broad legacy migration work.
-- Code signing and automatic updates remain outside the current implementation scope.
-- Narrow/snapped-window behavior remains a separate UI QA pass; do not treat the current desktop-oriented layout as fully responsive without explicit testing.
-
-## Rechecked Non-Issues
-
-- `visits.instance_type` and `notifications.target_instance_type` intentionally store VRChat raw labels such as `hidden`. UI-facing labels should be mapped by consumers, not rewritten in the persisted log model.
-- Log viewer category coloring works without DB hints via text classification. Keyword highlights intentionally require DB-confirmed markers.
-- No mojibake markers (U+FFFD replacement characters or common UTF-8/Shift_JIS mix-up fragments) were found in source comments or docs during the 2026-06-06 check.
+- Treat the current source and schema as canonical while the app is unreleased. Do not add compatibility code or DB migrations for pre-release states.
+- Use UTF-8 for source, comments, and docs unless a specific external tool boundary proves another encoding is required.
+- Comments should explain module boundaries, public contracts, invariants, and non-obvious failure handling. Avoid restating simple assignments or JSX structure.
+- `Data/archive/` contains irreplaceable compressed logs and must survive uninstall without overwrite or deletion.
+- The SQLite DB, app logs, WebView cache, and other generated data may be deleted and regenerated.
+- Managed archive IPC arguments are untrusted. Use `resolve_managed_archive_path` and accept only single file names matching `output_log_*.txt.tar.zst`.
+- Persist VRChat raw labels such as `hidden` in the log model. UI-facing labels are consumer responsibility.
+- Log viewer display may decode damaged UTF-8 lossily with U+FFFD so one broken line does not hide the rest of the log.
 
 ## Work Rules
 
 - Check `git status --short` before edits.
+- Read `.claude/README.md` first when looking for project documents, internal notes, or the right source of truth.
 - Use `apply_patch` for manual file edits.
 - Keep Japanese comments/docs UTF-8.
-- Run at least `npm run test` and `npm run test:rust` before handing off source changes; run `npm run verify` when the change touches lint-sensitive TypeScript/Rust boundaries.
+- Keep project philosophy in this file. Put memo-style notes and internal samples under `.claude/`.
+- Run at least `npm run test` and `npm run test:rust` before handing off source changes; run the relevant lint/build checks when the change touches TypeScript, Rust, docs, or tooling boundaries.

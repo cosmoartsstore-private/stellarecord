@@ -1,13 +1,14 @@
+import { byteUnitBytes, formatByteUnit } from '../../../shared/lib/byteFormat';
+
+/** Date.getDay() に対応する日本語曜日ラベル（0=日曜） */
+const dayNames = ['日', '月', '火', '水', '木', '金', '土'] as const;
+
 /**
  * アーカイブファイル名から `yyyy/mm/dd (曜日) hh:mm` 形式の表示文字列を抽出する
  *
  * ファイル名は `2025-04-30_20-15-00.tar.zst` のパターンを想定。
  * 認識可能な日付パターンが含まれない場合は null を返す
  */
-
-/** Date.getDay() に対応する日本語曜日ラベル（0=日曜） */
-const dayNames = ['日', '月', '火', '水', '木', '金', '土'] as const;
-
 export function parseArchiveDate(fileName: string): string | null {
   const m = /(\d{4})-(\d{2})-(\d{2})[_T](\d{2})-(\d{2})-(\d{2})/.exec(fileName);
   if (!m) return null;
@@ -18,14 +19,14 @@ export function parseArchiveDate(fileName: string): string | null {
 
 /** バイト数を人間が読みやすいサイズラベル（GB / MB / KB / B）に変換する */
 export function formatArchiveSize(sizeBytes: number) {
-  if (sizeBytes >= 1024 * 1024 * 1024) {
-    return `${(sizeBytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  if (sizeBytes >= byteUnitBytes.GB) {
+    return formatByteUnit(sizeBytes, 'GB', 2);
   }
-  if (sizeBytes >= 1024 * 1024) {
-    return `${(sizeBytes / (1024 * 1024)).toFixed(2)} MB`;
+  if (sizeBytes >= byteUnitBytes.MB) {
+    return formatByteUnit(sizeBytes, 'MB', 2);
   }
-  if (sizeBytes >= 1024) {
-    return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  if (sizeBytes >= byteUnitBytes.KB) {
+    return formatByteUnit(sizeBytes, 'KB', 1);
   }
   return String(sizeBytes) + ' B';
 }

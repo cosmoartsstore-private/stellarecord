@@ -611,11 +611,7 @@ const TABLE_COMMENTS: &[TableComment] = &[
 /// # Errors
 /// それ以外の文字が含まれる場合にエラーを返し、プレビュークエリの悪用を防ぐ。
 fn sanitize_table_name(table_name: &str) -> Result<&str, String> {
-    if !table_name.is_empty()
-        && table_name
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || character == '_')
-    {
+    if utils::is_sql_identifier(table_name) {
         Ok(table_name)
     } else {
         Err("テーブル名が不正です".to_string())
@@ -645,11 +641,7 @@ fn get_column_comment(table_name: &str, column_name: &str) -> Option<&'static Co
 /// 存在することも確認する。IPC から未知カラムを直接渡された場合は
 /// SQL エラーに落とさず、明示的な入力エラーとして返す。
 fn sanitize_sort_column(table_name: &str, column_name: &str) -> Result<&'static str, String> {
-    if column_name.is_empty()
-        || !column_name
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || character == '_')
-    {
+    if !utils::is_sql_identifier(column_name) {
         return Err("ソートカラム名が不正です".to_string());
     }
 

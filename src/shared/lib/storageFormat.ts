@@ -1,3 +1,5 @@
+import { formatByteUnit, formatRoundedMegabytes } from './byteFormat';
+
 /**
  * 解析ダッシュボードのストレージメーター用にバイト数をフォーマットする
  *
@@ -5,8 +7,8 @@
  */
 export function formatStorageMeter(bytes: number, forceGb: boolean) {
   if (forceGb) {
-    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+    return formatByteUnit(bytes, 'GB', 2);
   }
 
-  return String(Math.round(bytes / (1024 * 1024))) + ' MB';
+  return formatRoundedMegabytes(bytes);
 }

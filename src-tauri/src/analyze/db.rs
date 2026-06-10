@@ -1,6 +1,7 @@
 //! メインデータベースの `SQLite` スキーマ定義と初期化。
 //!
 //! メインデータベースは WAL ジャーナルモードと外部キーによる参照整合性を使用する。
+//! 発売前のため旧版 DB 互換マイグレーションは持たず、ここにある DDL を正とする。
 
 use rusqlite::{Connection, Result};
 
@@ -175,64 +176,6 @@ pub fn init_main_db(conn: &Connection) -> Result<()> {
     conn.execute_batch("PRAGMA foreign_keys = ON;")?;
     conn.execute_batch(MAIN_SCHEMA)?;
     conn.execute_batch(MAIN_VIEWS)?;
-    migrate_apps_unique_to_path(conn)?;
-    drop_legacy_apps_category(conn)?;
-    Ok(())
-}
-
-/// 旧スキーマで残存している `apps.category` 列を削除するマイグレーション。
-///
-/// fastparty / thirdparty の区別を撤廃した際の後方互換のため、列が存在する場合のみ
-/// `ALTER TABLE ... DROP COLUMN` を発行する。新規 DB では無操作。
-fn drop_legacy_apps_category(conn: &Connection) -> Result<()> {
-    let has_column: bool = conn
-        .query_row(
-            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('apps') WHERE name = 'category')",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(false);
-    if has_column {
-        conn.execute("ALTER TABLE apps DROP COLUMN category", [])?;
-    }
-    Ok(())
-}
-
-/// UNIQUE 制約を `name` から `path` へ移行する。
-///
-/// 旧スキーマでは `apps.name` が UNIQUE だったが、同パス（同一 exe）の重複登録を
-/// 防ぐほうが実用的なため `path` に変更。既存 DB ではテーブル再作成で移行する。
-fn migrate_apps_unique_to_path(conn: &Connection) -> Result<()> {
-    let name_is_unique: bool = conn
-        .query_row(
-            "SELECT EXISTS(
-                SELECT 1 FROM pragma_index_list('apps') il
-                JOIN pragma_index_info(il.name) ii ON ii.name = 'name'
-                WHERE il.\"unique\" = 1
-            )",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(false);
-    if !name_is_unique {
-        return Ok(());
-    }
-    conn.execute_batch(
-        "BEGIN;
-        CREATE TABLE apps_new (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            name            TEXT NOT NULL,
-            description     TEXT NOT NULL DEFAULT '',
-            path            TEXT NOT NULL UNIQUE,
-            icon            BLOB,
-            registered_at   DATETIME DEFAULT (datetime('now', 'localtime'))
-        );
-        INSERT OR IGNORE INTO apps_new (id, name, description, path, icon, registered_at)
-            SELECT id, name, description, path, icon, registered_at FROM apps;
-        DROP TABLE apps;
-        ALTER TABLE apps_new RENAME TO apps;
-        COMMIT;",
-    )?;
     Ok(())
 }
 
@@ -365,88 +308,5 @@ mod tests {
             [],
         );
         assert!(result.is_err(), "invalid instance_type should be rejected");
-    }
-
-    #[test]
-    fn drop_legacy_apps_category_noop_on_new_db() {
-        let conn = Connection::open_in_memory().unwrap();
-        init_main_db(&conn).unwrap();
-        drop_legacy_apps_category(&conn).unwrap();
-    }
-
-    #[test]
-    fn migrate_apps_unique_noop_on_new_db() {
-        let conn = Connection::open_in_memory().unwrap();
-        init_main_db(&conn).unwrap();
-        migrate_apps_unique_to_path(&conn).unwrap();
-    }
-
-    #[test]
-    fn drop_legacy_apps_category_removes_column() {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE apps (
-                id INTEGER PRIMARY KEY, name TEXT, description TEXT DEFAULT '',
-                path TEXT UNIQUE, icon BLOB, category TEXT,
-                registered_at DATETIME DEFAULT (datetime('now','localtime'))
-            );
-            INSERT INTO apps (name, path, category) VALUES ('TestApp', '/test', 'thirdparty');",
-        )
-        .unwrap();
-
-        drop_legacy_apps_category(&conn).unwrap();
-
-        let has_category: bool = conn
-            .query_row(
-                "SELECT EXISTS(SELECT 1 FROM pragma_table_info('apps') WHERE name = 'category')",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert!(!has_category, "category column should be removed");
-
-        let name: String = conn
-            .query_row("SELECT name FROM apps WHERE path = '/test'", [], |row| {
-                row.get(0)
-            })
-            .unwrap();
-        assert_eq!(name, "TestApp", "existing data should survive migration");
-    }
-
-    #[test]
-    fn migrate_apps_unique_moves_constraint_to_path() {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE apps (
-                id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL,
-                description TEXT DEFAULT '', path TEXT NOT NULL, icon BLOB,
-                registered_at DATETIME DEFAULT (datetime('now','localtime'))
-            );
-            INSERT INTO apps (name, path) VALUES ('App1', '/path/a');
-            INSERT INTO apps (name, path) VALUES ('App2', '/path/b');",
-        )
-        .unwrap();
-
-        migrate_apps_unique_to_path(&conn).unwrap();
-
-        let dup_name = conn.execute(
-            "INSERT INTO apps (name, path) VALUES ('App1', '/path/c')",
-            [],
-        );
-        assert!(dup_name.is_ok(), "duplicate name should now be allowed");
-
-        let dup_path = conn.execute(
-            "INSERT INTO apps (name, path) VALUES ('App3', '/path/a')",
-            [],
-        );
-        assert!(
-            dup_path.is_err(),
-            "duplicate path should be rejected after migration"
-        );
-
-        let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM apps", [], |row| row.get(0))
-            .unwrap();
-        assert_eq!(count, 3, "original rows + new name-dup row should exist");
     }
 }

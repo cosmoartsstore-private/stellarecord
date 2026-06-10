@@ -67,6 +67,16 @@ pub fn command_remove_err<E: std::fmt::Display>(path: &std::path::Path, err: E) 
     command_err(&format!("削除できませんでした [{}]", path.display()), err)
 }
 
+/// SQL に補間する識別子として安全な ASCII 英数字と `_` のみを許可する。
+///
+/// `SQLite` のテーブル名・カラム名は値バインドできないため、動的 SQL の入口で使う。
+pub fn is_sql_identifier(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '_')
+}
+
 /// レジストリからインストール済みの `CosmoArtsStore` アプリのディレクトリを解決する。
 ///
 /// インストール先は Windows レジストリ
@@ -270,6 +280,17 @@ mod tests {
         let msg = command_remove_err(path, "in use");
         assert!(msg.contains("/old/file.log"));
         assert!(msg.contains("in use"));
+    }
+
+    #[test]
+    fn sql_identifier_validation() {
+        assert!(is_sql_identifier("sessions"));
+        assert!(is_sql_identifier("with_users_detail"));
+        assert!(is_sql_identifier("table1"));
+        assert!(!is_sql_identifier(""));
+        assert!(!is_sql_identifier("users; DROP TABLE x"));
+        assert!(!is_sql_identifier("users WHERE 1=1"));
+        assert!(!is_sql_identifier("テーブル"));
     }
 
     // ── レジストリ: get_component_install_dir ──
