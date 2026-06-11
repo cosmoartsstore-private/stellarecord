@@ -1,5 +1,6 @@
 # Project Agent Workspace
 
+Read `C:\Users\kaimu\.codex\AGENTS.md` first for common rules.
 Root `AGENT.md` routes Codex here for StellaRecord-local constraints, internal notes, and prior agent decisions.
 Public user-facing documents remain in root `README.md` and `docs/`; `.claude/` contains agent-local policy, audit handoffs, follow-ups, and archived working references.
 
