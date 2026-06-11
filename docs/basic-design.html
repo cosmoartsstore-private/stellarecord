@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StellaRecord Basic Design</title>
+  <style>
+    :root { color-scheme: light; --bg: #f6f7f9; --paper: #fff; --ink: #1f2933; --muted: #64748b; --line: #d7dde5; --accent: #2563eb; --soft: #e8f0ff; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font-family: "Segoe UI", "Noto Sans JP", sans-serif; line-height: 1.65; }
+    header { padding: 32px 40px 20px; background: var(--paper); border-bottom: 1px solid var(--line); }
+    main { max-width: 1120px; margin: 0 auto; padding: 28px 24px 48px; }
+    h1, h2, h3 { line-height: 1.25; margin: 0; }
+    h1 { font-size: 30px; }
+    h2 { margin-top: 34px; padding-bottom: 8px; border-bottom: 2px solid var(--line); font-size: 22px; }
+    h3 { margin-top: 24px; font-size: 18px; }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0 22px; background: var(--paper); }
+    th, td { border: 1px solid var(--line); padding: 9px 10px; vertical-align: top; }
+    th { background: #eef2f7; text-align: left; }
+    .meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+    .meta div, .screen { background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 14px; }
+    .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+    .value { font-weight: 600; }
+    .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .wireframe { margin: 12px 0 0; padding: 12px; background: #0f172a; color: #dbeafe; border-radius: 6px; overflow-x: auto; font-family: Consolas, "Courier New", monospace; font-size: 12px; line-height: 1.35; }
+    .note { border-left: 4px solid var(--accent); background: var(--soft); padding: 10px 12px; }
+    @media (max-width: 820px) { header { padding: 24px 20px 16px; } main { padding: 20px 14px 36px; } .meta, .layout { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>StellaRecord 基本設計書</h1>
+    <p>画面構成、遷移、主要レイアウト、状態表示を外部設計レベルで定義する。</p>
+    <div class="meta">
+      <div><div class="label">Document</div><div class="value">docs/basic-design.html</div></div>
+      <div><div class="label">Target</div><div class="value">StellaRecord</div></div>
+      <div><div class="label">Platform</div><div class="value">Windows / Tauri v2</div></div>
+      <div><div class="label">Status</div><div class="value">Public reference</div></div>
+    </div>
+  </header>
+  <main>
+    <section>
+      <h2>1. Screen List</h2>
+      <table>
+        <thead><tr><th>Screen</th><th>Purpose</th><th>Primary Operations</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td>Launcher</td><td>登録アプリの一覧を表示し、起動・登録・解除を行う。</td><td>アプリ起動、EXE 登録、フォルダオープン、表示切替</td><td>features/registry</td></tr>
+          <tr><td>Analyze</td><td>ログ archive の状態、取り込み、閲覧、元ログ削除を扱う。</td><td>容量確認、手動取り込み、ログ閲覧、Polaris cleanup</td><td>features/analyze, features/archive</td></tr>
+          <tr><td>Database Preview</td><td>解析済み DB のテーブルと検索結果を表示する。</td><td>テーブル選択、検索、ページング、SQL preview</td><td>features/database</td></tr>
+          <tr><td>Settings</td><td>保存先、閾値、動作設定を管理する。</td><td>設定読込、保存、初期化</td><td>features/settings</td></tr>
+          <tr><td>Credit Modal</td><td>依存 OSS と権利情報を表示する。</td><td>表示、閉じる</td><td>app/CreditModal.tsx</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>2. Navigation Structure</h2>
+      <div class="note">アプリルートは左サイドバーとメインペインで構成する。Archive 系モーダルは Analyze から開く。</div>
+      <pre class="wireframe">App
+  ├─ Sidebar
+  │   ├─ Launcher
+  │   ├─ Analyze
+  │   └─ Database
+  ├─ Main Section
+  │   ├─ RegistrySection
+  │   ├─ AnalyzeSection
+  │   └─ DatabaseSection
+  └─ Global Modals
+      ├─ RegisterAppModal
+      ├─ ArchiveSelectorModal
+      ├─ LogViewerModal
+      ├─ PolarisCleanupModal
+      └─ CreditModal</pre>
+    </section>
+
+    <section>
+      <h2>3. Common Layout Rules</h2>
+      <table>
+        <thead><tr><th>Area</th><th>Definition</th></tr></thead>
+        <tbody>
+          <tr><td>Sidebar</td><td>主要セクションの切替と現在位置表示を担う。</td></tr>
+          <tr><td>Section header</td><td>画面名、概要、主要アクションを配置する。</td></tr>
+          <tr><td>Content panel</td><td>カード、テーブル、進捗、ログビューアを用途別に配置する。</td></tr>
+          <tr><td>Toast</td><td>IPC 成功・失敗、取り込み完了、保存結果を通知する。</td></tr>
+          <tr><td>Modal</td><td>ファイル選択、ログ表示、削除確認など一時操作を閉じ込める。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>4. Screen Layouts</h2>
+      <div class="layout">
+        <article class="screen">
+          <h3>Launcher</h3>
+          <p>登録アプリのカード/リストを表示し、起動と管理を行う。</p>
+          <pre class="wireframe">┌ Sidebar ┐┌ Launcher header: register / view mode ┐
+│ Analyze │├───────────────────────────────────────┤
+│ DB      ││ App list or app cards                 │
+│         ││ [icon] name path actions              │
+└─────────┘└ Toast area                            ┘</pre>
+        </article>
+        <article class="screen">
+          <h3>Analyze</h3>
+          <p>archive 容量、取り込み、ログ閲覧、元ログ削除をまとめる。</p>
+          <pre class="wireframe">┌ Analyze header: import / cleanup / settings ┐
+├ Storage meter                               ┤
+├ Import progress / event state               ┤
+├ Archive list summary                         │
+└ Actions: restore / open viewer / cleanup     ┘</pre>
+        </article>
+        <article class="screen">
+          <h3>Database Preview</h3>
+          <p>テーブル選択と検索結果を表示する。</p>
+          <pre class="wireframe">┌ Database header ┐
+├ Table selector / search / paging             ┤
+├ Result table                                  │
+│ col | col | col | ...                        │
+└ Row count / query status                      ┘</pre>
+        </article>
+        <article class="screen">
+          <h3>Log Viewer Modal</h3>
+          <p>plain log または compressed log をストリーム表示する。</p>
+          <pre class="wireframe">┌ Log viewer: file name / close ┐
+├ Toolbar: status / cancel      ┤
+├ Virtualized log lines         │
+│ 12:00 line text...            │
+└ Progress / error              ┘</pre>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <h2>5. Modal and Dialog Layouts</h2>
+      <table>
+        <thead><tr><th>Modal</th><th>Trigger</th><th>Primary Content</th><th>Close Rule</th></tr></thead>
+        <tbody>
+          <tr><td>RegisterAppModal</td><td>Launcher 登録</td><td>EXE パス、表示名、アイコン</td><td>登録完了または閉じる</td></tr>
+          <tr><td>ArchiveSelectorModal</td><td>Analyze 手動取り込み</td><td>archive 一覧、複数選択</td><td>開始または閉じる</td></tr>
+          <tr><td>PolarisCleanupModal</td><td>Analyze cleanup</td><td>削除対象ログ、確認</td><td>削除完了または閉じる</td></tr>
+          <tr><td>LogViewerModal</td><td>archive / plain log 選択</td><td>ログ本文、進捗、キャンセル</td><td>閉じるまたは読み込み完了</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>6. State and Feedback</h2>
+      <table>
+        <thead><tr><th>State</th><th>Display</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td>Import running</td><td>進捗バー、処理ファイル、キャンセル状態</td><td>analyze-progress event</td></tr>
+          <tr><td>Import finished</td><td>完了トースト、一覧再読込</td><td>analyze-finished event</td></tr>
+          <tr><td>Log streaming</td><td>読み込み行、進捗、キャンセル</td><td>log-viewer events</td></tr>
+          <tr><td>IPC error</td><td>エラートースト、操作ボタン再有効化</td><td>invoke result</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>

@@ -264,6 +264,7 @@ cargo clippy --workspace --all-targets    # Rust clippy（unwrap/expect/panic = 
 | [docs/spec.md](docs/spec.md) | 機能仕様書（アーキテクチャ、モジュール、IPC リファレンス、データフロー） |
 | [docs/database.md](docs/database.md) | データベース定義書（ER 図、スキーマ、インデックス） |
 | [docs/tech-stack.md](docs/tech-stack.md) | 技術スタック詳細と意思決定記録（ADR） |
+| [docs/basic-design.html](docs/basic-design.html) | 画面レイアウト基本設計書 |
 
 ---
 

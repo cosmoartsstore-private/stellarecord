@@ -12,6 +12,7 @@ Public user-facing documents remain in root `README.md` and `docs/`; `.claude/` 
 | `../docs/spec.md` | Users who need detailed behavior, developers | Feature behavior, IPC reference, data flow, state management, concurrency, security model |
 | `../docs/database.md` | Users/developers inspecting data | SQLite schema, tables, views, indexes, PRAGMAs, backup/restore notes |
 | `../docs/tech-stack.md` | Users/developers reviewing decisions | Technology choices, ADRs, rejected alternatives, build/distribution rationale |
+| `../docs/basic-design.html` | Users/developers reviewing screens | Screen layout basic design |
 
 ## Agent-Only Documents
 
@@ -28,6 +29,7 @@ Public user-facing documents remain in root `README.md` and `docs/`; `.claude/` 
 - Need exact feature behavior or IPC shape: read `../docs/spec.md`.
 - Need schema details or DB storage behavior: read `../docs/database.md`.
 - Need why a technology or architecture choice was made: read `../docs/tech-stack.md`.
+- Need screen layout details: read `../docs/basic-design.html`.
 - Need common engineering philosophy, comment policy, or collaboration rules: read the Codex global rules.
 - Need StellaRecord-local constraints, data-preservation rules, or test commands: continue in this file.
 - Need prior audit notes, follow-up items, do-not-rework decisions, or completed work notes: continue in this file.

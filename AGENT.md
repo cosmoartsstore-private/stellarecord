@@ -10,6 +10,7 @@ Common ethics, engineering philosophy, comment policy, and workflow rules live i
 - `docs/spec.md` - feature behavior, IPC reference, data flow, state management, concurrency, and security model.
 - `docs/database.md` - SQLite schema, tables, views, indexes, PRAGMAs, and backup/restore notes.
 - `docs/tech-stack.md` - technology choices, ADRs, rejected alternatives, and build/distribution rationale.
+- `docs/basic-design.html` - screen layout basic design.
 
 ## Routing
 
