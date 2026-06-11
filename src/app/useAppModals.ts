@@ -94,7 +94,9 @@ export function useAppModals(options: UseAppModalsOptions) {
 
   /** モーダルを閉じずに別のファイルに切り替える */
   const handleViewerNavigateToFile = (fileKey: string) => {
-    void openSelectedLogViewer(fileKey);
+    openSelectedLogViewer(fileKey).catch((error: unknown) => {
+      addToast('ログストリーム開始エラー: ' + String(error));
+    });
   };
 
   /** 外部ログファイルを選択し、最初に選んだファイルをビューアで開く */

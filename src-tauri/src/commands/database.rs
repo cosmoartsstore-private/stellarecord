@@ -750,7 +750,8 @@ pub fn get_db_tables() -> Result<Vec<DbTableSummary>, String> {
         .collect())
 }
 
-/// プレビューページあたりの最大行数。フロントエンドの仮想スクロールウィンドウに合わせる。
+/// DB プレビューで1ページあたりに返す最大行数。
+/// フロントエンド側の `pageSize` と一致させる。
 const PAGE_SIZE: u32 = 500;
 
 /// 選択された DB テーブルのページネーション付きプレビュー行とカラムメタデータを読み取る。

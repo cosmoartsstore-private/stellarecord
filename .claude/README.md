@@ -1,7 +1,7 @@
-# Claude/Codex Document Index
+# Project Agent Workspace
 
-This is the first file agents should read when choosing which StellaRecord document to use.
-Public user-facing documents remain in root `README.md` and `docs/`; `.claude/` only contains the agent index, internal notes, and archived working references.
+Root `AGENT.md` routes Codex here for StellaRecord-local constraints, internal notes, and prior agent decisions.
+Public user-facing documents remain in root `README.md` and `docs/`; `.claude/` contains agent-local policy, audit handoffs, follow-ups, and archived working references.
 
 ## Public Documents
 
@@ -16,8 +16,9 @@ Public user-facing documents remain in root `README.md` and `docs/`; `.claude/` 
 
 | Document | Audience | Use When |
 | --- | --- | --- |
-| `../AGENT.md` | Codex, Claude | Durable project principles and work rules |
-| `.claude/README.md` | Codex, Claude | Document map, internal notes, follow-up list, do-not-rework notes, completed work notes |
+| `../AGENT.md` | Codex | Codex entry point and document router |
+| `../CLAUDE.md` | Claude | Claude entry point and bridge to Codex global rules |
+| `.claude/README.md` | Codex, Claude | Project-local constraints, document map, internal notes, follow-up list, do-not-rework notes, completed work notes |
 | `.claude/manual.html` | Codex, Claude | Archived hard-coded interaction sample; not app source and not public documentation |
 
 ## Which Document To Read
@@ -26,8 +27,23 @@ Public user-facing documents remain in root `README.md` and `docs/`; `.claude/` 
 - Need exact feature behavior or IPC shape: read `../docs/spec.md`.
 - Need schema details or DB storage behavior: read `../docs/database.md`.
 - Need why a technology or architecture choice was made: read `../docs/tech-stack.md`.
-- Need project philosophy, data-preservation rules, or coding rules: read `../AGENT.md`.
+- Need common engineering philosophy, comment policy, or collaboration rules: read the Codex global rules.
+- Need StellaRecord-local constraints, data-preservation rules, or test commands: continue in this file.
 - Need prior audit notes, follow-up items, do-not-rework decisions, or completed work notes: continue in this file.
+
+## Local Project Constraints
+
+- Treat the current source and schema as canonical while the app is unreleased. Do not add compatibility code or DB migrations for pre-release states.
+- `Data/archive/` contains irreplaceable compressed logs and must survive uninstall without overwrite or deletion.
+- The SQLite DB, app logs, WebView cache, and other generated data may be deleted and regenerated.
+- Managed archive IPC arguments are untrusted. Use `resolve_managed_archive_path` and accept only single file names matching `output_log_*.txt.tar.zst`.
+- Persist VRChat raw labels such as `hidden` in the log model. UI-facing labels are consumer responsibility.
+- Log viewer display may decode damaged UTF-8 lossily with U+FFFD so one broken line does not hide the rest of the log.
+
+## Local Work Rules
+
+- Run at least `npm run test` and `npm run test:rust` before handing off source changes.
+- Run the relevant lint/build checks when the change touches TypeScript, Rust, docs, or tooling boundaries.
 
 ## Do Not Rework Without Requirement Change
 
