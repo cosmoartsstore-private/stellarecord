@@ -16,7 +16,12 @@ import { PolarisCleanupModal } from '../features/analyze/views/PolarisCleanupMod
 import { useAnalyzeState } from '../features/analyze/viewmodels/useAnalyzeState';
 import { useDatabaseState } from '../features/database/viewmodels/useDatabaseState';
 import { DatabaseSection } from '../features/database/views/DatabaseSection';
-import { launchExternalApp, openFolder, registerApp, unregisterApp } from '../features/registry/services/registryService';
+import {
+  launchExternalApp,
+  openFolder,
+  registerApp,
+  unregisterApp,
+} from '../features/registry/services/registryService';
 import type { AppCard } from '../features/registry/models/types';
 import { useRegistryState } from '../features/registry/viewmodels/useRegistryState';
 import { RegistrySection } from '../features/registry/views/RegistrySection';
@@ -24,11 +29,13 @@ import { RegisterAppModal } from '../features/registry/views/RegisterAppModal';
 import { readInitialTheme, saveTheme } from '../features/settings/models/theme';
 import type { ThemeMode } from '../features/settings/models/types';
 import { useSettingsState } from '../features/settings/viewmodels/useSettingsState';
+import { SettingsControls } from '../features/settings/views/SettingsControls';
 import { StellaIcon, stellaIconNames } from '../shared/components/Icons';
 import logoLightSrc from '../assets/logo-light.png';
 import logoDarkSrc from '../assets/logo-dark.png';
 import { useToasts } from '../shared/hooks/useToasts';
 import { CreditButton } from './CreditModal';
+import { addErrorToast } from '../shared/lib/errors';
 
 /** ランチャーグリッドの表示モード */
 type LauncherViewMode = 'list' | 'card';
@@ -127,7 +134,7 @@ function App() {
       await launchExternalApp(app.path);
       addToast(`${app.name} を起動しました`);
     } catch (error) {
-      addToast('エラー: ' + String(error));
+      addErrorToast(addToast, '登録済みアプリの起動', `${app.name} の起動に失敗しました`, error);
     }
   };
 
@@ -137,7 +144,12 @@ function App() {
       const dir = app.path.substring(0, app.path.lastIndexOf('\\'));
       await openFolder(dir);
     } catch (error) {
-      addToast('エラー: ' + String(error));
+      addErrorToast(
+        addToast,
+        '登録済みアプリのフォルダを開く',
+        'フォルダを開けませんでした',
+        error,
+      );
     }
   };
 
@@ -149,7 +161,7 @@ function App() {
       setIsRegisterModalOpen(false);
       await refreshRegistry();
     } catch (error) {
-      addToast('登録エラー: ' + String(error));
+      addErrorToast(addToast, 'サードパーティアプリ登録', `${name} の登録に失敗しました`, error);
     }
   };
 
@@ -160,7 +172,12 @@ function App() {
       addToast(`${app.name} の登録を解除しました`);
       await refreshRegistry();
     } catch (error) {
-      addToast('登録解除エラー: ' + String(error));
+      addErrorToast(
+        addToast,
+        'サードパーティアプリ登録解除',
+        `${app.name} の登録解除に失敗しました`,
+        error,
+      );
     }
   };
 
@@ -171,7 +188,7 @@ function App() {
       await toggleStartup();
       addToast(shouldEnable ? '自動起動を有効にしました' : '自動起動を無効にしました');
     } catch (error) {
-      addToast('設定保存に失敗しました: ' + String(error));
+      addErrorToast(addToast, '自動起動設定保存', '設定保存に失敗しました', error);
     }
   };
 
@@ -182,7 +199,7 @@ function App() {
       addToast('設定を保存しました');
       void pollStorage();
     } catch (error) {
-      addToast(String(error instanceof Error ? error.message : error));
+      addErrorToast(addToast, 'アーカイブ容量設定保存', '設定保存に失敗しました', error);
     }
   };
 
@@ -191,7 +208,7 @@ function App() {
     try {
       await runStartupImport();
     } catch (error) {
-      addToast('起動時取り込みに失敗しました: ' + String(error));
+      addErrorToast(addToast, '起動時取り込み開始', '起動時取り込みを開始できませんでした', error);
     }
   }, [addToast, runStartupImport]);
 
@@ -212,11 +229,12 @@ function App() {
     });
   };
 
-  const themeIcon = themeMode === 'light'
-    ? stellaIconNames.sun
-    : themeMode === 'dark'
-      ? stellaIconNames.moon
-      : stellaIconNames.eclipse;
+  const themeIcon =
+    themeMode === 'light'
+      ? stellaIconNames.sun
+      : themeMode === 'dark'
+        ? stellaIconNames.moon
+        : stellaIconNames.eclipse;
 
   // テーマ変更時にブラウザストレージへ永続化
   useEffect(() => {
@@ -230,7 +248,7 @@ function App() {
 
   const navItems: { section: SectionId; label: string }[] = [
     { section: 'registry', label: 'ランチャー' },
-    { section: 'analyze',  label: '解析' },
+    { section: 'analyze', label: '解析' },
     { section: 'database', label: 'DB' },
   ];
 
@@ -250,30 +268,58 @@ function App() {
             launcherViewMode={launcherViewMode}
             isReloading={isReloading}
             onSetLauncherViewMode={setLauncherViewMode}
-            onLaunchApp={(app) => { void handleLaunch(app); }}
-            onOpenFolder={(app) => { void handleOpenFolder(app); }}
-            onUnregisterApp={(app) => { void handleUnregisterApp(app); }}
-            onRegisterApp={() => { setIsRegisterModalOpen(true); }}
-            onReload={() => { void reloadRegistry(); }}
+            onLaunchApp={(app) => {
+              void handleLaunch(app);
+            }}
+            onOpenFolder={(app) => {
+              void handleOpenFolder(app);
+            }}
+            onUnregisterApp={(app) => {
+              void handleUnregisterApp(app);
+            }}
+            onRegisterApp={() => {
+              setIsRegisterModalOpen(true);
+            }}
+            onReload={() => {
+              void reloadRegistry();
+            }}
           />
         );
       case 'analyze':
         return (
           <AnalyzeSection
             storageStatus={storageStatus}
-            archiveLimitDraft={archiveLimitDraft}
-            isStartupEnabledDraft={isStartupEnabledDraft}
             isAnalyzeRunning={isAnalyzeRunning}
             analyzeProgress={analyzeProgress}
             analyzeStatus={analyzeStatus}
-            onArchiveLimitDraftChange={setArchiveLimitDraft}
-            onToggleStartup={() => { void handleToggleStartup(); }}
-            onSaveArchiveLimit={() => { void handleSaveArchiveLimit(); }}
-            onRefreshStorage={() => { void pollStorage(); }}
-            onOpenEnhancedSync={() => { void modals.handleOpenEnhancedSync(); }}
-            onOpenLogViewer={() => { void modals.handleOpenLogViewer(); }}
-            onCancelSync={() => { void handleCancelSync(); }}
-            onOpenCleanup={() => { void modals.handleOpenCleanup(); }}
+            settingsControls={
+              <SettingsControls
+                archiveLimitDraft={archiveLimitDraft}
+                isStartupEnabledDraft={isStartupEnabledDraft}
+                onArchiveLimitDraftChange={setArchiveLimitDraft}
+                onSaveArchiveLimit={() => {
+                  void handleSaveArchiveLimit();
+                }}
+                onToggleStartup={() => {
+                  void handleToggleStartup();
+                }}
+              />
+            }
+            onRefreshStorage={() => {
+              void pollStorage();
+            }}
+            onOpenEnhancedSync={() => {
+              void modals.handleOpenEnhancedSync();
+            }}
+            onOpenLogViewer={() => {
+              void modals.handleOpenLogViewer();
+            }}
+            onCancelSync={() => {
+              void handleCancelSync();
+            }}
+            onOpenCleanup={() => {
+              void modals.handleOpenCleanup();
+            }}
           />
         );
       case 'database':
@@ -287,9 +333,15 @@ function App() {
             totalPages={totalPages}
             pageSize={pageSize}
             sortState={sortState}
-            onSelectTable={(tableName) => { void loadTableData(tableName); }}
-            onGoToPage={(page) => { void goToPage(page); }}
-            onToggleSort={(columnName) => { void toggleSort(columnName); }}
+            onSelectTable={(tableName) => {
+              void loadTableData(tableName);
+            }}
+            onGoToPage={(page) => {
+              void goToPage(page);
+            }}
+            onToggleSort={(columnName) => {
+              void toggleSort(columnName);
+            }}
           />
         );
     }
@@ -302,7 +354,15 @@ function App() {
           <img
             src={themeMode === 'light' ? logoLightSrc : logoDarkSrc}
             alt="STELLA RECORD"
-            className={styles[themeMode === 'midnight' ? 'navLogoMidnight' : themeMode === 'dark' ? 'navLogoDark' : 'navLogoLight']}
+            className={
+              styles[
+                themeMode === 'midnight'
+                  ? 'navLogoMidnight'
+                  : themeMode === 'dark'
+                    ? 'navLogoDark'
+                    : 'navLogoLight'
+              ]
+            }
           />
         </div>
 
@@ -311,7 +371,9 @@ function App() {
             <button
               key={section}
               className={`${styles.pillBtn} ${activeSection === section ? styles.pillBtnActive : ''}`}
-              onClick={() => { void handleNavSelect(section); }}
+              onClick={() => {
+                void handleNavSelect(section);
+              }}
             >
               <StellaIcon name={navIcons[section]} />
               {label}
@@ -337,7 +399,9 @@ function App() {
           onClose={modals.closeArchiveSelector}
           onSelectAll={handleBatchSelectAll}
           onFileAction={handleBatchFileAction}
-          onConfirm={() => { void modals.handleConfirmImport(); }}
+          onConfirm={() => {
+            void modals.handleConfirmImport();
+          }}
         />
       )}
 
@@ -349,8 +413,12 @@ function App() {
           isLoading={isLogViewerLoading}
           isLoaded={isLogViewerLoaded}
           onNavigateToFile={modals.handleViewerNavigateToFile}
-          onPickExternalFiles={() => { void modals.handleSelectExternalFiles(); }}
-          onClearExternalFiles={() => { void modals.handleClearExternalFiles(); }}
+          onPickExternalFiles={() => {
+            void modals.handleSelectExternalFiles();
+          }}
+          onClearExternalFiles={() => {
+            void modals.handleClearExternalFiles();
+          }}
           onClose={modals.closeLogViewerModal}
         />
       )}
@@ -359,14 +427,20 @@ function App() {
         <PolarisCleanupModal
           logs={modals.deletableLogs}
           onClose={modals.closeCleanupModal}
-          onConfirm={(fileNames) => { void modals.handleConfirmCleanup(fileNames); }}
+          onConfirm={(fileNames) => {
+            void modals.handleConfirmCleanup(fileNames);
+          }}
         />
       )}
 
       {isRegisterModalOpen && (
         <RegisterAppModal
-          onClose={() => { setIsRegisterModalOpen(false); }}
-          onConfirm={(path, name, description) => { void handleRegisterApp(path, name, description); }}
+          onClose={() => {
+            setIsRegisterModalOpen(false);
+          }}
+          onConfirm={(path, name, description) => {
+            void handleRegisterApp(path, name, description);
+          }}
         />
       )}
 

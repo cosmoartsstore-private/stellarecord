@@ -7,6 +7,7 @@ import {
   onAnalyzeFinished,
   onAnalyzeProgress,
 } from '../services/analyzeService';
+import { addErrorToast } from '../../../shared/lib/errors';
 
 type AddToast = (msg: string) => void;
 
@@ -62,8 +63,6 @@ export function useAnalyzeState(addToast: AddToast) {
     unlistenFns.push(
       onAnalyzeFinished(() => {
         setAnalyzeRunning(false);
-        setAnalyzeStatus('待機中');
-        setAnalyzeProgress('');
         void pollStorage();
       }),
     );
@@ -85,7 +84,7 @@ export function useAnalyzeState(addToast: AddToast) {
       await cancelAnalyze();
       addToast('解析の中断を要求しました');
     } catch (error) {
-      addToast('停止エラー: ' + String(error));
+      addErrorToast(addToast, '解析停止要求', '停止要求を送信できませんでした', error);
     }
   }, [addToast]);
 

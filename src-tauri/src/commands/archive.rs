@@ -92,8 +92,8 @@ fn open_source_log_for_read(path: &Path) -> Result<fs::File, String> {
 /// `VRChat` 生ログ1件を単一エントリの `.tar.zst` アーカイブに圧縮する。
 ///
 /// tar でラップすることで元のファイル名が保持され、圧縮後も後続の
-/// インポートやログビューアフローがソース名を使い続けられる。
-/// zstd レベル 3 は圧縮速度と圧縮率のバランスに優れ、テキストログに対して
+/// インポートやログビューア処理がソース名を使い続けられる。
+/// zstd 圧縮レベル 3 は圧縮速度と圧縮率のバランスに優れ、テキストログに対して
 /// 十分な圧縮率を達成しつつリアルタイム同期を妨げない。
 fn compress_single_file(src: &Path, dst: &Path) -> Result<(), String> {
     let output = fs::File::create(dst).map_err(|err| utils::command_create_err(dst, err))?;
@@ -291,6 +291,62 @@ fn build_archive_sync_plan(
     }))
 }
 
+/// ソースログの現在内容が管理アーカイブ内のログと完全に一致するか確認する。
+///
+/// 元ログ削除は取り返しがつかないため、ファイル名・サイズ・バイト列が一致する場合
+/// のみ削除可能とする。古いアーカイブが残っているだけの状態は削除対象にしない。
+fn is_source_log_exactly_archived(source_path: &Path, archive_path: &Path) -> Result<bool, String> {
+    if !archive_path.exists() {
+        return Ok(false);
+    }
+
+    let source_name = source_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| {
+            format!(
+                "ファイル名を解決できませんでした [{}]",
+                source_path.display()
+            )
+        })?;
+    let archived_name = read_archive_source_name(archive_path)?;
+    if archived_name != source_name {
+        utils::log_warn(&format!(
+            "元ログ削除候補から除外します。アーカイブ内のファイル名が一致しません [{source_name} != {archived_name}]"
+        ));
+        return Ok(false);
+    }
+
+    let archive_file =
+        fs::File::open(archive_path).map_err(|err| utils::command_open_err(archive_path, err))?;
+    let decoder = zstd::stream::Decoder::new(archive_file)
+        .map_err(|err| utils::command_err("zstd デコーダーを初期化できませんでした", err))?;
+    let mut archive = tar::Archive::new(decoder);
+    let mut entries = archive
+        .entries()
+        .map_err(|err| utils::command_err("zst エントリ一覧を取得できませんでした", err))?;
+    let Some(entry_result) = entries.next() else {
+        return Ok(false);
+    };
+    let mut entry = entry_result
+        .map_err(|err| utils::command_err("zst エントリを読み取れませんでした", err))?;
+    let archived_size = entry.header().size().map_err(|err| {
+        utils::command_err("アーカイブエントリのサイズを取得できませんでした", err)
+    })?;
+
+    let mut source_file = open_source_log_for_read(source_path)?;
+    let source_size = source_file
+        .metadata()
+        .map_err(|err| utils::command_read_err(source_path, err))?
+        .len();
+    if source_size != archived_size {
+        return Ok(false);
+    }
+
+    streaming_prefix_equal(&mut entry, &mut source_file)
+        .map_err(|err| utils::command_read_err(source_path, err))
+}
+
 /// `Data` でアーカイブまたは更新が必要なソースログを収集する。
 ///
 /// # 引数
@@ -426,7 +482,7 @@ pub(crate) fn sync_source_logs_into_archive_store(
     Ok(plans.len())
 }
 
-/// ビューアの重要度レベルをチャンク転送用のコンパクトな `u8` にエンコードする。
+/// ビューアの重要度をチャンク転送用のコンパクトな `u8` にエンコードする。
 ///
 /// フロントエンドがこれを CSS クラスにデコードするため、数値マッピングは
 /// TypeScript のログビューア定数と同期を保つ必要がある。
@@ -504,7 +560,7 @@ struct DbKeywordMarker {
     text: String,
 }
 
-/// 生ログ行を粗いビューア重要度レベルに分類する。
+/// 生ログ行をビューア用の重要度に分類する。
 fn classify_log_level(line: &str) -> &'static str {
     if line.contains("[UserInfoLogger] Environment Info:") {
         return "debug";
@@ -906,7 +962,7 @@ fn emit_log_viewer_chunks(
             .unwrap_or_default();
 
         // 範囲ブロック内では debug-system 由来なら debug 固定。
-        // Notification 範囲はタイムスタンプ付き行の本来のレベルを尊重する。
+        // Notification 範囲はタイムスタンプ付き行の本来のログレベルを尊重する。
         let level = if matches!(
             active_range.as_ref().map(|b| b.kind),
             Some(RangeBlockKind::DebugSystem)
@@ -1235,7 +1291,7 @@ pub fn open_folder(path: &str) -> Result<(), String> {
     opener::open(path).map_err(|err| utils::command_err("フォルダを開けませんでした", err))
 }
 
-/// `.tar.zst` アーカイブが確認済みで安全に削除可能なソースログファイルを一覧表示する。
+/// `.tar.zst` 内のログと現在内容が一致し、安全に削除可能なソースログを一覧表示する。
 ///
 /// # Errors
 /// ソースログディレクトリまたはアーカイブディレクトリを読み取れない場合にエラーを返す。
@@ -1258,7 +1314,16 @@ pub fn get_deletable_source_logs() -> Result<Vec<DeletableLogInfo>, String> {
                 return None;
             }
             let archive_path = archive_dir.join(format!("{name}.tar.zst"));
-            if !archive_path.exists() {
+            let is_archived = match is_source_log_exactly_archived(&path, &archive_path) {
+                Ok(value) => value,
+                Err(err) => {
+                    utils::log_warn(&format!(
+                        "元ログ削除候補の確認に失敗しました [{name}]: {err}"
+                    ));
+                    false
+                }
+            };
+            if !is_archived {
                 return None;
             }
             let size_bytes = path.metadata().map(|m| m.len()).unwrap_or(0);
@@ -1357,7 +1422,7 @@ pub fn read_external_log_viewer(
     })
 }
 
-/// 各ファイルの `.tar.zst` アーカイブ存在を確認した上で指定ソースログを削除する。
+/// 各ファイルの `.tar.zst` 内容が現在の元ログと一致することを確認して削除する。
 ///
 /// # Errors
 /// ファイル名が不正、アーカイブが存在しない、または削除に失敗した場合にエラーを返す。
@@ -1372,14 +1437,19 @@ pub fn delete_source_logs(file_names: Vec<String>) -> Result<usize, String> {
         if !matches_source_log_file_name(file_name) {
             return Err(format!("不正なファイル名です: {file_name}"));
         }
-        let archive_path = archive_dir.join(format!("{file_name}.tar.zst"));
-        if !archive_path.exists() {
-            return Err(format!(
-                "アーカイブが見つかりません。削除を中止しました: {file_name}.tar.zst"
-            ));
-        }
         let source_path = source_dir.join(file_name);
         if source_path.exists() {
+            let archive_path = archive_dir.join(format!("{file_name}.tar.zst"));
+            if !archive_path.exists() {
+                return Err(format!(
+                    "アーカイブが見つかりません。削除を中止しました: {file_name}.tar.zst"
+                ));
+            }
+            if !is_source_log_exactly_archived(&source_path, &archive_path)? {
+                return Err(format!(
+                    "元ログの現在内容がアーカイブと一致しません。Data 同期後に再実行してください: {file_name}"
+                ));
+            }
             fs::remove_file(&source_path)
                 .map_err(|err| format!("{file_name} の削除に失敗しました: {err}"))?;
             deleted_count += 1;
@@ -1657,6 +1727,31 @@ mod tests {
 
         let plan = build_archive_sync_plan(&src, &archive_dir).unwrap();
         assert!(plan.is_none(), "identical source and archive should skip");
+    }
+
+    #[test]
+    fn source_log_exactly_archived_accepts_identical_archive() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("output_log_2025-04-30.txt");
+        let archive = dir.path().join("output_log_2025-04-30.txt.tar.zst");
+
+        fs::write(&src, "same content in both").unwrap();
+        compress_single_file(&src, &archive).unwrap();
+
+        assert!(is_source_log_exactly_archived(&src, &archive).unwrap());
+    }
+
+    #[test]
+    fn source_log_exactly_archived_rejects_stale_archive() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("output_log_2025-04-30.txt");
+        let archive = dir.path().join("output_log_2025-04-30.txt.tar.zst");
+
+        fs::write(&src, "first line\n").unwrap();
+        compress_single_file(&src, &archive).unwrap();
+        fs::write(&src, "first line\nsecond line\n").unwrap();
+
+        assert!(!is_source_log_exactly_archived(&src, &archive).unwrap());
     }
 
     #[test]

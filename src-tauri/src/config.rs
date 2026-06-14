@@ -255,6 +255,24 @@ fn load_catalog_from_db(db_path: &std::path::Path) -> RegistryCatalog {
     catalog
 }
 
+impl StellaRecordSetting {
+    /// `StellaRecord` が管理する圧縮ログアーカイブのディレクトリを解決する。
+    pub fn get_effective_archive_dir(&self) -> Option<PathBuf> {
+        if !self.archive_path.is_empty() {
+            return Some(PathBuf::from(&self.archive_path));
+        }
+        utils::get_stellarecord_data_dir("archive")
+    }
+
+    /// `StellaRecord` が開くメインデータベースのパスを解決する。
+    pub fn get_effective_db_path(&self) -> Option<PathBuf> {
+        if !self.db_path.is_empty() {
+            return Some(PathBuf::from(&self.db_path));
+        }
+        Some(utils::get_stellarecord_data_dir("db")?.join("stellarecord.db"))
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -470,23 +488,5 @@ mod tests {
             setting.get_effective_db_path(),
             Some(PathBuf::from(r"C:\StellaRecordTest\db\test.db"))
         );
-    }
-}
-
-impl StellaRecordSetting {
-    /// `StellaRecord` が管理する圧縮ログアーカイブのディレクトリを解決する。
-    pub fn get_effective_archive_dir(&self) -> Option<PathBuf> {
-        if !self.archive_path.is_empty() {
-            return Some(PathBuf::from(&self.archive_path));
-        }
-        utils::get_stellarecord_data_dir("archive")
-    }
-
-    /// `StellaRecord` が開くメインデータベースのパスを解決する。
-    pub fn get_effective_db_path(&self) -> Option<PathBuf> {
-        if !self.db_path.is_empty() {
-            return Some(PathBuf::from(&self.db_path));
-        }
-        Some(utils::get_stellarecord_data_dir("db")?.join("stellarecord.db"))
     }
 }

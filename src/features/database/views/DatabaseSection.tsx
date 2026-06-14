@@ -50,13 +50,12 @@ export function DatabaseSection({
       <button
         key={table.name}
         type="button"
-        onClick={() => { onSelectTable(table.name); }}
+        onClick={() => {
+          onSelectTable(table.name);
+        }}
         className={`${styles.tableItem} ${isActive ? styles.tableItemActive : ''}`}
-
       >
-        <span className={styles.tableItemLabel}>
-          {isPhysicalNames ? table.name : table.label}
-        </span>
+        <span className={styles.tableItemLabel}>{isPhysicalNames ? table.name : table.label}</span>
       </button>
     );
   };
@@ -74,7 +73,9 @@ export function DatabaseSection({
             <button
               type="button"
               className={styles.nameToggle}
-              onClick={() => { setIsPhysicalNames((prev) => !prev); }}
+              onClick={() => {
+                setIsPhysicalNames((prev) => !prev);
+              }}
             >
               {isPhysicalNames ? 'Physical' : 'Logical'}
             </button>
@@ -117,7 +118,9 @@ export function DatabaseSection({
                 <button
                   type="button"
                   className={shared.btn}
-                  onClick={() => { onGoToPage(currentPage - 1); }}
+                  onClick={() => {
+                    onGoToPage(currentPage - 1);
+                  }}
                   disabled={isDbLoading || currentPage === 0}
                 >
                   ←
@@ -128,7 +131,9 @@ export function DatabaseSection({
                 <button
                   type="button"
                   className={shared.btn}
-                  onClick={() => { onGoToPage(currentPage + 1); }}
+                  onClick={() => {
+                    onGoToPage(currentPage + 1);
+                  }}
                   disabled={isDbLoading || currentPage >= totalPages - 1}
                 >
                   →
@@ -150,11 +155,15 @@ export function DatabaseSection({
                         <th
                           key={column.name}
                           className={styles.sortableHeader}
-                          onClick={() => { onToggleSort(column.name); }}
+                          onClick={() => {
+                            onToggleSort(column.name);
+                          }}
                         >
                           <div className={styles.columnLabel}>
                             {column.label}
-                            <span className={`${styles.sortArrow} ${isSorted ? styles.sortArrowActive : ''}`}>
+                            <span
+                              className={`${styles.sortArrow} ${isSorted ? styles.sortArrowActive : ''}`}
+                            >
                               {isSorted ? (sortState.dir === 'asc' ? '▲' : '▼') : '▲'}
                             </span>
                           </div>

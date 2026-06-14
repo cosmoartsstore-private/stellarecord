@@ -1,7 +1,11 @@
 import { useState } from 'react';
-import { getDeletableSourceLogs, deleteSourceLogs } from '../features/analyze/services/analyzeService';
+import {
+  getDeletableSourceLogs,
+  deleteSourceLogs,
+} from '../features/analyze/services/analyzeService';
 import type { DeletableLogInfo } from '../features/analyze/models/types';
 import type { ArchiveFileItem } from '../features/archive/models/types';
+import { addErrorToast } from '../shared/lib/errors';
 
 /** モーダルコーディネーターが親Appから受け取るコールバックと共有状態 */
 interface UseAppModalsOptions {
@@ -21,7 +25,7 @@ interface UseAppModalsOptions {
 }
 
 /**
- * 全トップレベルモーダルの開閉・確認ロジックを集約するフック
+ * 全上位モーダルの開閉・確認ロジックを集約するフック
  *
  * App.tsxをレイアウトに専念させるため、モーダルのライフサイクル管理を
  * ここに委譲する。呼び出し側は modals.xxx のパターンで操作する
@@ -57,7 +61,7 @@ export function useAppModals(options: UseAppModalsOptions) {
       }
       setIsArchiveSelectorVisible(true);
     } catch (error) {
-      addToast('ファイル一覧取得失敗: ' + String(error));
+      addErrorToast(addToast, 'アーカイブ一覧取得', 'アーカイブ一覧を取得できませんでした', error);
     }
   };
 
@@ -71,7 +75,12 @@ export function useAppModals(options: UseAppModalsOptions) {
       await executeEnhancedSync(targets);
     } catch (error) {
       setAnalyzeRunning(false);
-      addToast('強化同期エラー: ' + String(error));
+      addErrorToast(
+        addToast,
+        '選択アーカイブ取り込み開始',
+        '取り込みを開始できませんでした',
+        error,
+      );
     }
   };
 
@@ -85,17 +94,27 @@ export function useAppModals(options: UseAppModalsOptions) {
       }
       setIsLogViewerModalVisible(true);
       openSelectedLogViewer(files[0].name).catch((error: unknown) => {
-        addToast('ログストリーム開始エラー: ' + String(error));
+        addErrorToast(
+          addToast,
+          '最新アーカイブログ閲覧開始',
+          'ログの読み込みを開始できませんでした',
+          error,
+        );
       });
     } catch (error) {
-      addToast('ログ閲覧エラー: ' + String(error));
+      addErrorToast(addToast, 'ログビューア一覧取得', 'ログビューアを開けませんでした', error);
     }
   };
 
   /** モーダルを閉じずに別のファイルに切り替える */
   const handleViewerNavigateToFile = (fileKey: string) => {
     openSelectedLogViewer(fileKey).catch((error: unknown) => {
-      addToast('ログストリーム開始エラー: ' + String(error));
+      addErrorToast(
+        addToast,
+        'ログビューアファイル切替',
+        'ログの読み込みを開始できませんでした',
+        error,
+      );
     });
   };
 
@@ -108,10 +127,10 @@ export function useAppModals(options: UseAppModalsOptions) {
       const newFiles = files.filter((f) => !externalFiles.includes(f));
       const target = newFiles.length > 0 ? newFiles[0] : files[0];
       openSelectedLogViewer(target).catch((error: unknown) => {
-        addToast('ログストリーム開始エラー: ' + String(error));
+        addErrorToast(addToast, '外部ログ閲覧開始', 'ログの読み込みを開始できませんでした', error);
       });
     } catch (error) {
-      addToast('外部ファイルの読み込みに失敗しました: ' + String(error));
+      addErrorToast(addToast, '外部ログファイル選択', '外部ログファイルを開けませんでした', error);
     }
   };
 
@@ -124,10 +143,20 @@ export function useAppModals(options: UseAppModalsOptions) {
         return;
       }
       openSelectedLogViewer(files[0].name).catch((error: unknown) => {
-        addToast('ログストリーム開始エラー: ' + String(error));
+        addErrorToast(
+          addToast,
+          '既定アーカイブログ閲覧開始',
+          'ログの読み込みを開始できませんでした',
+          error,
+        );
       });
     } catch (error) {
-      addToast('既定フォルダへの切替に失敗しました: ' + String(error));
+      addErrorToast(
+        addToast,
+        '既定アーカイブフォルダ切替',
+        '既定フォルダへ切り替えられませんでした',
+        error,
+      );
     }
   };
 
@@ -142,7 +171,7 @@ export function useAppModals(options: UseAppModalsOptions) {
       setDeletableLogs(logs);
       setIsCleanupModalOpen(true);
     } catch (error) {
-      addToast('元ログ一覧の取得に失敗しました: ' + String(error));
+      addErrorToast(addToast, '元ログ削除候補取得', '元ログ一覧を取得できませんでした', error);
     }
   };
 
@@ -153,7 +182,7 @@ export function useAppModals(options: UseAppModalsOptions) {
       const count = await deleteSourceLogs(fileNames);
       addToast(`元ログ ${String(count)} 件を削除しました`);
     } catch (error) {
-      addToast('削除に失敗しました: ' + String(error));
+      addErrorToast(addToast, '元ログ削除', '元ログを削除できませんでした', error);
     }
   };
 

@@ -12,7 +12,7 @@ export interface AnalyzeProgressEvent {
   is_running: boolean;
 }
 
-/** アーカイブ済みが確認され削除対象となるソースログファイル */
+/** アーカイブ内容と現在内容が一致し、削除対象となるソースログファイル */
 export interface DeletableLogInfo {
   file_name: string;
   size_bytes: number;

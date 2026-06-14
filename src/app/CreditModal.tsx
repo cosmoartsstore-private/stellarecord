@@ -21,13 +21,24 @@ export function CreditButton() {
     <>
       <button
         className={styles.trigger}
-        onClick={() => { setIsOpen(true); }}
+        onClick={() => {
+          setIsOpen(true);
+        }}
         aria-label="クレジット"
       >
-        <StellaIcon name={stellaIconNames.info} style={{ width: '18px', height: '18px', fill: 'currentColor' }} />
+        <StellaIcon
+          name={stellaIconNames.info}
+          style={{ width: '18px', height: '18px', fill: 'currentColor' }}
+        />
       </button>
 
-      {isOpen && <CreditModal onClose={() => { setIsOpen(false); }} />}
+      {isOpen && (
+        <CreditModal
+          onClose={() => {
+            setIsOpen(false);
+          }}
+        />
+      )}
     </>
   );
 }
@@ -48,9 +59,7 @@ function CreditModal({ onClose }: { onClose: () => void }) {
   return (
     <div className={shared.modalOverlay}>
       <button className={shared.modalBackdrop} onClick={onClose} />
-      <div
-        className={`${shared.modalContent} ${styles.modal}`}
-      >
+      <div className={`${shared.modalContent} ${styles.modal}`}>
         <div className={styles.banner}>
           <div className={styles.bannerGlow} />
           <img src={logoDarkSrc} alt="STELLA RECORD" className={styles.bannerLogo} />
@@ -73,17 +82,21 @@ function CreditModal({ onClose }: { onClose: () => void }) {
               <button
                 key={link.label}
                 className={styles.linkItem}
-                onClick={() => { handleLink(link.url); }}
+                onClick={() => {
+                  handleLink(link.url);
+                }}
               >
                 <span className={styles.linkIcon}>
-                  <StellaIcon name={link.icon} style={{ width: '14px', height: '14px', fill: 'currentColor' }} />
+                  <StellaIcon
+                    name={link.icon}
+                    style={{ width: '14px', height: '14px', fill: 'currentColor' }}
+                  />
                 </span>
                 <span className={styles.linkLabel}>{link.label}</span>
                 <span className={styles.linkArrow}>&#8250;</span>
               </button>
             ))}
           </div>
-
         </div>
       </div>
     </div>

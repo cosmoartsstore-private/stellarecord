@@ -67,7 +67,7 @@ pub struct ArchiveFileItem {
     pub size_bytes: u64,
 }
 
-/// .tar.zst アーカイブ済みで安全に削除可能なソースログファイル。
+/// .tar.zst 内のログと現在内容が一致し、削除対象にできるソースログファイル。
 #[derive(Debug, Clone, Serialize)]
 pub struct DeletableLogInfo {
     pub file_name: String,

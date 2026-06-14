@@ -6,7 +6,8 @@
 //! 結果に関わらず `analyze-finished` イベントで完了を通知する。
 
 use std::fs;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use tauri::{AppHandle, State};
 
@@ -19,6 +20,34 @@ use super::archive::{
     sync_source_logs_into_archive_store,
 };
 use super::{emit_analyze_progress, get_archive_store_dir, get_db_path, get_source_log_dir};
+
+/// 取り込みワーカー終了時に実行中フラグを必ず解除するためのガード。
+struct AnalyzeRunGuard {
+    running: Arc<AtomicBool>,
+}
+
+impl Drop for AnalyzeRunGuard {
+    fn drop(&mut self) {
+        self.running.store(false, Ordering::SeqCst);
+    }
+}
+
+/// 新しい取り込みワーカーの開始権を取得し、共有キャンセルフラグを初期化する。
+fn begin_analyze_run(
+    cancel_status: &AnalyzeCancelStatus,
+) -> Result<(Arc<AtomicBool>, AnalyzeRunGuard), String> {
+    cancel_status
+        .running
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .map_err(|_| "取り込みはすでに実行中です。完了後に再実行してください。".to_string())?;
+    cancel_status.cancel.store(false, Ordering::SeqCst);
+    Ok((
+        cancel_status.cancel.clone(),
+        AnalyzeRunGuard {
+            running: cancel_status.running.clone(),
+        },
+    ))
+}
 
 /// ユーザー選択のアーカイブログをバックグラウンドスレッドでインポート開始する。
 ///
@@ -37,9 +66,6 @@ pub fn launch_enhanced_import(
 ) -> Result<String, String> {
     let db_path = get_db_path()?;
     let zst_dir = get_archive_store_dir()?;
-    let cancel_flag = cancel_status.0.clone();
-    cancel_flag.store(false, Ordering::SeqCst);
-
     let mut target_paths = Vec::new();
     let total = file_names.len();
     for file_name in file_names {
@@ -51,7 +77,9 @@ pub fn launch_enhanced_import(
     }
     target_paths.sort();
 
+    let (cancel_flag, run_guard) = begin_analyze_run(&cancel_status)?;
     std::thread::spawn(move || {
+        let _run_guard = run_guard;
         let result = analyze::run_enhanced_import_batch(
             &db_path,
             &target_paths,
@@ -99,10 +127,9 @@ pub fn launch_startup_archive_import(
     let db_path = get_db_path()?;
     let source_dir = get_source_log_dir()?;
     let archive_store_dir = get_archive_store_dir()?;
-    let cancel_flag = cancel_status.0.clone();
-    cancel_flag.store(false, Ordering::SeqCst);
-
+    let (cancel_flag, run_guard) = begin_analyze_run(&cancel_status)?;
     std::thread::spawn(move || {
+        let _run_guard = run_guard;
         let pending_count =
             match collect_pending_archive_sync_plans(&source_dir, &archive_store_dir) {
                 Ok(plans) => plans.len(),
@@ -173,6 +200,6 @@ pub fn launch_startup_archive_import(
 /// ワーカーが粗い作業単位間でのみチェックするためチャネルや非同期協調は不要。
 #[tauri::command]
 pub async fn cancel_analyze(cancel_status: State<'_, AnalyzeCancelStatus>) -> Result<(), String> {
-    cancel_status.0.store(true, Ordering::SeqCst);
+    cancel_status.cancel.store(true, Ordering::SeqCst);
     Ok(())
 }

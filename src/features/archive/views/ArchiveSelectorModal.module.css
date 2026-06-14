@@ -82,7 +82,10 @@
   cursor: pointer;
   text-align: left;
   user-select: none;
-  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+  transition:
+    transform 0.15s,
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 
 .item:hover {
@@ -111,7 +114,11 @@
   border: 2px solid var(--file-checkbox-border);
   border-radius: 7px;
   background: transparent;
-  transition: background 0.2s, border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+  transition:
+    background 0.2s,
+    border-color 0.2s,
+    transform 0.2s,
+    box-shadow 0.2s;
 }
 
 .checkbox:hover {

@@ -62,7 +62,9 @@ export function RegisterAppModal({ onClose, onConfirm }: RegisterAppModalProps) 
               />
               <button
                 className={shared.btn}
-                onClick={() => { void handlePickFile(); }}
+                onClick={() => {
+                  void handlePickFile();
+                }}
               >
                 参照
               </button>
@@ -74,7 +76,9 @@ export function RegisterAppModal({ onClose, onConfirm }: RegisterAppModalProps) 
               type="text"
               className={styles.formInput}
               value={name}
-              onChange={(e) => { setName(e.target.value); }}
+              onChange={(e) => {
+                setName(e.target.value);
+              }}
               placeholder="表示名を入力"
             />
           </label>
@@ -84,7 +88,9 @@ export function RegisterAppModal({ onClose, onConfirm }: RegisterAppModalProps) 
               type="text"
               className={styles.formInput}
               value={description}
-              onChange={(e) => { setDescription(e.target.value); }}
+              onChange={(e) => {
+                setDescription(e.target.value);
+              }}
               placeholder="アプリの説明"
             />
           </label>
@@ -96,7 +102,9 @@ export function RegisterAppModal({ onClose, onConfirm }: RegisterAppModalProps) 
           <button
             className={`${shared.btn} ${shared.primary}`}
             disabled={!canSubmit}
-            onClick={() => { onConfirm(path, name.trim(), description); }}
+            onClick={() => {
+              onConfirm(path, name.trim(), description);
+            }}
           >
             登録
           </button>

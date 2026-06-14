@@ -11,7 +11,7 @@ interface SettingsControlsProps {
   onToggleStartup: () => void;
 }
 
-/** ストレージ警告ライン（MB）と自動起動のインライン設定ウィジェット */
+/** ストレージ警告ライン（MB）と自動起動のインライン設定フォーム */
 export function SettingsControls({
   archiveLimitDraft,
   isStartupEnabledDraft,

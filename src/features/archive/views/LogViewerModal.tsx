@@ -43,7 +43,7 @@ const levelClassMap: Record<string, string> = {
 const zoomStep = 0.1;
 const baseLineHeight = 22;
 
-/** バックエンドの数値レベルをCSSクラスキー文字列にマッピング */
+/** バックエンドの数値ログレベルをCSSクラスキー文字列にマッピング */
 const levelKeys = ['plain', 'info', 'warning', 'error', 'debug'] as const;
 /**
  * バックエンドの数値カテゴリを CSS クラスキー文字列にマッピング。
@@ -80,7 +80,7 @@ interface LogViewerModalProps {
 }
 
 /**
- * サイドバーナビ・カテゴリ/レベルフィルタ付きのフルスクリーンログビューアモーダル
+ * サイドバーナビ・カテゴリ/ログレベルフィルタ付きのフルスクリーンログビューアモーダル
  * 10万行超のレンダリングに @tanstack/react-virtual を使用
  */
 export function LogViewerModal({
@@ -176,7 +176,7 @@ export function LogViewerModal({
 
   const zoomFontSize = `${(0.8 * zoomLevel).toFixed(2)}rem`;
 
-  /** カテゴリ/レベル色分けとキーワードハイライト付きで1行を描画する */
+  /** カテゴリ/ログレベル色分けとキーワードハイライト付きで1行を描画する */
   const renderLine = (i: number, key: string | number, extraStyle?: React.CSSProperties) => {
     const rawLine = logViewerData.raw_lines[i] ?? '';
     const levelKey = levelKeys[logViewerData.levels[i] ?? 0] ?? 'plain';

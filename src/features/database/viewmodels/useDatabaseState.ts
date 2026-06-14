@@ -1,10 +1,8 @@
 import { useCallback, useState } from 'react';
 import type { DbTableSummary, TableData } from '../models/types';
 import { emptyTableData } from '../models/types';
-import {
-  loadDbTableData,
-  loadDbTables,
-} from '../services/databaseService';
+import { loadDbTableData, loadDbTables } from '../services/databaseService';
+import { addErrorToast } from '../../../shared/lib/errors';
 
 type AddToast = (msg: string) => void;
 
@@ -18,7 +16,7 @@ export interface SortState {
  * 読み取り専用DBプレビューと破壊的DB操作を管理するフック
  *
  * テーブルカタログ・ページネーション・ソート・破壊的アクションの
- * 確認/実行フローを一元管理する
+ * 確認と実行手順を一元管理する
  */
 export function useDatabaseState(addToast: AddToast) {
   const [dbTables, setDbTables] = useState<DbTableSummary[]>([]);
@@ -37,15 +35,10 @@ export function useDatabaseState(addToast: AddToast) {
       setCurrentPage(page);
       setIsDbLoading(true);
       try {
-        const data = await loadDbTableData(
-          tableName,
-          page,
-          sort?.column,
-          sort?.dir,
-        );
+        const data = await loadDbTableData(tableName, page, sort?.column, sort?.dir);
         setTableData(data);
       } catch (error) {
-        addToast('データ読込エラー: ' + String(error));
+        addErrorToast(addToast, 'DBテーブルデータ取得', 'データを読み込めませんでした', error);
       } finally {
         setIsDbLoading(false);
       }
@@ -100,7 +93,7 @@ export function useDatabaseState(addToast: AddToast) {
           await loadTableData(nextTableName);
         }
       } catch (error) {
-        addToast('DBエラー: ' + String(error));
+        addErrorToast(addToast, 'DBカタログ取得', 'DB一覧を取得できませんでした', error);
         setDbTables([]);
         setCurrentTable('');
         setTableData(emptyTableData);

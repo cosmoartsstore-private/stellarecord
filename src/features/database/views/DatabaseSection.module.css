@@ -43,7 +43,9 @@
   font-size: 0.68rem;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
   line-height: 1;
   white-space: nowrap;
 }
@@ -97,7 +99,6 @@
   flex-wrap: wrap;
   line-height: 1.4;
 }
-
 
 .sidebarDivider {
   font-size: 0.68rem;

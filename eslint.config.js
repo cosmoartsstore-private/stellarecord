@@ -60,7 +60,14 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ['../features/*', '../../features/*', '../../../features/*'],
+              group: [
+                '../features/*',
+                '../../features/*',
+                '../../../features/*',
+                '../features/**',
+                '../../features/**',
+                '../../../features/**',
+              ],
               message: 'shared から features を参照しないでください。',
             },
             {
@@ -81,7 +88,14 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ['../features/*', '../../features/*', '../../../features/*'],
+              group: [
+                '../features/*',
+                '../../features/*',
+                '../../../features/*',
+                '../features/**',
+                '../../features/**',
+                '../../../features/**',
+              ],
               message: 'shared から features を参照しないでください。',
             },
             {
@@ -106,7 +120,29 @@ export default tseslint.config(
               message: 'features から app を参照しないでください。',
             },
             {
-              group: ['../features/*', '../../features/*', '../../../features/*'],
+              group: [
+                '../features/*',
+                '../../features/*',
+                '../../../features/*',
+                '../features/**',
+                '../../features/**',
+                '../../../features/**',
+                '../analyze/**',
+                '../../analyze/**',
+                '../../../analyze/**',
+                '../archive/**',
+                '../../archive/**',
+                '../../../archive/**',
+                '../database/**',
+                '../../database/**',
+                '../../../database/**',
+                '../registry/**',
+                '../../registry/**',
+                '../../../registry/**',
+                '../settings/**',
+                '../../settings/**',
+                '../../../settings/**',
+              ],
               message: 'feature 間依存は禁止です。',
             },
           ],

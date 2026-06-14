@@ -1,21 +1,17 @@
+import type { ReactNode } from 'react';
 import { StellaIcon, stellaIconNames } from '../../../shared/components/Icons';
 import { formatStorageMeter } from '../../../shared/lib/storageFormat';
 import shared from '../../../shared/styles/shared.module.css';
-import { SettingsControls } from '../../settings/views/SettingsControls';
 import type { StorageStatus } from '../models/types';
 import styles from './AnalyzeSection.module.css';
 
-/** 解析ダッシュボードのProps — 状態は全てリフトされており、純粋な表示コンポーネント */
+/** 解析ダッシュボードのProps — 状態は親コンポーネントが保持し、このコンポーネントは表示に専念する */
 interface AnalyzeSectionProps {
   storageStatus: StorageStatus;
-  archiveLimitDraft: string;
-  isStartupEnabledDraft: boolean;
   isAnalyzeRunning: boolean;
   analyzeProgress: string;
   analyzeStatus: string;
-  onArchiveLimitDraftChange: (value: string) => void;
-  onToggleStartup: () => void;
-  onSaveArchiveLimit: () => void;
+  settingsControls: ReactNode;
   onRefreshStorage: () => void;
   onOpenEnhancedSync: () => void;
   onOpenLogViewer: () => void;
@@ -26,14 +22,10 @@ interface AnalyzeSectionProps {
 /** 解析メインダッシュボード — ストレージメーター・アーカイブ同期・ログビューア・クリーンアップ */
 export function AnalyzeSection({
   storageStatus,
-  archiveLimitDraft,
-  isStartupEnabledDraft,
   isAnalyzeRunning,
   analyzeProgress,
   analyzeStatus,
-  onArchiveLimitDraftChange,
-  onToggleStartup,
-  onSaveArchiveLimit,
+  settingsControls,
   onRefreshStorage,
   onOpenEnhancedSync,
   onOpenLogViewer,
@@ -54,15 +46,7 @@ export function AnalyzeSection({
           <div>
             <h3 className={styles.sectionMiniTitle}>ストレージ管理</h3>
           </div>
-          <div className={styles.dbActionRow}>
-            <SettingsControls
-              archiveLimitDraft={archiveLimitDraft}
-              isStartupEnabledDraft={isStartupEnabledDraft}
-              onArchiveLimitDraftChange={onArchiveLimitDraftChange}
-              onSaveArchiveLimit={onSaveArchiveLimit}
-              onToggleStartup={onToggleStartup}
-            />
-          </div>
+          <div className={styles.dbActionRow}>{settingsControls}</div>
         </div>
 
         <div className={styles.dbStorageCard}>
@@ -82,7 +66,7 @@ export function AnalyzeSection({
           <div className={styles.storageTrack}>
             <div
               className={`${styles.storageFill} ${storageStatus.percent > 90 ? styles.storageWarning : ''}`}
-              // インラインwidthでアニメーションフィルバーを駆動
+              // インライン width でアニメーションする進捗バーを制御する
               style={{ width: `${String(storageStatus.percent)}%` }}
             />
           </div>
@@ -150,6 +134,16 @@ export function AnalyzeSection({
               <button type="button" className={styles.progressCancel} onClick={onCancelSync}>
                 停止
               </button>
+            </div>
+          </div>
+        )}
+        {!isAnalyzeRunning && analyzeStatus.length > 0 && (
+          <div className={styles.progressContainer} aria-live="polite">
+            <div className={styles.progressStatusRow}>
+              <p className={styles.sectionMiniCopy}>
+                {analyzeStatus}
+                {analyzeProgress.length > 0 ? ` (${analyzeProgress})` : ''}
+              </p>
             </div>
           </div>
         )}

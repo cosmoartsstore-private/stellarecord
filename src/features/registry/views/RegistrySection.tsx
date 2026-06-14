@@ -49,23 +49,24 @@ export function RegistrySection({
             <div className={styles.launcherViewSwitch}>
               <button
                 className={`${styles.launcherViewButton} ${launcherViewMode === 'list' ? styles.active : ''}`}
-                onClick={() => { onSetLauncherViewMode('list'); }}
+                onClick={() => {
+                  onSetLauncherViewMode('list');
+                }}
                 aria-label="リスト表示"
               >
                 <StellaIcon name={stellaIconNames.list} />
               </button>
               <button
                 className={`${styles.launcherViewButton} ${launcherViewMode === 'card' ? styles.active : ''}`}
-                onClick={() => { onSetLauncherViewMode('card'); }}
+                onClick={() => {
+                  onSetLauncherViewMode('card');
+                }}
                 aria-label="カード表示"
               >
                 <StellaIcon name={stellaIconNames.grid} />
               </button>
             </div>
-            <button
-              className={`${shared.btn} ${shared.primary}`}
-              onClick={onRegisterApp}
-            >
+            <button className={`${shared.btn} ${shared.primary}`} onClick={onRegisterApp}>
               <StellaIcon name={stellaIconNames.plus} />
               登録
             </button>
@@ -83,7 +84,6 @@ export function RegistrySection({
         </div>
       </div>
       <div className={`${shared.card} ${styles.section}`}>
-
         {allApps.length === 0 && (
           <div className={styles.launcherEmptyState}>登録されているアプリはありません</div>
         )}
@@ -91,14 +91,14 @@ export function RegistrySection({
         {allApps.length > 0 && launcherViewMode === 'list' && (
           <div className={styles.launcherList}>
             {allApps.map((app) => (
-              <article key={app.name} className={styles.launcherListItem}>
+              <article key={app.path} className={styles.launcherListItem}>
                 <div className={styles.launcherListMain}>
-                  <div className={styles.launcherListIcon}>
-                    {renderLauncherIcon(app)}
-                  </div>
+                  <div className={styles.launcherListIcon}>{renderLauncherIcon(app)}</div>
                   <div className={styles.launcherListCopy}>
                     <h4>{app.name}</h4>
-                    <p className={app.description ? undefined : styles.noDescription}>{app.description || 'No description'}</p>
+                    <p className={app.description ? undefined : styles.noDescription}>
+                      {app.description || 'No description'}
+                    </p>
                   </div>
                 </div>
                 <div className={styles.launcherListActions}>
@@ -120,7 +120,9 @@ export function RegistrySection({
                   </button>
                   <button
                     className={styles.deleteButton}
-                    onClick={() => { onUnregisterApp(app); }}
+                    onClick={() => {
+                      onUnregisterApp(app);
+                    }}
                     aria-label="登録解除"
                   >
                     <StellaIcon name={stellaIconNames.trash} />
@@ -134,13 +136,13 @@ export function RegistrySection({
         {allApps.length > 0 && launcherViewMode === 'card' && (
           <div className={styles.launcherCardGrid}>
             {allApps.map((app) => (
-              <article key={app.name} className={styles.launcherCardLarge}>
-                <div className={styles.launcherCardLargeIcon}>
-                  {renderLauncherIcon(app)}
-                </div>
+              <article key={app.path} className={styles.launcherCardLarge}>
+                <div className={styles.launcherCardLargeIcon}>{renderLauncherIcon(app)}</div>
                 <div className={styles.launcherCardLargeCopy}>
                   <h4>{app.name}</h4>
-                  <p className={app.description ? undefined : styles.noDescription}>{app.description || 'No description'}</p>
+                  <p className={app.description ? undefined : styles.noDescription}>
+                    {app.description || 'No description'}
+                  </p>
                 </div>
                 <div className={styles.launcherCardLargeActions}>
                   <button
@@ -161,7 +163,9 @@ export function RegistrySection({
                   </button>
                   <button
                     className={styles.deleteButton}
-                    onClick={() => { onUnregisterApp(app); }}
+                    onClick={() => {
+                      onUnregisterApp(app);
+                    }}
                     aria-label="登録解除"
                   >
                     <StellaIcon name={stellaIconNames.trash} />

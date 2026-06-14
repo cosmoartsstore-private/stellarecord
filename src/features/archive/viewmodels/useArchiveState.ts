@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { flushSync } from 'react-dom';
-import type {
-  ArchiveFileItem,
-  LogViewerChunk,
-  LogViewerData,
-} from '../models/types';
+import type { ArchiveFileItem, LogViewerChunk, LogViewerData } from '../models/types';
 import {
   launchEnhancedImport,
   launchStartupArchiveImport,
@@ -91,50 +87,53 @@ export function useArchiveState() {
   }, []);
 
   /** 指定ファイルのストリーミングビューアセッションを開始する */
-  const openStreamForFile = useCallback(async (fileKey: string) => {
-    stopStream();
-    if (flushTimerRef.current) {
-      clearTimeout(flushTimerRef.current);
-      flushTimerRef.current = null;
-    }
-    pendingChunksRef.current = [];
-
-    flushSync(() => {
-      setLogViewerData(emptyViewerData(fileKey));
-      setIsLogViewerLoaded(false);
-    });
-
-    const sessionId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-
-    const unlistenChunk = await listen<LogViewerChunk>('log_viewer_chunk', (e) => {
-      if (e.payload.session_id !== sessionId) return;
-      pendingChunksRef.current.push(e.payload);
-      flushTimerRef.current ??= setTimeout(flushChunks, 100);
-    });
-
-    const unlistenDone = await listen<string>('log_viewer_done', (e) => {
-      if (e.payload !== sessionId) return;
+  const openStreamForFile = useCallback(
+    async (fileKey: string) => {
+      stopStream();
       if (flushTimerRef.current) {
         clearTimeout(flushTimerRef.current);
         flushTimerRef.current = null;
       }
-      flushChunks();
-      setIsLogViewerLoaded(true);
-      stopStream();
-    });
+      pendingChunksRef.current = [];
 
-    unlistenRef.current = () => {
-      unlistenChunk();
-      unlistenDone();
-    };
+      flushSync(() => {
+        setLogViewerData(emptyViewerData(fileKey));
+        setIsLogViewerLoaded(false);
+      });
 
-    const isExternal = externalFilesRef.current.includes(fileKey);
-    const meta = isExternal
-      ? await startExternalLogViewerStream(fileKey, sessionId)
-      : await startLogViewerStream(fileKey, sessionId);
-    setLogViewerData((prev) => (prev ? { ...prev, source_name: meta.source_name } : prev));
-    return meta.archive_name;
-  }, [stopStream, flushChunks]);
+      const sessionId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+
+      const unlistenChunk = await listen<LogViewerChunk>('log_viewer_chunk', (e) => {
+        if (e.payload.session_id !== sessionId) return;
+        pendingChunksRef.current.push(e.payload);
+        flushTimerRef.current ??= setTimeout(flushChunks, 100);
+      });
+
+      const unlistenDone = await listen<string>('log_viewer_done', (e) => {
+        if (e.payload !== sessionId) return;
+        if (flushTimerRef.current) {
+          clearTimeout(flushTimerRef.current);
+          flushTimerRef.current = null;
+        }
+        flushChunks();
+        setIsLogViewerLoaded(true);
+        stopStream();
+      });
+
+      unlistenRef.current = () => {
+        unlistenChunk();
+        unlistenDone();
+      };
+
+      const isExternal = externalFilesRef.current.includes(fileKey);
+      const meta = isExternal
+        ? await startExternalLogViewerStream(fileKey, sessionId)
+        : await startLogViewerStream(fileKey, sessionId);
+      setLogViewerData((prev) => (prev ? { ...prev, source_name: meta.source_name } : prev));
+      return meta.archive_name;
+    },
+    [stopStream, flushChunks],
+  );
 
   /** バックエンドからアーカイブファイル一覧を取得して状態に格納する */
   const loadArchiveSelection = useCallback(async () => {
