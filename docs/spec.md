@@ -233,7 +233,7 @@ src-tauri/src/
 
 ### Database Preview
 
-**Purpose**: 取り込まれた SQLite データを読み取り専用でブラウジングする開発者・上級ユーザー向け機能。
+**Purpose**: 取り込まれた SQLite データを読み取り専用で確認する機能。
 
 #### Components
 
