@@ -121,6 +121,14 @@ fn ensure_parent_dir(path: &std::path::Path) -> Result<(), String> {
     Ok(())
 }
 
+/// フロントエンドで捕捉した詳細エラーをアプリログへ記録する。
+#[tauri::command]
+pub fn log_client_error(message: String) {
+    let normalized = message.replace(['\r', '\n'], " ");
+    let truncated: String = normalized.chars().take(4000).collect();
+    utils::log_warn(&format!("frontend: {truncated}"));
+}
+
 /// 管理対象の `.tar.zst` アーカイブを格納するディレクトリを解決する。
 fn get_archive_store_dir() -> Result<PathBuf, String> {
     get_data_dir()

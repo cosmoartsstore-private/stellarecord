@@ -28,7 +28,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 /// インポートが意図的にキャンセルされた際にユーザーに返すメッセージ。
 ///
 /// パーサー、コマンド、UI で同一テキストを再利用し、キャンセルを
-/// 汎用的なエラーではなく一貫した制御フローとして扱う。
+/// 汎用的なエラーではなく一貫した制御結果として扱う。
 pub const ANALYZE_CANCELED_MESSAGE: &str = "解析を中断しました。変更はロールバックされました。";
 
 /// コンテキストラベルと元エラーから一貫した解析エラー文字列を生成する。
@@ -45,6 +45,18 @@ fn analyze_err<E: std::fmt::Display>(context: &str, err: E) -> String {
 /// SQL 以外のエラーは `SQLite` 形式のエラーにラップする。
 fn analyze_sqlite_err<E: std::fmt::Display>(context: &str, err: E) -> rusqlite::Error {
     rusqlite::Error::InvalidParameterName(analyze_err(context, err))
+}
+
+/// ログ1行の無効 UTF-8 バイトだけを置換し、行末改行を取り除く。
+fn decode_log_line_lossy(line: &[u8]) -> String {
+    let mut decoded = String::from_utf8_lossy(line).into_owned();
+    if decoded.ends_with('\n') {
+        decoded.pop();
+        if decoded.ends_with('\r') {
+            decoded.pop();
+        }
+    }
+    decoded
 }
 
 /// 正規の `SQLite` 形式キャンセルエラーを生成する。
@@ -504,12 +516,12 @@ where
 /// ログストリーム1件を解析し、正規化データをメインデータベースに書き込む。
 ///
 /// 行単位のステートマシンを意図的に1か所にまとめている。パーサーは
-/// 時系列の副作用に依存しており、フローを過度に分割すると
+/// 時系列の副作用に依存しており、処理を過度に分割すると
 /// セッション・訪問・プレイヤー・通知の状態更新の整合性検証が困難になる。
 #[allow(clippy::too_many_lines)]
 fn parse_and_import_reader<R, F>(
     main_tx: &Connection,
-    reader: BufReader<R>,
+    mut reader: BufReader<R>,
     filename: &str,
     cancel_status: &AtomicBool,
     progress_callback: &mut F,
@@ -544,12 +556,24 @@ where
     progress_callback("パース開始".to_string(), String::new());
 
     let mut line_count = 0;
-    for line_result in reader.lines() {
+    let mut invalid_utf8_line_count = 0;
+    let mut line_buffer = Vec::new();
+    loop {
         if cancel_status.load(Ordering::SeqCst) {
             return Err(analyze_cancel_sqlite_err());
         }
 
-        let Ok(line) = line_result else { continue };
+        line_buffer.clear();
+        let bytes_read = reader
+            .read_until(b'\n', &mut line_buffer)
+            .map_err(|err| analyze_sqlite_err("ログ行を読み取れませんでした", err))?;
+        if bytes_read == 0 {
+            break;
+        }
+        if std::str::from_utf8(&line_buffer).is_err() {
+            invalid_utf8_line_count += 1;
+        }
+        let line = decode_log_line_lossy(&line_buffer);
         line_count += 1;
 
         if line_count % 5000 == 0 {
@@ -796,6 +820,11 @@ where
             )?;
         }
     }
+    if invalid_utf8_line_count > 0 {
+        crate::utils::log_warn(&format!(
+            "無効な UTF-8 を含むログ行を置換して取り込みました [{filename}]: {invalid_utf8_line_count} 行"
+        ));
+    }
 
     progress_callback("コミット中".to_string(), String::new());
 
@@ -961,6 +990,10 @@ mod tests {
         BufReader::new(Cursor::new(content.as_bytes().to_vec()))
     }
 
+    fn make_reader_bytes(content: Vec<u8>) -> BufReader<Cursor<Vec<u8>>> {
+        BufReader::new(Cursor::new(content))
+    }
+
     #[test]
     fn source_name_strips_tar_zst() {
         let path = Path::new("/data/output_log_2025-04-30.txt.tar.zst");
@@ -1065,6 +1098,36 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM with_users", [], |row| row.get(0))
             .unwrap();
         assert!(with_count >= 1);
+    }
+
+    #[test]
+    fn import_lossy_decodes_invalid_utf8_line() {
+        let conn = setup_test_db();
+        let cancel = AtomicBool::new(false);
+        let mut log = b"2025.04.30 20:01:00 Log        -  ".to_vec();
+        log.push(0xff);
+        log.extend_from_slice(
+            b" User Authenticated: TestUser (usr_aaaa-bbbb-cccc-dddd-eeeeeeeeeeee)\n",
+        );
+        let reader = make_reader_bytes(log);
+
+        parse_and_import_reader(
+            &conn,
+            reader,
+            "invalid_utf8_log.txt",
+            &cancel,
+            &mut |_status: String, _progress: String| {},
+        )
+        .unwrap();
+
+        let account_name: Option<String> = conn
+            .query_row(
+                "SELECT account_name FROM sessions WHERE log_name = 'invalid_utf8_log.txt'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(account_name.as_deref(), Some("TestUser"));
     }
 
     #[test]

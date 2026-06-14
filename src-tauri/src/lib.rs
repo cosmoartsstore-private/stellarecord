@@ -23,19 +23,24 @@ use std::sync::Arc;
 
 use tauri::{WebviewUrl, WebviewWindowBuilder};
 
-/// 長時間実行される解析タスクで共有するキャンセルフラグ。
+/// 長時間実行される解析タスクの共有状態。
 ///
-/// フロントエンドのキャンセルボタンとワーカースレッドの間を `AtomicBool` で
-/// 橋渡しする。チャネルや非同期ランタイムを介さずに済む最もシンプルな
-/// クロススレッドキャンセルパターン。
-pub struct AnalyzeCancelStatus(pub Arc<AtomicBool>);
+/// キャンセルフラグと実行中フラグを `AtomicBool` で保持し、フロントエンドの
+/// 表示状態に依存せずバックエンド境界で取り込みワーカーを1本に制限する。
+pub struct AnalyzeCancelStatus {
+    pub cancel: Arc<AtomicBool>,
+    pub running: Arc<AtomicBool>,
+}
 
 /// `StellaRecord` Tauri アプリケーションを構築し実行する。
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .manage(AnalyzeCancelStatus(Arc::new(AtomicBool::new(false))))
+        .manage(AnalyzeCancelStatus {
+            cancel: Arc::new(AtomicBool::new(false)),
+            running: Arc::new(AtomicBool::new(false)),
+        })
         .invoke_handler(tauri::generate_handler![
             commands::archive::list_archive_files,
             commands::archive::read_archive_log_viewer,
@@ -58,6 +63,7 @@ pub fn run() {
             commands::settings::get_management_settings,
             commands::settings::save_management_settings,
             commands::settings::read_registry_catalog,
+            commands::log_client_error,
         ])
         .setup(|app| {
             let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())

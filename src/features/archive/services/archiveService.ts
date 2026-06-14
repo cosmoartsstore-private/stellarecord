@@ -9,7 +9,8 @@ import { invoke } from '@tauri-apps/api/core';
 import type { LogViewerMeta } from '../models/types';
 
 /** アーカイブディレクトリ内の .tar.zst ファイル一覧を取得する */
-export const loadArchiveFiles = () => invoke<{ name: string; size_bytes: number }[]>('list_archive_files');
+export const loadArchiveFiles = () =>
+  invoke<{ name: string; size_bytes: number }[]>('list_archive_files');
 
 /** 選択されたアーカイブファイルのバッチインポートを開始する */
 export const launchEnhancedImport = (fileNames: string[]) =>
@@ -23,15 +24,11 @@ export const startLogViewerStream = (fileName: string, sessionId: string) =>
 export const pickLogFiles = () => invoke<string[]>('pick_log_files');
 
 /** 外部ログファイルに対するストリーミングログビューアセッションを開始する */
-export const startExternalLogViewerStream = (
-  filePath: string,
-  sessionId: string,
-) =>
+export const startExternalLogViewerStream = (filePath: string, sessionId: string) =>
   invoke<LogViewerMeta>('read_external_log_viewer', {
     filePath,
     sessionId,
   });
 
 /** 起動時の一回限りのアーカイブ取り込みを実行する（バックグラウンドでイベント経由に進捗を流す） */
-export const launchStartupArchiveImport = () =>
-  invoke('launch_startup_archive_import');
+export const launchStartupArchiveImport = () => invoke('launch_startup_archive_import');

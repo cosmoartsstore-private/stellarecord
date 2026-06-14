@@ -9,7 +9,9 @@ describe('readInitialTheme', () => {
     vi.stubGlobal('window', {
       localStorage: {
         getItem: (key: string) => storage[key] ?? null,
-        setItem: (key: string, value: string) => { storage[key] = value; },
+        setItem: (key: string, value: string) => {
+          storage[key] = value;
+        },
       },
     });
   });
@@ -51,7 +53,9 @@ describe('saveTheme', () => {
     vi.stubGlobal('window', {
       localStorage: {
         getItem: (key: string) => storage[key] ?? null,
-        setItem: (key: string, value: string) => { storage[key] = value; },
+        setItem: (key: string, value: string) => {
+          storage[key] = value;
+        },
       },
     });
   });

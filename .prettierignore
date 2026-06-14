@@ -5,3 +5,4 @@ node_modules/
 *.generated.*
 src-tauri/gen/schemas/
 .claude/
+docs/manual.html

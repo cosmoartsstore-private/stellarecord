@@ -4,7 +4,7 @@ import type { DeletableLogInfo } from '../models/types';
 import shared from '../../../shared/styles/shared.module.css';
 import styles from './PolarisCleanupModal.module.css';
 
-/** クリーンアップモーダルのProps — 削除可能なログのみ受け取る */
+/** クリーンアップモーダルのProps — アーカイブ内容と一致した元ログのみ受け取る */
 interface PolarisCleanupModalProps {
   logs: DeletableLogInfo[];
   onClose: () => void;
@@ -18,7 +18,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** アーカイブ済みソースログの削除確認モーダル */
+/** アーカイブ内容と一致したソースログの削除確認モーダル */
 export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanupModalProps) {
   // 一括削除が一般的なため、初期状態で全ファイルを選択
   const [selected, setSelected] = useState<Set<string>>(new Set(logs.map((l) => l.file_name)));
@@ -66,7 +66,8 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
         </div>
 
         <div className={styles.notice}>
-          対象データはSTELLA RECORD側に圧縮バックアップされているため、削除後もログビューアから閲覧できます
+          対象データはSTELLA
+          RECORD側の圧縮ログと一致しているため、削除後もログビューアから閲覧できます
         </div>
 
         <div className={styles.listHeader}>
@@ -74,8 +75,7 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
             {isAllSelected ? 'すべて解除' : 'すべて選択'}
           </button>
           <span className={styles.listMeta}>
-            {String(selected.size)} / {String(logs.length)} 件 選択中 —{' '}
-            {formatBytes(totalSize)}
+            {String(selected.size)} / {String(logs.length)} 件 選択中 — {formatBytes(totalSize)}
           </span>
         </div>
 
@@ -87,7 +87,9 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
                 key={log.file_name}
                 type="button"
                 className={`${styles.fileRow} ${isSelected ? styles.fileRowSelected : ''}`}
-                onClick={() => { toggle(log.file_name); }}
+                onClick={() => {
+                  toggle(log.file_name);
+                }}
               >
                 <div className={`${styles.checkbox} ${isSelected ? styles.checkboxChecked : ''}`}>
                   <svg viewBox="0 0 12 10" className={styles.checkIcon}>

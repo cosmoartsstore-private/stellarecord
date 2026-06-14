@@ -509,7 +509,7 @@ body.no-guide #tip{display:none}
     <div class="cd">
       <div class="an-block-hd">
         <div><h3 class="smt">ログデータ取込・ビューア</h3></div>
-        <button class="bt dg" onclick="openCleanup()" data-t="元ログの削除|バックアップ済みの元ログを削除してディスク容量を節約します。削除後もログビューアからは閲覧できます。">元ログの削除</button>
+        <button class="bt dg" onclick="openCleanup()" data-t="元ログの削除|圧縮ログと一致したPolaris側の元ログを削除してディスク容量を節約します。削除後もログビューアからは閲覧できます。">元ログの削除</button>
       </div>
       <div class="sync-g">
         <div class="sync-cd" data-t="復元|圧縮アーカイブを選んでデータベースへ取り込みます。複数ファイルの一括選択にも対応します。">
@@ -599,10 +599,10 @@ body.no-guide #tip{display:none}
       <div class="cl-warn"><svg viewBox="0 0 24 24"><path d="M13,14H11V10H13M13,18H11V16H13M1,21H23L12,2L1,21Z"/></svg></div>
       <div>
         <h3 class="cl-title">元ログ削除</h3>
-        <p class="cl-sub">ログの保管元に存在する元ログを削除します<br><span class="cl-danger">※削除した場合、元には戻せません</span></p>
+        <p class="cl-sub">Polaris側に存在する元ログを削除します<br><span class="cl-danger">※削除した場合、元には戻せません</span></p>
       </div>
     </div>
-    <div class="cl-notice">対象データはSTELLA RECORD側に圧縮バックアップされているため、削除後もログビューアから閲覧できます</div>
+    <div class="cl-notice">対象データはSTELLA RECORD側の圧縮ログと一致しているため、削除後もログビューアから閲覧できます</div>
     <div class="cl-lhd"><button class="cl-toggle" id="clToggle" onclick="cleanupToggleAll()">すべて解除</button><span class="cl-lmeta" id="clMeta"></span></div>
     <div class="cl-list" id="clList"></div>
     <div class="modal-acts">

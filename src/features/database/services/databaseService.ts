@@ -7,8 +7,7 @@ export const loadDbTableData = (
   page = 0,
   sortColumn?: string,
   sortDir?: 'asc' | 'desc',
-) =>
-  invoke<TableData>('get_db_table_data', { tableName, page, sortColumn, sortDir });
+) => invoke<TableData>('get_db_table_data', { tableName, page, sortColumn, sortDir });
 
 /** プレビュー可能なテーブル一覧（カタログ）を取得する */
 export const loadDbTables = () => invoke<DbTableSummary[]>('get_db_tables');

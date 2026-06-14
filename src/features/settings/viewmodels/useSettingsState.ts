@@ -4,6 +4,7 @@ import {
   loadManagementSettings as loadManagementSettingsCommand,
   saveManagementSettings as saveManagementSettingsCommand,
 } from '../services/settingsService';
+import { UserFacingError } from '../../../shared/lib/errors';
 
 /** バックエンド設定読み込み前に使用する安全なデフォルト値 */
 const defaultManagementSettings: ManagementSettings = {
@@ -77,7 +78,7 @@ export function useSettingsState() {
   const saveArchiveLimit = useCallback(async () => {
     const parsed = Number(archiveLimitDraft);
     if (!Number.isFinite(parsed) || parsed <= 0 || !Number.isInteger(parsed) || parsed > 10485760) {
-      throw new Error('警告ラインは 1MB～10,485,760MB (10TB) の整数で指定してください');
+      throw new UserFacingError('警告ラインは 1MB～10,485,760MB (10TB) の整数で指定してください');
     }
     await saveManagementSettings(isStartupEnabledDraft, parsed);
   }, [archiveLimitDraft, isStartupEnabledDraft, saveManagementSettings]);

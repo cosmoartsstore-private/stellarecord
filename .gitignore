@@ -11,12 +11,10 @@ src-tauri/coverage/
 *.pem
 *.key
 
-# Claude/Codex shared notes
-.claude/*
-!.claude/
-!.claude/*.md
-!.claude/manual.html
-.claude/worktrees/
+# Agent-local instructions and workspaces
+AGENT.md
+CLAUDE.md
+.claude/
 memory/
 
 # Design/planning tools (not part of the app)

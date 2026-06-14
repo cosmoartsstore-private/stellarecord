@@ -58,7 +58,10 @@ textarea {
 }
 
 button {
-  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease, opacity 0.2s;
+  transition:
+    transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.25s ease,
+    opacity 0.2s;
 }
 
 /* ─── アイコンSVG（グローバル、StellaIcon用） ─── */
@@ -106,4 +109,3 @@ button {
     --gap-lg: 1rem;
   }
 }
-

@@ -70,7 +70,9 @@
   background: transparent;
   color: var(--text-main);
   cursor: pointer;
-  transition: background 0.15s, opacity 0.15s;
+  transition:
+    background 0.15s,
+    opacity 0.15s;
 }
 
 .sidebarFolderButton:hover:not(:disabled) {
@@ -266,8 +268,13 @@
 }
 
 @keyframes line-count-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }
 
 /* ── 凡例 ───────────────────────────────────── */
@@ -289,7 +296,10 @@
   letter-spacing: 0.03em;
   background: transparent;
   cursor: pointer;
-  transition: opacity 0.15s, box-shadow 0.15s, border-color 0.15s;
+  transition:
+    opacity 0.15s,
+    box-shadow 0.15s,
+    border-color 0.15s;
 }
 
 .legendItem:hover {
@@ -361,7 +371,9 @@
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .loadingText {
@@ -379,7 +391,9 @@
   line-height: 1.6;
   white-space: pre;
   color: var(--terminal-body);
-  font-feature-settings: 'zero' 1, 'ss01' 1;
+  font-feature-settings:
+    'zero' 1,
+    'ss01' 1;
   user-select: text;
 }
 
@@ -394,23 +408,50 @@
 
 /* ── カテゴリ色 ──────────────────────────── */
 
-.line.categoryWorld,    .legendWorld        { color: var(--terminal-world); }
-.line.categoryNotification, .legendNotification { color: var(--terminal-notification); }
+.line.categoryWorld,
+.legendWorld {
+  color: var(--terminal-world);
+}
+.line.categoryNotification,
+.legendNotification {
+  color: var(--terminal-notification);
+}
 .line.categoryPlayerJoin,
-.line.categoryPlayerReady,  .legendPlayerJoin   { color: var(--terminal-player-join); }
-.line.categoryPlayerLeft                    { color: var(--terminal-player-left); }
-.legendWarning                              { color: var(--terminal-warning); }
-.legendError                                { color: var(--terminal-error); }
-.legendDebug                                { color: var(--terminal-debug); }
-.line.categoryDebugSystem                   { color: var(--terminal-debug-system); }
+.line.categoryPlayerReady,
+.legendPlayerJoin {
+  color: var(--terminal-player-join);
+}
+.line.categoryPlayerLeft {
+  color: var(--terminal-player-left);
+}
+.legendWarning {
+  color: var(--terminal-warning);
+}
+.legendError {
+  color: var(--terminal-error);
+}
+.legendDebug {
+  color: var(--terminal-debug);
+}
+.line.categoryDebugSystem {
+  color: var(--terminal-debug-system);
+}
 
-/* ── レベル色 ─────────────────────────────── */
+/* ── ログレベル色 ─────────────────────────────── */
 
-.levelError   { color: var(--terminal-error); }
-.levelWarning { color: var(--terminal-warning); }
-.levelDebug   { color: var(--terminal-debug); }
+.levelError {
+  color: var(--terminal-error);
+}
+.levelWarning {
+  color: var(--terminal-warning);
+}
+.levelDebug {
+  color: var(--terminal-debug);
+}
 .levelPlain,
-.levelInfo    { color: var(--terminal-body); }
+.levelInfo {
+  color: var(--terminal-body);
+}
 
 /* ── レスポンシブ ───────────────────────────────── */
 

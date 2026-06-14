@@ -9,8 +9,7 @@ describe('SectionId', () => {
 
   test('type guard works at runtime', () => {
     const validIds = ['registry', 'analyze', 'database'] as const;
-    const isValid = (id: string): id is SectionId =>
-      (validIds as readonly string[]).includes(id);
+    const isValid = (id: string): id is SectionId => (validIds as readonly string[]).includes(id);
 
     expect(isValid('registry')).toBe(true);
     expect(isValid('analyze')).toBe(true);
