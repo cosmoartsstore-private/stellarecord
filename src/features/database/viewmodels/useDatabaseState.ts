@@ -31,12 +31,13 @@ export function useDatabaseState(addToast: AddToast) {
   const loadTableDataForRequest = useCallback(
     async (requestGeneration: number, tableName: string, page = 0, sort?: SortState | null) => {
       if (requestGenerationRef.current !== requestGeneration) return;
-      setCurrentTable(tableName);
-      setCurrentPage(page);
       setIsDbLoading(true);
       try {
         const data = await loadDbTableData(tableName, page, sort?.column, sort?.dir);
         if (requestGenerationRef.current === requestGeneration) {
+          setCurrentTable(tableName);
+          setCurrentPage(page);
+          setSortState(sort ?? null);
           setTableData(data);
         }
       } catch (error) {
@@ -80,7 +81,6 @@ export function useDatabaseState(addToast: AddToast) {
       } else {
         next = { column: columnName, dir: 'asc' };
       }
-      setSortState(next);
       if (currentTable) {
         await loadTableData(currentTable, 0, next);
       }
@@ -100,6 +100,8 @@ export function useDatabaseState(addToast: AddToast) {
         setDbTables(tables);
         if (tables.length === 0) {
           setCurrentTable('');
+          setCurrentPage(0);
+          setSortState(null);
           setTableData(emptyTableData);
           return;
         }
@@ -108,7 +110,6 @@ export function useDatabaseState(addToast: AddToast) {
           preferredTableName ??
           (tables.some((table) => table.name === currentTable) ? currentTable : tables[0]?.name);
         if (nextTableName) {
-          setSortState(null);
           await loadTableDataForRequest(requestGeneration, nextTableName);
         }
       } catch (error) {
@@ -116,6 +117,8 @@ export function useDatabaseState(addToast: AddToast) {
         addErrorToast(addToast, 'DBカタログ取得', 'DB一覧を取得できませんでした', error);
         setDbTables([]);
         setCurrentTable('');
+        setCurrentPage(0);
+        setSortState(null);
         setTableData(emptyTableData);
       } finally {
         if (requestGenerationRef.current === requestGeneration) {

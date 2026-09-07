@@ -129,12 +129,29 @@
 .modalOverlay {
   position: fixed;
   inset: 0;
-  background: var(--modal-overlay-bg);
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  padding: 2rem;
+  border: 0;
+  background: transparent;
+  color: var(--text-main);
+  box-sizing: border-box;
+  overflow: auto;
+  z-index: 1000;
+}
+
+.modalOverlay[open] {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
-  padding: 2rem;
+  animation: modal-overlay-in 0.25s ease-out forwards;
+}
+
+.modalOverlay::backdrop {
+  background: var(--modal-overlay-bg);
   animation: modal-overlay-in 0.25s ease-out forwards;
 }
 
@@ -200,14 +217,6 @@
 
 .modalActions .btn {
   min-width: 110px;
-}
-
-.modalBackdrop {
-  position: absolute;
-  inset: 0;
-  border: none;
-  background: transparent;
-  cursor: default;
 }
 
 @media (width <= 1024px) {

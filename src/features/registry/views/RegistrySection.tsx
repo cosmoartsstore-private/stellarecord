@@ -69,6 +69,7 @@ function LauncherItem({ app, viewMode, onLaunch, onOpenFolder, onUnregister }: L
       )}
       <div className={isList ? styles.launcherListActions : styles.launcherCardLargeActions}>
         <button
+          type="button"
           className={
             isList
               ? `${shared.btn} ${shared.primary}`
@@ -81,6 +82,7 @@ function LauncherItem({ app, viewMode, onLaunch, onOpenFolder, onUnregister }: L
           起動
         </button>
         <button
+          type="button"
           className={shared.btn}
           onClick={() => {
             onOpenFolder(app);
@@ -89,11 +91,12 @@ function LauncherItem({ app, viewMode, onLaunch, onOpenFolder, onUnregister }: L
           フォルダを開く
         </button>
         <button
+          type="button"
           className={styles.deleteButton}
           onClick={() => {
             onUnregister(app);
           }}
-          aria-label="登録解除"
+          aria-label={`${app.name} の登録を解除`}
         >
           <StellaIcon name={stellaIconNames.trash} />
         </button>
@@ -124,29 +127,38 @@ export function RegistrySection({
           <div className={styles.headerActions}>
             <div className={styles.launcherViewSwitch}>
               <button
+                type="button"
                 className={`${styles.launcherViewButton} ${launcherViewMode === 'list' ? styles.active : ''}`}
                 onClick={() => {
                   onSetLauncherViewMode('list');
                 }}
                 aria-label="リスト表示"
+                aria-pressed={launcherViewMode === 'list'}
               >
                 <StellaIcon name={stellaIconNames.list} />
               </button>
               <button
+                type="button"
                 className={`${styles.launcherViewButton} ${launcherViewMode === 'card' ? styles.active : ''}`}
                 onClick={() => {
                   onSetLauncherViewMode('card');
                 }}
                 aria-label="カード表示"
+                aria-pressed={launcherViewMode === 'card'}
               >
                 <StellaIcon name={stellaIconNames.grid} />
               </button>
             </div>
-            <button className={`${shared.btn} ${shared.primary}`} onClick={onRegisterApp}>
+            <button
+              type="button"
+              className={`${shared.btn} ${shared.primary}`}
+              onClick={onRegisterApp}
+            >
               <StellaIcon name={stellaIconNames.plus} />
               登録
             </button>
             <button
+              type="button"
               className={`${shared.btn} ${styles.reloadButton}`}
               onClick={onReload}
               disabled={isReloading}

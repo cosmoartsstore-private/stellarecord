@@ -1,5 +1,6 @@
-import { useEffect, useRef, type MouseEvent, type ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { StellaIcon, stellaIconNames } from '../../../shared/components/Icons';
+import { useModalDialog } from '../../../shared/hooks/useModalDialog';
 import styles from './SettingsModal.module.css';
 
 interface SettingsModalProps {
@@ -9,39 +10,20 @@ interface SettingsModalProps {
 
 /** アプリ設定をまとめて表示するモーダル。 */
 export function SettingsModal({ children, onClose }: SettingsModalProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
-
-  const closeDialog = () => {
-    if (dialogRef.current?.open) dialogRef.current.close();
-    onClose();
-  };
-
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (!dialog.open) dialog.showModal();
-    titleRef.current?.focus();
-
-    return () => {
-      if (dialog.open) dialog.close();
-    };
-  }, []);
-
-  const handleBackdropClick = (event: MouseEvent<HTMLDialogElement>) => {
-    if (event.target === event.currentTarget) closeDialog();
-  };
+  const { dialogRef, closeDialog, handleCancel, handleBackdropMouseDown } = useModalDialog({
+    onClose,
+    initialFocusRef: titleRef,
+    shouldCloseOnBackdrop: true,
+  });
 
   return (
     <dialog
       ref={dialogRef}
       className={styles.dialog}
       aria-labelledby="settings-title"
-      onCancel={(event) => {
-        event.preventDefault();
-        closeDialog();
-      }}
-      onClick={handleBackdropClick}
+      onCancel={handleCancel}
+      onMouseDown={handleBackdropMouseDown}
     >
       <header className={styles.header}>
         {/* prettier-ignore */}

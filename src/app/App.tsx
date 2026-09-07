@@ -385,7 +385,7 @@ function App() {
 
   return (
     <div className={`stella-record-root ${styles.mainWrapper} ${styles.root} ${themeMode}-theme`}>
-      <nav className={styles.topNavigation}>
+      <nav className={styles.topNavigation} aria-label="メインナビゲーション">
         <div className={styles.navBrand}>
           <img
             src={themeMode === 'light' ? logoLightSrc : logoDarkSrc}
@@ -406,7 +406,9 @@ function App() {
           {navItems.map(({ section, label }) => (
             <button
               key={section}
+              type="button"
               className={`${styles.pillBtn} ${activeSection === section ? styles.pillBtnActive : ''}`}
+              aria-current={activeSection === section ? 'page' : undefined}
               onClick={() => {
                 void handleNavSelect(section);
               }}

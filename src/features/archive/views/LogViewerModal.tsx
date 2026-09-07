@@ -3,6 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { renderHighlightedBody } from '../models/logFormat';
 import { parseArchiveDate } from '../models/archiveFormat';
 import { formatFileSize } from '../../../shared/lib/byteFormat';
+import { useModalDialog } from '../../../shared/hooks/useModalDialog';
 import type { ArchiveFileItem, LogViewerData } from '../models/types';
 import shared from '../../../shared/styles/shared.module.css';
 import styles from './LogViewerModal.module.css';
@@ -96,21 +97,16 @@ export function LogViewerModal({
   onClose,
 }: LogViewerModalProps) {
   const listRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
+  const { dialogRef, closeDialog, handleCancel, handleBackdropMouseDown } = useModalDialog({
+    onClose,
+    initialFocusRef: titleRef,
+    shouldCloseOnBackdrop: true,
+  });
 
   const hasExternalFiles = externalFiles.length > 0;
-
-  // 他のモーダルと同じく Escape で閉じられるようにする。
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [onClose]);
 
   // ファイル切替時にスクロール位置のみリセット（フィルタは維持）
   useEffect(() => {
@@ -199,13 +195,14 @@ export function LogViewerModal({
   const sidebarCount = sidebarFiles.length + (hasExternalFiles ? archiveFiles.length : 0);
 
   return (
-    <div className={`${styles.root} ${shared.modalOverlay} ${shared.fullscreen}`}>
-      <button
-        type="button"
-        className={shared.modalBackdrop}
-        onClick={onClose}
-        aria-label="ログビューアを閉じる"
-      />
+    <dialog
+      ref={dialogRef}
+      className={`${styles.root} ${shared.modalOverlay} ${shared.fullscreen}`}
+      aria-labelledby="log-viewer-title"
+      aria-describedby="log-viewer-source"
+      onCancel={handleCancel}
+      onMouseDown={handleBackdropMouseDown}
+    >
       <div className={`${styles.content} ${shared.modalContent}`}>
         {/* ── サイドバー ── */}
         <aside className={styles.sidebar}>
@@ -250,6 +247,7 @@ export function LogViewerModal({
                         if (!isActive && !isLoading) onNavigateToFile(filePath);
                       }}
                       disabled={isLoading && !isActive}
+                      aria-current={isActive ? 'true' : undefined}
                     >
                       <span className={styles.sidebarItemDate}>{date ?? name}</span>
                     </button>
@@ -273,6 +271,7 @@ export function LogViewerModal({
                       if (!isActive && !isLoading) onNavigateToFile(file.name);
                     }}
                     disabled={isLoading && !isActive}
+                    aria-current={isActive ? 'true' : undefined}
                   >
                     <span className={styles.sidebarItemDate}>{date ?? file.name}</span>
                     <span className={styles.sidebarItemSize}>
@@ -289,8 +288,12 @@ export function LogViewerModal({
         <div className={styles.main}>
           <div className={styles.mainHeader}>
             <div className={styles.mainHeaderCopy}>
-              <h3 className={styles.mainTitle}>ログビューア</h3>
-              <p className={styles.mainSub}>{logViewerData.source_name}</p>
+              <h3 ref={titleRef} id="log-viewer-title" className={styles.mainTitle} tabIndex={-1}>
+                ログビューア
+              </h3>
+              <p id="log-viewer-source" className={styles.mainSub}>
+                {logViewerData.source_name}
+              </p>
             </div>
             <div className={styles.mainHeaderMeta}>
               <span className={`${styles.lineCount} ${!isLoaded ? styles.lineCountLoading : ''}`}>
@@ -310,6 +313,7 @@ export function LogViewerModal({
                 key={chip.key}
                 type="button"
                 className={`${styles.legendItem} ${chip.colorClass} ${activeFilter === chip.key ? styles.legendItemActive : ''}`}
+                aria-pressed={activeFilter === chip.key}
                 onClick={() => {
                   setActiveFilter((prev) => (prev === chip.key ? null : chip.key));
                 }}
@@ -351,12 +355,12 @@ export function LogViewerModal({
           </div>
 
           <div className={shared.modalActions}>
-            <button className={shared.btn} onClick={onClose}>
+            <button type="button" className={shared.btn} onClick={closeDialog}>
               閉じる
             </button>
           </div>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }

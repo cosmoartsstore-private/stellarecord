@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE TABLE IF NOT EXISTS imported_logs (
     log_name        TEXT PRIMARY KEY REFERENCES sessions(log_name) ON DELETE CASCADE,
     content_sha256  BLOB NOT NULL CHECK(length(content_sha256) = 32),
-    content_size    INTEGER NOT NULL CHECK(content_size >= 0)
+    content_size    INTEGER NOT NULL CHECK(content_size >= 0),
+    parser_version  INTEGER NOT NULL DEFAULT 1 CHECK(parser_version >= 1)
 );
 
 CREATE TABLE IF NOT EXISTS visits (
@@ -54,6 +55,7 @@ CREATE TABLE IF NOT EXISTS with_users (
     visit_id        INTEGER NOT NULL REFERENCES visits(id),
     vrchat_id       TEXT NOT NULL REFERENCES find_users(vrchat_id),
     is_self         BOOLEAN NOT NULL DEFAULT 0,
+    friend_status   INTEGER NOT NULL DEFAULT 2 CHECK(friend_status IN (0,1,2)),
     join_time       DATETIME NOT NULL,
     leave_time      DATETIME,
     UNIQUE(visit_id, vrchat_id)
@@ -157,6 +159,7 @@ SELECT
     wu.vrchat_id,
     fu.account_name  AS user_name,
     wu.is_self,
+    wu.friend_status,
     wu.join_time,
     wu.leave_time
 FROM with_users wu
@@ -177,25 +180,24 @@ FROM screenshots s
 LEFT JOIN visits v ON v.id = s.visit_id;
 ";
 
+/// 指定テーブルにカラムが存在するか確認する。
+fn table_has_column(conn: &Connection, table: &str, column: &str) -> Result<bool> {
+    let mut statement = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
+    for existing in columns {
+        if existing? == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// 旧 `screenshots` スキーマへセッション所有列を追加し、確定できる行だけ補完する。
 ///
 /// `visit_id` がある行は親訪問からセッションを一意に特定できる。ワールド外撮影として
 /// `visit_id` が `NULL` の旧行は所有元を推定せず、そのまま保持する。
 fn migrate_screenshot_session_ownership(conn: &Connection) -> Result<()> {
-    let has_session_id = {
-        let mut statement = conn.prepare("PRAGMA table_info(screenshots)")?;
-        let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
-        let mut found = false;
-        for column in columns {
-            if column? == "session_id" {
-                found = true;
-                break;
-            }
-        }
-        found
-    };
-
-    if !has_session_id {
+    if !table_has_column(conn, "screenshots", "session_id")? {
         conn.execute(
             "ALTER TABLE screenshots
              ADD COLUMN session_id INTEGER REFERENCES sessions(id)",
@@ -222,6 +224,35 @@ fn migrate_screenshot_session_ownership(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// 既存 DB に訪問時点のフレンド状態列を追加する。
+fn migrate_friend_status(conn: &Connection) -> Result<()> {
+    if !table_has_column(conn, "with_users", "friend_status")? {
+        conn.execute(
+            "ALTER TABLE with_users
+             ADD COLUMN friend_status INTEGER NOT NULL DEFAULT 2
+             CHECK(friend_status IN (0,1,2))",
+            [],
+        )?;
+    }
+    Ok(())
+}
+
+/// 既存 DB に解析バージョン列を追加する。
+///
+/// 旧取り込み行をバージョン1として保持し、現在のパーサーが必要なログだけを
+/// ファイル単位 savepoint 内で再構築できるようにする。
+fn migrate_import_parser_version(conn: &Connection) -> Result<()> {
+    if !table_has_column(conn, "imported_logs", "parser_version")? {
+        conn.execute(
+            "ALTER TABLE imported_logs
+             ADD COLUMN parser_version INTEGER NOT NULL DEFAULT 1
+             CHECK(parser_version >= 1)",
+            [],
+        )?;
+    }
+    Ok(())
+}
+
 /// メイン `StellaRecord` スキーマと必要なビューを初期化する。
 ///
 /// # Errors
@@ -232,6 +263,11 @@ pub fn init_main_db(conn: &Connection) -> Result<()> {
     conn.execute_batch("PRAGMA foreign_keys = ON;")?;
     conn.execute_batch(MAIN_SCHEMA)?;
     migrate_screenshot_session_ownership(conn)?;
+    migrate_friend_status(conn)?;
+    migrate_import_parser_version(conn)?;
+    if !table_has_column(conn, "with_users_detail", "friend_status")? {
+        conn.execute_batch("DROP VIEW IF EXISTS with_users_detail;")?;
+    }
     conn.execute_batch(MAIN_VIEWS)?;
     Ok(())
 }

@@ -27,8 +27,8 @@ interface SettingsControlsProps {
 
 interface SettingSwitchProps {
   id: string;
-  checked: boolean;
-  disabled?: boolean;
+  isChecked: boolean;
+  isDisabled?: boolean;
   labelledBy: string;
   describedBy: string;
   onChange: () => void;
@@ -36,7 +36,7 @@ interface SettingSwitchProps {
 
 /** 即時反映される二値設定を、状態名付きのスイッチとして表示する。 */
 function SettingSwitch(props: SettingSwitchProps) {
-  const { id, checked, disabled = false, labelledBy, describedBy, onChange } = props;
+  const { id, isChecked, isDisabled = false, labelledBy, describedBy, onChange } = props;
 
   return (
     <label className={styles.switchControl} htmlFor={id}>
@@ -44,8 +44,8 @@ function SettingSwitch(props: SettingSwitchProps) {
         id={id}
         className={styles.switchInput}
         type="checkbox"
-        checked={checked}
-        disabled={disabled}
+        checked={isChecked}
+        disabled={isDisabled}
         onChange={onChange}
         aria-labelledby={labelledBy}
         aria-describedby={describedBy}
@@ -56,7 +56,7 @@ function SettingSwitch(props: SettingSwitchProps) {
       </span>
       {/* prettier-ignore */}
       <span className={styles.switchState} aria-hidden="true">
-        {checked ? 'オン' : 'オフ'}
+        {isChecked ? 'オン' : 'オフ'}
       </span>
     </label>
   );
@@ -112,7 +112,7 @@ export function SettingsControls(props: SettingsControlsProps) {
             </div>
             <SettingSwitch
               id="windows-startup"
-              checked={isStartupEnabledDraft}
+              isChecked={isStartupEnabledDraft}
               labelledBy="windows-startup-label"
               describedBy="windows-startup-description"
               onChange={onToggleStartup}
@@ -127,8 +127,8 @@ export function SettingsControls(props: SettingsControlsProps) {
             </div>
             <SettingSwitch
               id="startup-import"
-              checked={isStartupImportEnabled}
-              disabled={isStartupImportLoading}
+              isChecked={isStartupImportEnabled}
+              isDisabled={isStartupImportLoading}
               labelledBy="startup-import-label"
               describedBy="startup-import-description"
               onChange={onToggleStartupImport}
@@ -167,7 +167,9 @@ export function SettingsControls(props: SettingsControlsProps) {
                   if (event.key === 'Enter') onSaveArchiveLimit();
                 }}
               />
-              <span id="archive-limit-unit" className={styles.numberUnit}>MB</span>
+              <span id="archive-limit-unit" className={styles.numberUnit}>
+                MB
+              </span>
               {/* prettier-ignore */}
               <button type="button" className={`${shared.btn} ${styles.saveButton}`} onClick={onSaveArchiveLimit}>保存</button>
             </div>

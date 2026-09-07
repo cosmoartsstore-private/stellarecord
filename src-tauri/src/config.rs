@@ -176,6 +176,10 @@ pub fn load_startup_import_preference() -> StartupImportPreference {
 ///
 /// 許可状態を先に書き、回答済み状態を最後に書くことで、途中失敗時に未回答のまま
 /// 起動時取り込みが有効になることを防ぐ。
+///
+/// # Errors
+/// レジストリキーの作成、許可状態、または回答済み状態の書き込みに失敗した場合に
+/// エラーを返す。
 pub fn save_startup_import_preference(enabled: bool) -> Result<(), String> {
     let key = create_key(STELLA_RECORD_KEY)?;
     key.set_value("StartupImportEnabled", &u32::from(enabled))

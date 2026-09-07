@@ -53,6 +53,7 @@ export function DatabaseSection({
         onClick={() => {
           onSelectTable(table.name);
         }}
+        aria-pressed={isActive}
         className={`${styles.tableItem} ${isActive ? styles.tableItemActive : ''}`}
       >
         <span className={styles.tableItemLabel}>{isPhysicalNames ? table.name : table.label}</span>
@@ -76,6 +77,7 @@ export function DatabaseSection({
               onClick={() => {
                 setIsPhysicalNames((prev) => !prev);
               }}
+              aria-pressed={isPhysicalNames}
             >
               {isPhysicalNames ? 'Physical' : 'Logical'}
             </button>
@@ -122,6 +124,7 @@ export function DatabaseSection({
                     onGoToPage(currentPage - 1);
                   }}
                   disabled={isDbLoading || currentPage === 0}
+                  aria-label="前のページ"
                 >
                   ←
                 </button>
@@ -135,6 +138,7 @@ export function DatabaseSection({
                     onGoToPage(currentPage + 1);
                   }}
                   disabled={isDbLoading || currentPage >= totalPages - 1}
+                  aria-label="次のページ"
                 >
                   →
                 </button>
@@ -155,18 +159,32 @@ export function DatabaseSection({
                         <th
                           key={column.name}
                           className={styles.sortableHeader}
-                          onClick={() => {
-                            onToggleSort(column.name);
-                          }}
+                          aria-sort={
+                            isSorted
+                              ? sortState.dir === 'asc'
+                                ? 'ascending'
+                                : 'descending'
+                              : 'none'
+                          }
                         >
-                          <div className={styles.columnLabel}>
-                            {column.label}
-                            <span
-                              className={`${styles.sortArrow} ${isSorted ? styles.sortArrowActive : ''}`}
-                            >
-                              {isSorted ? (sortState.dir === 'asc' ? '▲' : '▼') : '▲'}
+                          <button
+                            type="button"
+                            className={styles.sortButton}
+                            onClick={() => {
+                              onToggleSort(column.name);
+                            }}
+                            aria-label={`${column.label}で並べ替え`}
+                          >
+                            <span className={styles.columnLabel}>
+                              {column.label}
+                              <span
+                                aria-hidden="true"
+                                className={`${styles.sortArrow} ${isSorted ? styles.sortArrowActive : ''}`}
+                              >
+                                {isSorted ? (sortState.dir === 'asc' ? '▲' : '▼') : '▲'}
+                              </span>
                             </span>
-                          </div>
+                          </button>
                         </th>
                       );
                     })}

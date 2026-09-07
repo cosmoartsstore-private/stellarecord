@@ -33,12 +33,12 @@ export function useArchiveSelection(archiveFiles: string[]) {
   }, []);
 
   /**
-   * mousedown('down') / mouseenter('enter') の統合ハンドラ
+   * mousedown('down') / mouseenter('enter') / キーボード('keyboard') の統合ハンドラ
    * Shift範囲選択・Ctrl個別トグル・プレーンクリック・ドラッグ選択を処理する
    */
   const handleFileAction = useCallback(
-    (event: MouseEvent, file: string, type: 'down' | 'enter') => {
-      if (type === 'down') {
+    (event: MouseEvent, file: string, type: 'down' | 'enter' | 'keyboard') => {
+      if (type === 'down' || type === 'keyboard') {
         if (event.shiftKey && lastSelected) {
           const startIdx = archiveFiles.indexOf(lastSelected);
           const endIdx = archiveFiles.indexOf(file);
@@ -54,6 +54,20 @@ export function useArchiveSelection(archiveFiles: string[]) {
               return next;
             });
           }
+          return;
+        }
+
+        if (type === 'keyboard') {
+          setSelectedFiles((prev) => {
+            const next = new Set(prev);
+            if (next.has(file)) {
+              next.delete(file);
+            } else {
+              next.add(file);
+            }
+            return next;
+          });
+          setLastSelected(file);
           return;
         }
 

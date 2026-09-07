@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { useModalDialog } from '../../../shared/hooks/useModalDialog';
 import shared from '../../../shared/styles/shared.module.css';
 import styles from './RegistrySection.module.css';
 import { extractExeDisplayName, pickExeFile } from '../services/registryService';
@@ -13,6 +14,11 @@ export function RegisterAppModal({ onClose, onConfirm }: RegisterAppModalProps) 
   const [path, setPath] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const { dialogRef, closeDialog, handleCancel } = useModalDialog({
+    onClose,
+    initialFocusRef: titleRef,
+  });
 
   // 直前に自動補完で入れた名前。ユーザーが手動編集した場合は ref と現値が乖離するため、
   // 次の exe 選択時に上書きしてよいかどうかを判定できる。
@@ -46,9 +52,18 @@ export function RegisterAppModal({ onClose, onConfirm }: RegisterAppModalProps) 
   const canSubmit = path.length > 0 && name.trim().length > 0;
 
   return (
-    <div className={shared.modalOverlay}>
+    <dialog
+      ref={dialogRef}
+      className={shared.modalOverlay}
+      aria-labelledby="register-app-title"
+      aria-describedby="register-app-description"
+      onCancel={handleCancel}
+    >
       <div className={shared.modalContent}>
-        <h3>アプリを登録</h3>
+        <h3 ref={titleRef} id="register-app-title" tabIndex={-1}>
+          アプリを登録
+        </h3>
+        <p id="register-app-description">ランチャーから起動する実行ファイルを登録します。</p>
         <div className={styles.registerForm}>
           <label className={styles.formField}>
             <span>実行ファイル</span>
@@ -61,6 +76,7 @@ export function RegisterAppModal({ onClose, onConfirm }: RegisterAppModalProps) 
                 placeholder="ファイルを選択してください"
               />
               <button
+                type="button"
                 className={shared.btn}
                 onClick={() => {
                   void handlePickFile();
@@ -96,10 +112,11 @@ export function RegisterAppModal({ onClose, onConfirm }: RegisterAppModalProps) 
           </label>
         </div>
         <div className={shared.modalActions}>
-          <button className={shared.btn} onClick={onClose}>
+          <button type="button" className={shared.btn} onClick={closeDialog}>
             キャンセル
           </button>
           <button
+            type="button"
             className={`${shared.btn} ${shared.primary}`}
             disabled={!canSubmit}
             onClick={() => {
@@ -110,6 +127,6 @@ export function RegisterAppModal({ onClose, onConfirm }: RegisterAppModalProps) 
           </button>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }

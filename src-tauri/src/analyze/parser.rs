@@ -76,6 +76,33 @@ pub static RE_PLAYER_LEFT: LazyLock<Regex> = LazyLock::new(|| {
     )
 });
 
+/// プレイヤーが使用アバターを切り替えた行にマッチする。
+/// キャプチャ1はプレイヤー表示名、2はアバター名。
+pub static RE_AVATAR_SWITCH: LazyLock<Regex> = LazyLock::new(|| {
+    compile_regex(
+        r"\[Behaviour\] Switching (.*?) to avatar (.+)$",
+        "RE_AVATAR_SWITCH",
+    )
+});
+
+/// 旧形式のアバターダウンロード完了行から `Friend:0` / `Friend:1` を抽出する。
+/// 2026.1.3 以降の `Dist` 形式には一致せず、判定不能として扱われる。
+pub static RE_AVATAR_DOWNLOAD_FRIEND: LazyLock<Regex> = LazyLock::new(|| {
+    compile_regex(
+        r"\[AssetBundleDownloadManager\] Download for avatar \([^)]*Friend:([01])[^)]*\)",
+        "RE_AVATAR_DOWNLOAD_FRIEND",
+    )
+});
+
+/// アバター展開完了行にマッチする。
+/// キャプチャ1は `アバター名 by 作者名` の全体であり、作者名を装着者とは解釈しない。
+pub static RE_AVATAR_UNPACK: LazyLock<Regex> = LazyLock::new(|| {
+    compile_regex(
+        r"\[AssetBundleDownloadManager\] \[\d+\] Unpacking Avatar \((.*)\)$",
+        "RE_AVATAR_UNPACK",
+    )
+});
+
 /// ワールド入室後に出力されるローカルプレイヤー分類行にマッチする。
 /// 例: `[Behaviour] Initialized PlayerAPI "Name" is local`
 pub static RE_IS_LOCAL: LazyLock<Regex> = LazyLock::new(|| {

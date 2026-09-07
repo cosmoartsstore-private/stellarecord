@@ -8,12 +8,14 @@
 //! キャンセルや単一ファイルの失敗で部分データが残ることはない。
 
 mod db;
+mod friendship;
 mod parser;
 
 pub use db::init_main_db;
 pub use parser::{
-    is_collectible_notification, parse_access_type, parse_location, ParsedLocation, RE_ENTERING,
-    RE_IS_LOCAL, RE_JOINING, RE_LEFT_ROOM, RE_NOTIFICATION, RE_NOTIFICATION_WORLD_ID,
+    is_collectible_notification, parse_access_type, parse_location, ParsedLocation,
+    RE_AVATAR_DOWNLOAD_FRIEND, RE_AVATAR_SWITCH, RE_AVATAR_UNPACK, RE_ENTERING, RE_IS_LOCAL,
+    RE_JOINING, RE_LEFT_ROOM, RE_NOTIFICATION, RE_NOTIFICATION_WORLD_ID,
     RE_NOTIFICATION_WORLD_NAME, RE_OSC_FOUND, RE_PLAYER_JOIN, RE_PLAYER_JOIN_COMPLETE,
     RE_PLAYER_LEFT, RE_SCREENSHOT, RE_SUBSCRIPTION_STATUS, RE_TIME, RE_USER_AUTH,
 };
@@ -27,6 +29,10 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::utils::decode_log_line_lossy;
+use friendship::{FriendStatus, FriendshipTracker, UNKNOWN_FRIEND_STATUS};
+
+/// 取り込み結果へ影響するログ解析仕様のバージョン。
+const CURRENT_PARSER_VERSION: i64 = 2;
 
 /// インポートが意図的にキャンセルされた際にユーザーに返すメッセージ。
 ///
@@ -286,8 +292,14 @@ fn imported_content_is_current(
             WHERE imported.log_name = ?1
               AND imported.content_sha256 = ?2
               AND imported.content_size = ?3
+              AND imported.parser_version = ?4
          )",
-        params![filename, &fingerprint.sha256[..], fingerprint.content_size],
+        params![
+            filename,
+            &fingerprint.sha256[..],
+            fingerprint.content_size,
+            CURRENT_PARSER_VERSION
+        ],
         |row| row.get(0),
     )
 }
@@ -353,9 +365,14 @@ fn record_imported_content(
     fingerprint: &LogFingerprint,
 ) -> Result<()> {
     conn.execute(
-        "INSERT INTO imported_logs (log_name, content_sha256, content_size)
-         VALUES (?1, ?2, ?3)",
-        params![filename, &fingerprint.sha256[..], fingerprint.content_size],
+        "INSERT INTO imported_logs (log_name, content_sha256, content_size, parser_version)
+         VALUES (?1, ?2, ?3, ?4)",
+        params![
+            filename,
+            &fingerprint.sha256[..],
+            fingerprint.content_size,
+            CURRENT_PARSER_VERSION
+        ],
     )?;
     Ok(())
 }
@@ -736,6 +753,7 @@ where
     // 開始行で `">` で閉じていない場合のみ Some になり、`">` を含む行で確定する。
     // EOF 時に未閉鎖のまま残った内容は破棄する。
     let mut pending_notification: Option<String> = None;
+    let mut friendship_tracker = FriendshipTracker::default();
 
     main_tx.execute(
         "INSERT OR IGNORE INTO sessions (start_time, end_time, account_id, account_name, log_name)
@@ -814,6 +832,38 @@ where
             .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
             .unwrap_or_default();
 
+        // --- 旧形式アバター取得ログによるフレンド状態の推定 ---
+        // `Friend` 値だけではユーザーを識別できないため、同一訪問内でアバター名、
+        // 展開順、入室中の表示名とユーザー ID がすべて一意な場合だけ保存する。
+        if current_visit_id.is_some() {
+            if let Some(caps) = RE_AVATAR_SWITCH.captures(&line) {
+                if let (Some(display_match), Some(avatar_match)) = (caps.get(1), caps.get(2)) {
+                    friendship_tracker
+                        .on_avatar_switch(display_match.as_str(), avatar_match.as_str());
+                }
+            } else if line.contains("[AssetBundleDownloadManager] Download for avatar (") {
+                let status = RE_AVATAR_DOWNLOAD_FRIEND
+                    .captures(&line)
+                    .and_then(|caps| caps.get(1))
+                    .and_then(|value| FriendStatus::from_log_value(value.as_str()));
+                friendship_tracker.on_avatar_download(status, line_count);
+            } else if let Some(caps) = RE_AVATAR_UNPACK.captures(&line) {
+                if let Some(payload) = caps.get(1) {
+                    if let (Some(visit_id), Some((user_id, friend_status))) = (
+                        current_visit_id,
+                        friendship_tracker.on_avatar_unpack(payload.as_str(), line_count),
+                    ) {
+                        main_tx.execute(
+                            "UPDATE with_users
+                             SET friend_status = ?1
+                             WHERE visit_id = ?2 AND vrchat_id = ?3 AND is_self = 0",
+                            params![friend_status, visit_id, user_id],
+                        )?;
+                    }
+                }
+            }
+        }
+
         // --- セッション識別（認証済みユーザー） ---
         if let Some(caps) = RE_USER_AUTH.captures(&line) {
             if my_display_name.is_none() {
@@ -827,6 +877,7 @@ where
 
         // --- ワールド訪問ライフサイクル（入室・参加・退室） ---
         if let Some(caps) = RE_ENTERING.captures(&line) {
+            friendship_tracker.reset_visit();
             if let Some(visit_id) = current_visit_id {
                 main_tx.execute(
                     "UPDATE visits SET leave_time = ?1 WHERE id = ?2 AND leave_time IS NULL",
@@ -865,6 +916,7 @@ where
                         ts_str
                     ],
                 )?;
+                friendship_tracker.reset_visit();
                 current_visit_id = Some(main_tx.last_insert_rowid());
                 pending_room_name = None;
             }
@@ -884,6 +936,7 @@ where
                 current_visit_id = None;
                 pending_room_name = None;
             }
+            friendship_tracker.reset_visit();
             continue;
         }
 
@@ -902,6 +955,7 @@ where
             )?;
 
             if let Some(visit_id) = current_visit_id {
+                friendship_tracker.on_player_join(&display_name, &user_id);
                 main_tx.execute(
                     "INSERT OR IGNORE INTO with_users (visit_id, vrchat_id, is_self, join_time)
                      VALUES (?1, ?2, 0, ?3)",
@@ -912,9 +966,10 @@ where
         }
 
         if let Some(caps) = RE_PLAYER_LEFT.captures(&line) {
-            let Some(user_match) = caps.get(2) else {
+            let (Some(display_match), Some(user_match)) = (caps.get(1), caps.get(2)) else {
                 continue;
             };
+            let display_name = display_match.as_str().to_string();
             let user_id = user_match.as_str().to_string();
             if let Some(visit_id) = current_visit_id {
                 main_tx.execute(
@@ -922,6 +977,7 @@ where
                      WHERE visit_id = ?2 AND vrchat_id = ?3 AND leave_time IS NULL",
                     params![ts_str, visit_id, user_id],
                 )?;
+                friendship_tracker.on_player_left(&display_name, &user_id);
             }
             continue;
         }
@@ -940,10 +996,10 @@ where
                 }
                 if let Some(visit_id) = current_visit_id {
                     main_tx.execute(
-                        "UPDATE with_users SET is_self = 1
+                        "UPDATE with_users SET is_self = 1, friend_status = ?3
                          WHERE visit_id = ?1
                            AND vrchat_id IN (SELECT vrchat_id FROM find_users WHERE account_name = ?2)",
-                        params![visit_id, display_name],
+                        params![visit_id, display_name, UNKNOWN_FRIEND_STATUS],
                     )?;
                 }
             }
@@ -1050,6 +1106,16 @@ where
             filename
         ],
     )?;
+
+    if let Some(user_id) = my_user_id {
+        main_tx.execute(
+            "UPDATE with_users
+             SET is_self = 1, friend_status = ?1
+             WHERE vrchat_id = ?2
+               AND visit_id IN (SELECT id FROM visits WHERE session_id = ?3)",
+            params![UNKNOWN_FRIEND_STATUS, user_id, session_id],
+        )?;
+    }
 
     Ok(())
 }

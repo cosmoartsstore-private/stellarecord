@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { StellaIcon, stellaIconNames } from '../../../shared/components/Icons';
+import { useModalDialog } from '../../../shared/hooks/useModalDialog';
 import { formatFileSize } from '../../../shared/lib/byteFormat';
 import type { DeletableLogInfo } from '../models/types';
 import shared from '../../../shared/styles/shared.module.css';
@@ -16,6 +17,12 @@ interface PolarisCleanupModalProps {
 export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanupModalProps) {
   // 一括削除が一般的なため、初期状態で全ファイルを選択
   const [selected, setSelected] = useState<Set<string>>(new Set(logs.map((l) => l.file_name)));
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const { dialogRef, closeDialog, handleCancel, handleBackdropMouseDown } = useModalDialog({
+    onClose,
+    initialFocusRef: titleRef,
+    shouldCloseOnBackdrop: true,
+  });
 
   const isAllSelected = selected.size === logs.length;
 
@@ -42,16 +49,24 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
     .reduce((sum, l) => sum + l.size_bytes, 0);
 
   return (
-    <div className={shared.modalOverlay}>
-      <button className={shared.modalBackdrop} onClick={onClose} />
+    <dialog
+      ref={dialogRef}
+      className={shared.modalOverlay}
+      aria-labelledby="polaris-cleanup-title"
+      aria-describedby="polaris-cleanup-description polaris-cleanup-notice"
+      onCancel={handleCancel}
+      onMouseDown={handleBackdropMouseDown}
+    >
       <div className={`${shared.modalContent} ${styles.content}`}>
         <div className={styles.header}>
           <div className={styles.warningIcon}>
             <StellaIcon name={stellaIconNames.alert} />
           </div>
           <div>
-            <h3 className={styles.title}>元ログ削除</h3>
-            <p className={styles.subtitle}>
+            <h3 ref={titleRef} id="polaris-cleanup-title" className={styles.title} tabIndex={-1}>
+              元ログ削除
+            </h3>
+            <p id="polaris-cleanup-description" className={styles.subtitle}>
               Polaris側に存在する元ログを削除します
               <br />
               <span className={styles.dangerText}>※削除した場合、元には戻せません</span>
@@ -59,13 +74,13 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
           </div>
         </div>
 
-        <div className={styles.notice}>
+        <div id="polaris-cleanup-notice" className={styles.notice}>
           対象データはSTELLA
           RECORD側の圧縮ログと一致しているため、削除後もログビューアから閲覧できます
         </div>
 
         <div className={styles.listHeader}>
-          <button className={styles.toggleAllBtn} onClick={toggleAll}>
+          <button type="button" className={styles.toggleAllBtn} onClick={toggleAll}>
             {isAllSelected ? 'すべて解除' : 'すべて選択'}
           </button>
           <span className={styles.listMeta}>
@@ -80,16 +95,17 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
               <button
                 key={log.file_name}
                 type="button"
+                aria-pressed={isSelected}
                 className={`${styles.fileRow} ${isSelected ? styles.fileRowSelected : ''}`}
                 onClick={() => {
                   toggle(log.file_name);
                 }}
               >
-                <div className={`${styles.checkbox} ${isSelected ? styles.checkboxChecked : ''}`}>
-                  <svg viewBox="0 0 12 10" className={styles.checkIcon}>
+                <span className={`${styles.checkbox} ${isSelected ? styles.checkboxChecked : ''}`}>
+                  <svg aria-hidden="true" viewBox="0 0 12 10" className={styles.checkIcon}>
                     <polyline points="1.5 5 4.5 8 10.5 2" />
                   </svg>
-                </div>
+                </span>
                 <span className={styles.fileName}>{log.file_name}</span>
                 <span className={styles.fileSize}>{formatFileSize(log.size_bytes)}</span>
               </button>
@@ -98,10 +114,11 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
         </div>
 
         <div className={shared.modalActions}>
-          <button className={shared.btn} onClick={onClose}>
+          <button type="button" className={shared.btn} onClick={closeDialog}>
             キャンセル
           </button>
           <button
+            type="button"
             className={`${shared.btn} ${shared.danger} ${shared.wipe}`}
             disabled={selected.size === 0}
             onClick={() => {
@@ -112,6 +129,6 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
           </button>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }

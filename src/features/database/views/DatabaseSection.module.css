@@ -266,17 +266,33 @@
   font-size: 0.9rem;
 }
 
-.sortableHeader {
-  cursor: pointer;
+.table .sortableHeader {
+  padding: 0;
   user-select: none;
 }
 
-.sortableHeader:hover {
+.sortButton {
+  width: 100%;
+  padding: 0.8rem 1.1rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sortButton:hover {
   background: var(--db-table-head-bg);
   filter: brightness(1.1);
 }
 
-.sortableHeader:hover .sortArrow {
+.sortButton:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+
+.sortButton:hover .sortArrow {
   opacity: 0.5;
 }
 
@@ -341,5 +357,13 @@
   .table td {
     padding: 0.55rem 0.75rem;
     font-size: 0.75rem;
+  }
+
+  .table .sortableHeader {
+    padding: 0;
+  }
+
+  .sortButton {
+    padding: 0.55rem 0.75rem;
   }
 }

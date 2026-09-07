@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
 import { open } from '@tauri-apps/plugin-shell';
 import { StellaIcon, stellaIconNames } from '../shared/components/Icons';
+import { useModalDialog } from '../shared/hooks/useModalDialog';
 import shared from '../shared/styles/shared.module.css';
 import styles from './CreditModal.module.css';
 import avatarSrc from '../assets/avatar.jpg';
@@ -20,6 +21,7 @@ export function CreditButton() {
   return (
     <>
       <button
+        type="button"
         className={styles.trigger}
         onClick={() => {
           setIsOpen(true);
@@ -46,6 +48,12 @@ export function CreditButton() {
 /** 制作者情報・アプリバージョン・外部リンクを表示するクレジットモーダル本体。 */
 function CreditModal({ onClose }: { onClose: () => void }) {
   const [version, setVersion] = useState('');
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const { dialogRef, closeDialog, handleCancel, handleBackdropMouseDown } = useModalDialog({
+    onClose,
+    initialFocusRef: closeButtonRef,
+    shouldCloseOnBackdrop: true,
+  });
 
   useEffect(() => {
     void getVersion().then(setVersion);
@@ -57,9 +65,26 @@ function CreditModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className={shared.modalOverlay}>
-      <button className={shared.modalBackdrop} onClick={onClose} />
+    <dialog
+      ref={dialogRef}
+      className={shared.modalOverlay}
+      aria-labelledby="credit-title"
+      onCancel={handleCancel}
+      onMouseDown={handleBackdropMouseDown}
+    >
       <div className={`${shared.modalContent} ${styles.modal}`}>
+        <h3 id="credit-title" className={styles.visuallyHidden}>
+          クレジット
+        </h3>
+        <button
+          ref={closeButtonRef}
+          type="button"
+          className={styles.closeButton}
+          onClick={closeDialog}
+          aria-label="クレジットを閉じる"
+        >
+          <StellaIcon name={stellaIconNames.close} />
+        </button>
         <div className={styles.banner}>
           <div className={styles.bannerGlow} />
           <img src={logoDarkSrc} alt="STELLA RECORD" className={styles.bannerLogo} />
@@ -81,6 +106,7 @@ function CreditModal({ onClose }: { onClose: () => void }) {
             {LINKS.map((link) => (
               <button
                 key={link.label}
+                type="button"
                 className={styles.linkItem}
                 onClick={() => {
                   handleLink(link.url);
@@ -99,6 +125,6 @@ function CreditModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }

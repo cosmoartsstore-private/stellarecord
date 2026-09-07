@@ -142,6 +142,11 @@ const WITH_USERS_COLUMNS: &[ColumnComment] = &[
         description: "自分自身の入室記録かどうか",
     },
     ColumnComment {
+        name: "friend_status",
+        label: "フレンド状態",
+        description: "訪問時点の推定状態（0: 非フレンド、1: フレンド、2: 判定不能）",
+    },
+    ColumnComment {
         name: "join_time",
         label: "Join時刻",
         description: "そのプレイヤーを観測した開始時刻",
@@ -183,6 +188,11 @@ const WITH_USERS_DETAIL_COLUMNS: &[ColumnComment] = &[
         name: "is_self",
         label: "is_self",
         description: "自分自身の入室記録かどうか",
+    },
+    ColumnComment {
+        name: "friend_status",
+        label: "フレンド状態",
+        description: "訪問時点の推定状態（0: 非フレンド、1: フレンド、2: 判定不能）",
     },
     ColumnComment {
         name: "join_time",
