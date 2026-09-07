@@ -1,0 +1,129 @@
+.dialog {
+  width: min(720px, calc(100vw - 2rem));
+  max-width: none;
+  max-height: calc(100dvh - 2rem);
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--modal-border);
+  border-radius: 24px;
+  background: var(--modal-bg);
+  color: var(--text-main);
+  box-shadow: var(--modal-shadow);
+  overflow: hidden;
+}
+
+.dialog[open] {
+  display: flex;
+  flex-direction: column;
+  animation: settings-dialog-in 0.2s ease-out;
+}
+
+.dialog::backdrop {
+  background: var(--modal-overlay-bg);
+  animation: settings-backdrop-in 0.18s ease-out;
+}
+
+.header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem 1rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  outline: none;
+}
+
+.closeButton {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.closeButton:hover {
+  border-color: var(--border);
+  background: var(--bg-card-soft);
+  color: var(--text-main);
+}
+
+.closeButton:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.closeButton :global(.icon-svg) {
+  width: 18px;
+  height: 18px;
+  fill: currentcolor;
+}
+
+.body {
+  min-height: 0;
+  padding: 0 1.5rem 1.5rem;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--db-scrollbar-thumb) transparent;
+}
+
+.body::-webkit-scrollbar {
+  display: block;
+  width: 6px;
+}
+
+.body::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--db-scrollbar-thumb);
+}
+
+@keyframes settings-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes settings-backdrop-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (width <= 640px) {
+  .dialog {
+    width: calc(100vw - 1rem);
+    max-height: calc(100dvh - 1rem);
+    border-radius: 16px;
+  }
+
+  .header {
+    padding: 1rem 1rem 0.75rem;
+  }
+
+  .body {
+    padding: 0 1rem 1rem;
+  }
+}

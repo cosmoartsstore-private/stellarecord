@@ -62,6 +62,8 @@ pub fn run() {
             commands::registry::unregister_app,
             commands::settings::get_management_settings,
             commands::settings::save_management_settings,
+            commands::settings::get_startup_import_settings,
+            commands::settings::save_startup_import_preference,
             commands::settings::read_registry_catalog,
             commands::log_client_error,
         ])
@@ -84,9 +86,9 @@ pub fn run() {
         let msg = format!("Tauri アプリケーションの起動に失敗しました: {err}");
         utils::log_err(&msg);
         show_error_dialog(&msg);
+        #[allow(clippy::exit)]
+        std::process::exit(1);
     }
-    #[allow(clippy::exit)]
-    std::process::exit(0);
 }
 
 /// 致命的エラーを Windows メッセージボックスで表示する。

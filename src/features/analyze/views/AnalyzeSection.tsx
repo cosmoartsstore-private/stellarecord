@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import { StellaIcon, stellaIconNames } from '../../../shared/components/Icons';
 import { formatStorageMeter } from '../../../shared/lib/storageFormat';
 import shared from '../../../shared/styles/shared.module.css';
@@ -11,7 +10,6 @@ interface AnalyzeSectionProps {
   isAnalyzeRunning: boolean;
   analyzeProgress: string;
   analyzeStatus: string;
-  settingsControls: ReactNode;
   onRefreshStorage: () => void;
   onOpenEnhancedSync: () => void;
   onOpenLogViewer: () => void;
@@ -25,7 +23,6 @@ export function AnalyzeSection({
   isAnalyzeRunning,
   analyzeProgress,
   analyzeStatus,
-  settingsControls,
   onRefreshStorage,
   onOpenEnhancedSync,
   onOpenLogViewer,
@@ -43,17 +40,19 @@ export function AnalyzeSection({
 
       <section className={`${shared.card} ${styles.primaryCard}`}>
         <div className={styles.homeSectionHead}>
-          <div>
-            <h3 className={styles.sectionMiniTitle}>ストレージ管理</h3>
-          </div>
-          <div className={styles.dbActionRow}>{settingsControls}</div>
+          <h3 className={styles.sectionMiniTitle}>ストレージ管理</h3>
         </div>
 
         <div className={styles.dbStorageCard}>
           <div className={styles.storageHeader}>
             <div className={styles.storageTitle}>
               アーカイブ容量
-              <button className={styles.btnRefreshStorage} onClick={onRefreshStorage}>
+              <button
+                type="button"
+                className={styles.btnRefreshStorage}
+                onClick={onRefreshStorage}
+                aria-label="アーカイブ容量を更新"
+              >
                 <StellaIcon name={stellaIconNames.refresh} />
               </button>
             </div>

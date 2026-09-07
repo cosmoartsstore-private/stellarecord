@@ -1,5 +1,3 @@
-import { byteUnitBytes, formatByteUnit } from '../../../shared/lib/byteFormat';
-
 /** Date.getDay() に対応する日本語曜日ラベル（0=日曜） */
 const dayNames = ['日', '月', '火', '水', '木', '金', '土'] as const;
 
@@ -15,18 +13,4 @@ export function parseArchiveDate(fileName: string): string | null {
   const date = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   const dow = dayNames[date.getDay()];
   return `${m[1]}/${m[2]}/${m[3]} (${dow}) ${m[4]}:${m[5]}`;
-}
-
-/** バイト数を人間が読みやすいサイズラベル（GB / MB / KB / B）に変換する */
-export function formatArchiveSize(sizeBytes: number) {
-  if (sizeBytes >= byteUnitBytes.GB) {
-    return formatByteUnit(sizeBytes, 'GB', 2);
-  }
-  if (sizeBytes >= byteUnitBytes.MB) {
-    return formatByteUnit(sizeBytes, 'MB', 2);
-  }
-  if (sizeBytes >= byteUnitBytes.KB) {
-    return formatByteUnit(sizeBytes, 'KB', 1);
-  }
-  return String(sizeBytes) + ' B';
 }

@@ -1,6 +1,6 @@
 import type { MouseEvent } from 'react';
 import { StellaIcon, stellaIconNames } from '../../../shared/components/Icons';
-import { formatArchiveSize } from '../models/archiveFormat';
+import { formatFileSize } from '../../../shared/lib/byteFormat';
 import type { ArchiveFileItem } from '../models/types';
 import shared from '../../../shared/styles/shared.module.css';
 import styles from './ArchiveSelectorModal.module.css';
@@ -79,7 +79,7 @@ export function ArchiveSelectorModal({
                 </span>
                 <div className={styles.metaBlock}>
                   <span className={styles.name}>{file.name}</span>
-                  <span className={styles.size}>{formatArchiveSize(file.size_bytes)}</span>
+                  <span className={styles.size}>{formatFileSize(file.size_bytes)}</span>
                 </div>
               </button>
             ))

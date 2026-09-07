@@ -12,6 +12,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, State};
 
 use crate::analyze;
+use crate::config;
 use crate::utils;
 use crate::AnalyzeCancelStatus;
 
@@ -24,6 +25,38 @@ use super::{emit_analyze_progress, get_archive_store_dir, get_db_path, get_sourc
 /// 取り込みワーカー終了時に実行中フラグを必ず解除するためのガード。
 struct AnalyzeRunGuard {
     running: Arc<AtomicBool>,
+}
+
+/// 差分インポート結果を最終進捗イベント用の文面へ変換する。
+fn format_diff_import_completion(summary: &analyze::DiffImportSummary) -> (String, String) {
+    let failed_count = summary.failed_filenames.len();
+    if failed_count == 0 {
+        return (
+            "Data 内 zst アーカイブからの取り込みが完了しました。".to_string(),
+            "100%".to_string(),
+        );
+    }
+
+    let successful_count = summary.total_count.saturating_sub(failed_count);
+    let mut filename_summary = summary
+        .failed_filenames
+        .iter()
+        .take(5)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("、");
+    if failed_count > 5 {
+        filename_summary.push_str("、ほか");
+        filename_summary.push_str(&(failed_count - 5).to_string());
+        filename_summary.push('件');
+    }
+
+    (
+        format!(
+            "{successful_count}件完了、{failed_count}件失敗（成功分は保存済み）: {filename_summary}"
+        ),
+        format!("{successful_count}/{}", summary.total_count),
+    )
 }
 
 impl Drop for AnalyzeRunGuard {
@@ -124,6 +157,11 @@ pub fn launch_startup_archive_import(
     app: AppHandle,
     cancel_status: State<'_, AnalyzeCancelStatus>,
 ) -> Result<(), String> {
+    let preference = config::load_startup_import_preference();
+    if !preference.preference_set || !preference.enabled {
+        return Ok(());
+    }
+
     let db_path = get_db_path()?;
     let source_dir = get_source_log_dir()?;
     let archive_store_dir = get_archive_store_dir()?;
@@ -170,12 +208,10 @@ pub fn launch_startup_archive_import(
         );
 
         match result {
-            Ok(()) => emit_analyze_progress(
-                &app,
-                "Data 内 zst アーカイブからの取り込みが完了しました。".to_string(),
-                "100%".to_string(),
-                false,
-            ),
+            Ok(summary) => {
+                let (status, progress) = format_diff_import_completion(&summary);
+                emit_analyze_progress(&app, status, progress, false);
+            }
             Err(err) if err == analyze::ANALYZE_CANCELED_MESSAGE => emit_analyze_progress(
                 &app,
                 "キャンセルしました".to_string(),
@@ -202,4 +238,41 @@ pub fn launch_startup_archive_import(
 pub async fn cancel_analyze(cancel_status: State<'_, AnalyzeCancelStatus>) -> Result<(), String> {
     cancel_status.cancel.store(true, Ordering::SeqCst);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn diff_import_completion_reports_partial_success() {
+        let summary = analyze::DiffImportSummary {
+            total_count: 3,
+            failed_filenames: vec!["output_log_failed.txt".to_string()],
+        };
+
+        assert_eq!(
+            format_diff_import_completion(&summary),
+            (
+                "2件完了、1件失敗（成功分は保存済み）: output_log_failed.txt".to_string(),
+                "2/3".to_string(),
+            )
+        );
+    }
+
+    #[test]
+    fn diff_import_completion_reports_full_success() {
+        let summary = analyze::DiffImportSummary {
+            total_count: 3,
+            failed_filenames: Vec::new(),
+        };
+
+        assert_eq!(
+            format_diff_import_completion(&summary),
+            (
+                "Data 内 zst アーカイブからの取り込みが完了しました。".to_string(),
+                "100%".to_string(),
+            )
+        );
+    }
 }

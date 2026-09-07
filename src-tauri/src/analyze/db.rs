@@ -1,7 +1,8 @@
 //! メインデータベースの `SQLite` スキーマ定義と初期化。
 //!
 //! メインデータベースは WAL ジャーナルモードと外部キーによる参照整合性を使用する。
-//! 発売前のため旧版 DB 互換マイグレーションは持たず、ここにある DDL を正とする。
+//! ここにある DDL を正とし、追加テーブルと追加列は既存データを保持したまま
+//! 初期化時に適用する。
 
 use rusqlite::{Connection, Result};
 
@@ -20,6 +21,14 @@ CREATE TABLE IF NOT EXISTS sessions (
     account_name    TEXT,
     start_time      DATETIME,
     end_time        DATETIME
+);
+
+-- 同名ログの追記を検出するため、取り込み済み本文の暗号学的ハッシュと長さを保持する。
+-- ファイル時刻や圧縮時の tar メタデータは内容同一性の判定に使用しない。
+CREATE TABLE IF NOT EXISTS imported_logs (
+    log_name        TEXT PRIMARY KEY REFERENCES sessions(log_name) ON DELETE CASCADE,
+    content_sha256  BLOB NOT NULL CHECK(length(content_sha256) = 32),
+    content_size    INTEGER NOT NULL CHECK(content_size >= 0)
 );
 
 CREATE TABLE IF NOT EXISTS visits (
@@ -77,7 +86,8 @@ CREATE TABLE IF NOT EXISTS screenshots (
     file_path         TEXT NOT NULL,
     resolution_width  INTEGER,
     resolution_height INTEGER,
-    timestamp         DATETIME NOT NULL
+    timestamp         DATETIME NOT NULL,
+    session_id        INTEGER REFERENCES sessions(id)
 );
 CREATE INDEX IF NOT EXISTS idx_screenshots_visit_id  ON screenshots(visit_id);
 CREATE INDEX IF NOT EXISTS idx_screenshots_timestamp ON screenshots(timestamp);
@@ -167,14 +177,61 @@ FROM screenshots s
 LEFT JOIN visits v ON v.id = s.visit_id;
 ";
 
+/// 旧 `screenshots` スキーマへセッション所有列を追加し、確定できる行だけ補完する。
+///
+/// `visit_id` がある行は親訪問からセッションを一意に特定できる。ワールド外撮影として
+/// `visit_id` が `NULL` の旧行は所有元を推定せず、そのまま保持する。
+fn migrate_screenshot_session_ownership(conn: &Connection) -> Result<()> {
+    let has_session_id = {
+        let mut statement = conn.prepare("PRAGMA table_info(screenshots)")?;
+        let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
+        let mut found = false;
+        for column in columns {
+            if column? == "session_id" {
+                found = true;
+                break;
+            }
+        }
+        found
+    };
+
+    if !has_session_id {
+        conn.execute(
+            "ALTER TABLE screenshots
+             ADD COLUMN session_id INTEGER REFERENCES sessions(id)",
+            [],
+        )?;
+    }
+
+    conn.execute(
+        "UPDATE screenshots
+         SET session_id = (
+             SELECT visit.session_id
+             FROM visits AS visit
+             WHERE visit.id = screenshots.visit_id
+         )
+         WHERE session_id IS NULL
+           AND visit_id IS NOT NULL",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_screenshots_session_id
+         ON screenshots(session_id)",
+        [],
+    )?;
+    Ok(())
+}
+
 /// メイン `StellaRecord` スキーマと必要なビューを初期化する。
 ///
 /// # Errors
-/// `SQLite` プラグマ、スキーマ、またはビューの適用に失敗した場合にエラーを返す。
+/// `SQLite` プラグマ、スキーマ、加算的移行、またはビューの適用に失敗した場合に
+/// エラーを返す。
 pub fn init_main_db(conn: &Connection) -> Result<()> {
     conn.execute_batch("PRAGMA journal_mode = WAL;")?;
     conn.execute_batch("PRAGMA foreign_keys = ON;")?;
     conn.execute_batch(MAIN_SCHEMA)?;
+    migrate_screenshot_session_ownership(conn)?;
     conn.execute_batch(MAIN_VIEWS)?;
     Ok(())
 }
@@ -191,6 +248,7 @@ mod tests {
 
         let expected_tables = [
             "sessions",
+            "imported_logs",
             "visits",
             "find_users",
             "with_users",
@@ -243,7 +301,7 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(table_count, 9);
+        assert_eq!(table_count, 10);
     }
 
     #[test]
@@ -308,5 +366,157 @@ mod tests {
             [],
         );
         assert!(result.is_err(), "invalid instance_type should be rejected");
+    }
+
+    #[test]
+    fn init_main_db_adds_import_tracking_to_existing_database() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                log_name TEXT UNIQUE NOT NULL,
+                account_id TEXT,
+                account_name TEXT,
+                start_time DATETIME,
+                end_time DATETIME
+             );
+             INSERT INTO sessions (log_name, start_time) VALUES ('legacy.txt', '2025-01-01');",
+        )
+        .unwrap();
+
+        init_main_db(&conn).unwrap();
+
+        let session_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get(0))
+            .unwrap();
+        let tracking_exists: bool = conn
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM sqlite_master
+                    WHERE type = 'table' AND name = 'imported_logs'
+                 )",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(session_count, 1);
+        assert!(tracking_exists);
+    }
+
+    #[test]
+    fn init_main_db_migrates_screenshot_session_ownership_idempotently() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "PRAGMA foreign_keys = ON;
+             CREATE TABLE sessions (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 log_name TEXT UNIQUE NOT NULL,
+                 account_id TEXT,
+                 account_name TEXT,
+                 start_time DATETIME,
+                 end_time DATETIME
+             );
+             CREATE TABLE visits (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 session_id INTEGER NOT NULL REFERENCES sessions(id),
+                 world_name TEXT NOT NULL,
+                 instance_id TEXT NOT NULL,
+                 instance_type TEXT,
+                 region TEXT,
+                 join_time DATETIME NOT NULL,
+                 leave_time DATETIME
+             );
+             CREATE TABLE screenshots (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 visit_id INTEGER REFERENCES visits(id),
+                 file_path TEXT NOT NULL,
+                 resolution_width INTEGER,
+                 resolution_height INTEGER,
+                 timestamp DATETIME NOT NULL
+             );
+             INSERT INTO sessions (log_name, start_time)
+             VALUES ('legacy.txt', '2025-01-01');
+             INSERT INTO visits
+                 (session_id, world_name, instance_id, instance_type, join_time)
+             VALUES (1, 'Legacy World', 'legacy', 'public', '2025-01-01');
+             INSERT INTO screenshots
+                 (visit_id, file_path, resolution_width, resolution_height, timestamp)
+             VALUES
+                 (1, 'C:\\with-visit.png', 1920, 1080, '2025-01-01 00:01:00'),
+                 (NULL, 'C:\\without-visit.png', 1920, 1080, '2025-01-01 00:02:00');",
+        )
+        .unwrap();
+
+        init_main_db(&conn).unwrap();
+        init_main_db(&conn).unwrap();
+
+        let session_id_column_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*)
+                 FROM pragma_table_info('screenshots')
+                 WHERE name = 'session_id'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let with_visit_owner: Option<i64> = conn
+            .query_row(
+                "SELECT session_id FROM screenshots WHERE visit_id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let without_visit_owner: Option<i64> = conn
+            .query_row(
+                "SELECT session_id FROM screenshots WHERE visit_id IS NULL",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let screenshot_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM screenshots", [], |row| row.get(0))
+            .unwrap();
+        let session_index_exists: bool = conn
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM sqlite_master
+                    WHERE type = 'index'
+                      AND name = 'idx_screenshots_session_id'
+                 )",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(session_id_column_count, 1);
+        assert_eq!(with_visit_owner, Some(1));
+        assert_eq!(without_visit_owner, None);
+        assert_eq!(screenshot_count, 2);
+        assert!(session_index_exists);
+    }
+
+    #[test]
+    fn imported_log_tracking_is_removed_with_session() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_main_db(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO sessions (log_name, start_time) VALUES ('tracked.txt', '2025-01-01')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO imported_logs (log_name, content_sha256, content_size)
+             VALUES ('tracked.txt', ?1, 3)",
+            [&[0_u8; 32][..]],
+        )
+        .unwrap();
+
+        conn.execute("DELETE FROM sessions WHERE log_name = 'tracked.txt'", [])
+            .unwrap();
+
+        let tracking_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM imported_logs", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(tracking_count, 0);
     }
 }

@@ -77,6 +77,13 @@ pub fn is_sql_identifier(value: &str) -> bool {
             .all(|character| character.is_ascii_alphanumeric() || character == '_')
 }
 
+/// ログ1行の無効 UTF-8 バイトだけを置換し、行末の改行を取り除く。
+pub fn decode_log_line_lossy(bytes: &[u8]) -> String {
+    let line = bytes.strip_suffix(b"\n").unwrap_or(bytes);
+    let line = line.strip_suffix(b"\r").unwrap_or(line);
+    String::from_utf8_lossy(line).into_owned()
+}
+
 /// レジストリからインストール済みの `CosmoArtsStore` アプリのディレクトリを解決する。
 ///
 /// インストール先は Windows レジストリ
@@ -291,6 +298,13 @@ mod tests {
         assert!(!is_sql_identifier("users; DROP TABLE x"));
         assert!(!is_sql_identifier("users WHERE 1=1"));
         assert!(!is_sql_identifier("テーブル"));
+    }
+
+    #[test]
+    fn lossy_log_line_decoding_replaces_invalid_utf8_and_trims_newline() {
+        assert_eq!(decode_log_line_lossy(b"ok\xffnext\r\n"), "ok\u{fffd}next");
+        assert_eq!(decode_log_line_lossy(b"line\n"), "line");
+        assert_eq!(decode_log_line_lossy(b"line"), "line");
     }
 
     // ── レジストリ: get_component_install_dir ──

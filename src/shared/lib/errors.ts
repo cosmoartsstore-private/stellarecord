@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 
-type AddToast = (msg: string) => void;
+export type AddToast = (msg: string) => void;
 
 const maxClientErrorLogLength = 4000;
 

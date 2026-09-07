@@ -17,9 +17,6 @@
   --text-dim: #7a8499;
   --text-faint: #4e5670;
 
-  /* ── セマンティック ───────────────────────────────── */
-  --danger: #ef4444;
-
   /* ── ボーダー ────────────────────────────────── */
   --border: #1e293b;
   --border-strong: rgb(123 147 248 / 40%);
@@ -34,10 +31,6 @@
 
   /* ── 機能カード ───────────────────────────── */
   --feature-icon-border: rgb(123 147 248 / 16%);
-
-  /* ── ボタン ────────────────────────────────── */
-  --btn-primary-shadow: none;
-  --btn-primary-hover-shadow: none;
 
   /* ── ランチャー / DB ──────────────────────────── */
   --launcher-card-bg: #131b2e;
@@ -74,20 +67,9 @@
   --terminal-bg: #070d1a;
   --terminal-border: #1e293b;
   --terminal-body: #c8d0e7;
-  --terminal-world: #60a5fa;
-  --terminal-notification: #facc15;
-  --terminal-player-join: #4ade80;
-  --terminal-player-left: #f87171;
-  --terminal-warning: #fb923c;
-  --terminal-error: #ef4444;
   --terminal-debug: #4e5670;
   --terminal-debug-system: #7b93f8;
   --terminal-highlight-bg: rgb(123 147 248 / 22%);
-  --terminal-highlight-text: #fff;
   --terminal-highlight-border: rgb(160 180 252 / 20%);
   --terminal-scrollbar-thumb: rgb(123 147 248 / 45%);
-
-  /* ── 共有 ─────────────────────────────────── */
-  --sr-shared-body-background: var(--bg-gradient);
-  --sr-shared-body-color: var(--text-main);
 }

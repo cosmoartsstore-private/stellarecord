@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "stylelint": "stylelint \"src/**/*.css\"",
@@ -15,9 +15,9 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "fmt:check": "cargo fmt --manifest-path src-tauri/Cargo.toml --all --check",
-    "clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
-    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib",
-    "verify": "npm run format:check && npm run stylelint && npm run lint && npm run test && npm run build && npm run fmt:check && npm run clippy && npm run test:rust",
+    "clippy": "cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
+    "test:rust": "cargo test --locked --workspace --all-targets",
+    "verify": "npm run format:check && npm run stylelint && npm run lint && npm run test:coverage && npm run build && npm run fmt:check && npm run clippy && npm run test:rust",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -32,6 +32,7 @@
     "@eslint/js": "^9.39.1",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/cli": "^2.10.0",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
@@ -43,6 +44,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-unicorn": "^61.0.2",
     "globals": "^16.5.0",
+    "jsdom": "^29.1.1",
     "prettier": "^3.6.2",
     "stylelint": "^16.25.0",
     "stylelint-config-standard": "^38.0.0",

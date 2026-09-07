@@ -1,6 +1,7 @@
 dist/
 build/
 target/
+coverage/
 node_modules/
 *.generated.*
 src-tauri/gen/schemas/

@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import '../App.css';
 import '../App.light.css';
 import '../App.dark.css';
 import '../App.midnight.css';
-import type { SectionId } from './section';
 import styles from './App.module.css';
 import { useAppModals } from './useAppModals';
 import { ToastContainer } from './ToastContainer';
@@ -22,14 +21,16 @@ import {
   registerApp,
   unregisterApp,
 } from '../features/registry/services/registryService';
-import type { AppCard } from '../features/registry/models/types';
+import type { AppCard, LauncherViewMode } from '../features/registry/models/types';
 import { useRegistryState } from '../features/registry/viewmodels/useRegistryState';
 import { RegistrySection } from '../features/registry/views/RegistrySection';
 import { RegisterAppModal } from '../features/registry/views/RegisterAppModal';
-import { readInitialTheme, saveTheme } from '../features/settings/models/theme';
-import type { ThemeMode } from '../features/settings/models/types';
+import { readInitialTheme, saveTheme, type ThemeMode } from '../features/settings/models/theme';
 import { useSettingsState } from '../features/settings/viewmodels/useSettingsState';
+import { useStartupImportSettings } from '../features/settings/viewmodels/useStartupImportSettings';
 import { SettingsControls } from '../features/settings/views/SettingsControls';
+import { SettingsModal } from '../features/settings/views/SettingsModal';
+import { StartupImportConsentDialog } from '../features/settings/views/StartupImportConsentDialog';
 import { StellaIcon, stellaIconNames } from '../shared/components/Icons';
 import logoLightSrc from '../assets/logo-light.png';
 import logoDarkSrc from '../assets/logo-dark.png';
@@ -37,10 +38,7 @@ import { useToasts } from '../shared/hooks/useToasts';
 import { CreditButton } from './CreditModal';
 import { addErrorToast } from '../shared/lib/errors';
 
-/** ランチャーグリッドの表示モード */
-type LauncherViewMode = 'list' | 'card';
-
-const themeCycle: ThemeMode[] = ['light', 'dark', 'midnight'];
+type SectionId = 'registry' | 'analyze' | 'database';
 
 function App() {
   const [themeMode, setThemeMode] = useState<ThemeMode>(readInitialTheme);
@@ -48,6 +46,9 @@ function App() {
   const [launcherViewMode, setLauncherViewMode] = useState<LauncherViewMode>('list');
 
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const startupImportInitialCheckCompletedRef = useRef(false);
+  const startupImportSettingsErrorShownRef = useRef(false);
 
   const { toasts, addToast } = useToasts();
   const { registryApps, isReloading, reloadRegistry, refreshRegistry } = useRegistryState();
@@ -58,6 +59,13 @@ function App() {
     toggleStartup,
     saveArchiveLimit,
   } = useSettingsState();
+  const {
+    startupImportSettings,
+    startupImportSettingsError,
+    isStartupImportSettingsLoading,
+    isStartupImportPreferenceSaving,
+    saveStartupImportPreference,
+  } = useStartupImportSettings();
   const {
     analyzeRunning: isAnalyzeRunning,
     analyzeProgress,
@@ -212,16 +220,49 @@ function App() {
     }
   }, [addToast, runStartupImport]);
 
+  /** 起動時ログ取り込みの設定を保存し、成功したかを呼び出し元へ返す。 */
+  const persistStartupImportPreference = async (enabled: boolean) => {
+    try {
+      await saveStartupImportPreference(enabled);
+      return true;
+    } catch (error) {
+      addErrorToast(
+        addToast,
+        '起動時ログ取り込み設定保存',
+        'ログの読み取り設定を保存できませんでした',
+        error,
+      );
+      return false;
+    }
+  };
+
+  /** 初回確認で許可された場合は、設定保存後に今回分のログ取り込みを開始する。 */
+  const handleStartupImportConsent = async (enabled: boolean) => {
+    const isSaved = await persistStartupImportPreference(enabled);
+    if (isSaved && enabled) await handleStartupImport();
+  };
+
+  /** 設定画面から次回以降の起動時ログ取り込みを切り替える。 */
+  const handleToggleStartupImport = async () => {
+    const shouldEnable = !(startupImportSettings?.enabled ?? false);
+    const isSaved = await persistStartupImportPreference(shouldEnable);
+    if (isSaved) {
+      addToast(
+        shouldEnable
+          ? '次回からログの自動取り込みを有効にします'
+          : 'ログの自動取り込みを無効にしました',
+      );
+    }
+  };
+
   /**
-   * テーマを light → dark → midnight の順で切り替える
+   * 設定画面で選択されたテーマへ切り替える
    * 切替時にCSSトランジションを一時無効化し、中間状態のちらつきを防ぐ
    */
-  const handleThemeToggle = () => {
+  const handleThemeChange = (nextThemeMode: ThemeMode) => {
+    if (nextThemeMode === themeMode) return;
     document.documentElement.classList.add('disable-transitions');
-    setThemeMode((prev) => {
-      const idx = themeCycle.indexOf(prev);
-      return themeCycle[(idx + 1) % themeCycle.length] ?? 'light';
-    });
+    setThemeMode(nextThemeMode);
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         document.documentElement.classList.remove('disable-transitions');
@@ -229,22 +270,30 @@ function App() {
     });
   };
 
-  const themeIcon =
-    themeMode === 'light'
-      ? stellaIconNames.sun
-      : themeMode === 'dark'
-        ? stellaIconNames.moon
-        : stellaIconNames.eclipse;
-
   // テーマ変更時にブラウザストレージへ永続化
   useEffect(() => {
     saveTheme(themeMode);
   }, [themeMode]);
 
-  // マウント時に起動取り込みを実行
+  // 初回取得時点で許可済みの場合だけ、アプリ起動ごとに1回取り込みを実行
   useEffect(() => {
-    void handleStartupImport();
-  }, [handleStartupImport]);
+    if (!startupImportSettings || startupImportInitialCheckCompletedRef.current) return;
+    startupImportInitialCheckCompletedRef.current = true;
+    if (startupImportSettings.preference_set && startupImportSettings.enabled) {
+      void handleStartupImport();
+    }
+  }, [handleStartupImport, startupImportSettings]);
+
+  useEffect(() => {
+    if (!startupImportSettingsError || startupImportSettingsErrorShownRef.current) return;
+    startupImportSettingsErrorShownRef.current = true;
+    addErrorToast(
+      addToast,
+      'ログ保存先の取得',
+      'ログとDBの保存先を取得できませんでした',
+      startupImportSettingsError,
+    );
+  }, [addToast, startupImportSettingsError]);
 
   const navItems: { section: SectionId; label: string }[] = [
     { section: 'registry', label: 'ランチャー' },
@@ -292,19 +341,6 @@ function App() {
             isAnalyzeRunning={isAnalyzeRunning}
             analyzeProgress={analyzeProgress}
             analyzeStatus={analyzeStatus}
-            settingsControls={
-              <SettingsControls
-                archiveLimitDraft={archiveLimitDraft}
-                isStartupEnabledDraft={isStartupEnabledDraft}
-                onArchiveLimitDraftChange={setArchiveLimitDraft}
-                onSaveArchiveLimit={() => {
-                  void handleSaveArchiveLimit();
-                }}
-                onToggleStartup={() => {
-                  void handleToggleStartup();
-                }}
-              />
-            }
             onRefreshStorage={() => {
               void pollStorage();
             }}
@@ -381,13 +417,8 @@ function App() {
           ))}
         </div>
 
-        <button
-          className={styles.navSettingsButton}
-          onClick={handleThemeToggle}
-          aria-label="テーマ切替"
-        >
-          <StellaIcon name={themeIcon} />
-        </button>
+        {/* prettier-ignore */}
+        <button type="button" className={styles.navSettingsButton} onClick={() => { setIsSettingsModalOpen(true); }}><StellaIcon name={stellaIconNames.settings} />設定</button>
       </nav>
 
       <main className={styles.contentArea}>{renderSection()}</main>
@@ -440,6 +471,52 @@ function App() {
           }}
           onConfirm={(path, name, description) => {
             void handleRegisterApp(path, name, description);
+          }}
+        />
+      )}
+
+      {isSettingsModalOpen && (
+        <SettingsModal
+          onClose={() => {
+            setIsSettingsModalOpen(false);
+          }}
+        >
+          <SettingsControls
+            themeMode={themeMode}
+            archiveLimitDraft={archiveLimitDraft}
+            isStartupEnabledDraft={isStartupEnabledDraft}
+            isStartupImportEnabled={startupImportSettings?.enabled ?? false}
+            isStartupImportLoading={
+              isStartupImportSettingsLoading || isStartupImportPreferenceSaving
+            }
+            logArchivePath={startupImportSettings?.log_archive_path ?? ''}
+            databasePath={startupImportSettings?.database_path ?? ''}
+            isDataLocationLoading={isStartupImportSettingsLoading}
+            onThemeModeChange={handleThemeChange}
+            onArchiveLimitDraftChange={setArchiveLimitDraft}
+            onSaveArchiveLimit={() => {
+              void handleSaveArchiveLimit();
+            }}
+            onToggleStartup={() => {
+              void handleToggleStartup();
+            }}
+            onToggleStartupImport={() => {
+              void handleToggleStartupImport();
+            }}
+          />
+        </SettingsModal>
+      )}
+
+      {startupImportSettings && !startupImportSettings.preference_set && (
+        <StartupImportConsentDialog
+          logArchivePath={startupImportSettings.log_archive_path}
+          databasePath={startupImportSettings.database_path}
+          isSaving={isStartupImportPreferenceSaving}
+          onAllow={() => {
+            void handleStartupImportConsent(true);
+          }}
+          onDecline={() => {
+            void handleStartupImportConsent(false);
           }}
         />
       )}

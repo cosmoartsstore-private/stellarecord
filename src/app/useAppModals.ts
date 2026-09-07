@@ -5,11 +5,11 @@ import {
 } from '../features/analyze/services/analyzeService';
 import type { DeletableLogInfo } from '../features/analyze/models/types';
 import type { ArchiveFileItem } from '../features/archive/models/types';
-import { addErrorToast } from '../shared/lib/errors';
+import { addErrorToast, type AddToast } from '../shared/lib/errors';
 
 /** モーダルコーディネーターが親Appから受け取るコールバックと共有状態 */
 interface UseAppModalsOptions {
-  addToast: (msg: string) => void;
+  addToast: AddToast;
   archiveFiles: ArchiveFileItem[];
   openEnhancedSync: () => Promise<ArchiveFileItem[]>;
   executeEnhancedSync: (targets: string[]) => Promise<void>;

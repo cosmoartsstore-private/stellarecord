@@ -329,6 +329,11 @@ const SCREENSHOTS_COLUMNS: &[ColumnComment] = &[
         description: "撮影時に滞在していたワールド訪問",
     },
     ColumnComment {
+        name: "session_id",
+        label: "セッションID",
+        description: "撮影イベントの取り込み元ログセッション",
+    },
+    ColumnComment {
         name: "file_path",
         label: "ファイルパス",
         description: "スクリーンショットの保存先フルパス",
@@ -918,6 +923,7 @@ mod tests {
     #[test]
     fn column_comment_lookup() {
         assert!(get_column_comment("sessions", "log_name").is_some());
+        assert!(get_column_comment("screenshots", "session_id").is_some());
         assert!(get_column_comment("sessions", "no_such_column").is_none());
         assert!(get_column_comment("no_such_table", "log_name").is_none());
     }

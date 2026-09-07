@@ -133,12 +133,18 @@
   background: var(--bg-card);
   border: 1px solid var(--border);
   color: var(--text-dim);
-  width: 42px;
+  width: auto;
+  min-width: 42px;
   height: 42px;
+  padding: 0 0.9rem;
   border-radius: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 0.4rem;
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  font-weight: 800;
   cursor: pointer;
   box-shadow: var(--shadow-sm);
   transition:
@@ -153,6 +159,12 @@
 
 .navSettingsButton:active {
   transform: translateY(0);
+}
+
+.navSettingsButton :global(.icon-svg) {
+  width: 18px;
+  height: 18px;
+  fill: currentcolor;
 }
 
 .toastContainer {
@@ -267,8 +279,10 @@
   }
 
   .navSettingsButton {
-    width: 34px;
+    min-width: 34px;
     height: 34px;
+    padding: 0 0.7rem;
     border-radius: 10px;
+    font-size: 0.75rem;
   }
 }

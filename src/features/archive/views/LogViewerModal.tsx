@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { renderHighlightedBody } from '../models/logFormat';
-import { formatArchiveSize, parseArchiveDate } from '../models/archiveFormat';
+import { parseArchiveDate } from '../models/archiveFormat';
+import { formatFileSize } from '../../../shared/lib/byteFormat';
 import type { ArchiveFileItem, LogViewerData } from '../models/types';
 import shared from '../../../shared/styles/shared.module.css';
 import styles from './LogViewerModal.module.css';
@@ -275,7 +276,7 @@ export function LogViewerModal({
                   >
                     <span className={styles.sidebarItemDate}>{date ?? file.name}</span>
                     <span className={styles.sidebarItemSize}>
-                      {formatArchiveSize(file.size_bytes)}
+                      {formatFileSize(file.size_bytes)}
                     </span>
                   </button>
                 );

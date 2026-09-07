@@ -10,6 +10,7 @@
 - [ER Diagram](#er-diagram)
 - [Tables](#tables)
   - [sessions](#sessions)
+  - [imported_logs](#imported_logs)
   - [visits](#visits)
   - [find_users](#find_users)
   - [with_users](#with_users)
@@ -36,12 +37,12 @@
 | Engine            | SQLite 3 (via rusqlite 0.38, `bundled` feature) |
 | Journal Mode      | WAL (Write-Ahead Logging)                       |
 | Foreign Keys      | Enforced (`PRAGMA foreign_keys = ON`)           |
-| Tables            | 9                                               |
+| Tables            | 10                                              |
 | Views             | 3                                               |
-| Indexes           | 10 (UNIQUE 制約による自動生成を除く)            |
+| Indexes           | 11 (UNIQUE 制約による自動生成を除く)            |
 | Schema Definition | `src-tauri/src/analyze/db.rs`                   |
 
-データベースは VRChat ログから抽出した正規化データを保管するメインドメインのテーブル群と、ランチャー機能で使用する `apps` テーブルで構成される。
+データベースは VRChat ログから抽出した正規化データ、取り込み済み本文の識別情報、ランチャー機能で使用する `apps` テーブルで構成される。
 
 ---
 
@@ -49,15 +50,15 @@
 
 ### Naming
 
-| Element     | Convention                                                     | Example                     |
-| ----------- | -------------------------------------------------------------- | --------------------------- |
-| Table name  | snake_case (複数形)                                            | `sessions`, `visits`        |
-| Column name | snake_case                                                     | `account_name`, `join_time` |
-| Primary key | `id INTEGER PRIMARY KEY AUTOINCREMENT` （`find_users` を除く） | -                           |
-| Foreign key | `<table>_id INTEGER NOT NULL REFERENCES <table>(id)`           | `session_id`                |
-| Timestamp   | `DATETIME` 型、`'YYYY-MM-DD HH:MM:SS'` 文字列で保管            | `join_time`                 |
-| Boolean     | `BOOLEAN`（SQLite 内部は INTEGER 0/1）                         | `is_self`, `is_active`      |
-| Enum        | `TEXT CHECK(col IN (...))`                                     | `instance_type`             |
+| Element     | Convention                                                                      | Example                     |
+| ----------- | ------------------------------------------------------------------------------- | --------------------------- |
+| Table name  | snake_case (複数形)                                                             | `sessions`, `visits`        |
+| Column name | snake_case                                                                      | `account_name`, `join_time` |
+| Primary key | `id INTEGER PRIMARY KEY AUTOINCREMENT` （`find_users`, `imported_logs` を除く） | -                           |
+| Foreign key | `<table>_id INTEGER REFERENCES <table>(id)`。所有関係に応じて `NOT NULL` を付与 | `session_id`                |
+| Timestamp   | `DATETIME` 型、`'YYYY-MM-DD HH:MM:SS'` 文字列で保管                             | `join_time`                 |
+| Boolean     | `BOOLEAN`（SQLite 内部は INTEGER 0/1）                                          | `is_self`, `is_active`      |
+| Enum        | `TEXT CHECK(col IN (...))`                                                      | `instance_type`             |
 
 ### Type Mapping
 
@@ -75,14 +76,15 @@ SQLite はストレージクラスのみを持ち、宣言型は親和性ヒン�
 
 再取り込みやエラー時の冪等性を保証するため、各テーブルで以下の戦略を採用する。
 
-| Table           | Idempotency Mechanism                                            |
-| --------------- | ---------------------------------------------------------------- |
-| `sessions`      | `log_name UNIQUE` + `INSERT OR IGNORE`                           |
-| `notifications` | `notif_id UNIQUE` + `INSERT OR IGNORE`                           |
-| `with_users`    | `UNIQUE(visit_id, vrchat_id)` + `INSERT OR IGNORE`               |
-| `find_users`    | `vrchat_id PRIMARY KEY` + `ON CONFLICT DO UPDATE` (表示名最新化) |
-| `subscription`  | `session_id UNIQUE` + `INSERT OR IGNORE`                         |
-| `apps`          | `path UNIQUE`                                                    |
+| Table           | Idempotency Mechanism                                                          |
+| --------------- | ------------------------------------------------------------------------------ |
+| `sessions`      | `log_name UNIQUE`。本文更新時はファイル単位 savepoint 内で関連データごと再構築 |
+| `imported_logs` | 展開後本文の SHA-256 とバイト長が一致する場合だけ再取り込みを省略              |
+| `notifications` | `notif_id UNIQUE` + `INSERT OR IGNORE`                                         |
+| `with_users`    | `UNIQUE(visit_id, vrchat_id)` + `INSERT OR IGNORE`                             |
+| `find_users`    | `vrchat_id PRIMARY KEY` + `ON CONFLICT DO UPDATE`（表示名最新化）              |
+| `subscription`  | `session_id UNIQUE` + `INSERT OR IGNORE`                                       |
+| `apps`          | `path UNIQUE`                                                                  |
 
 ---
 
@@ -91,11 +93,13 @@ SQLite はストレージクラスのみを持ち、宣言型は親和性ヒン�
 ```mermaid
 erDiagram
     sessions ||--o{ visits          : has
+    sessions ||--o| imported_logs   : fingerprints
     sessions ||--o{ notifications   : receives
     sessions ||--o{ osc             : logs
     sessions ||--o| subscription    : has
+    sessions o|--o{ screenshots     : owns
     visits   ||--o{ with_users      : "co-present"
-    visits   ||--o{ screenshots     : captures
+    visits   o|--o{ screenshots     : captures
     find_users ||--o{ with_users    : "appears in"
 
     sessions {
@@ -105,6 +109,12 @@ erDiagram
         TEXT     account_name
         DATETIME start_time
         DATETIME end_time
+    }
+
+    imported_logs {
+        TEXT    log_name PK,FK
+        BLOB    content_sha256
+        INTEGER content_size
     }
 
     visits {
@@ -156,6 +166,7 @@ erDiagram
         INTEGER  resolution_width
         INTEGER  resolution_height
         DATETIME timestamp
+        INTEGER  session_id FK
     }
 
     osc {
@@ -211,6 +222,25 @@ erDiagram
 
 - `PRIMARY KEY (id)`
 - `UNIQUE (log_name)` — 再取り込み防止
+
+---
+
+### imported_logs
+
+取り込み済みログの展開後本文を識別する内部テーブル。同名アーカイブが置き換わった場合でも、本文が変化したときだけセッションと関連データを再構築する。
+
+| Column           | Type    | Nullable | Default | Description                      |
+| ---------------- | ------- | -------- | ------- | -------------------------------- |
+| `log_name`       | TEXT    | NO       | -       | 対応する `sessions.log_name`     |
+| `content_sha256` | BLOB    | NO       | -       | 展開後本文の SHA-256（32バイト） |
+| `content_size`   | INTEGER | NO       | -       | 展開後本文のバイト長             |
+
+**Constraints**
+
+- `PRIMARY KEY (log_name)`
+- `FOREIGN KEY (log_name) REFERENCES sessions(log_name) ON DELETE CASCADE`
+- `CHECK (length(content_sha256) = 32)`
+- `CHECK (content_size >= 0)`
 
 ---
 
@@ -349,16 +379,21 @@ VRChat Camera による撮影イベント。
 | `resolution_width`  | INTEGER  | YES      | NULL          | 解像度幅 (px)                          |
 | `resolution_height` | INTEGER  | YES      | NULL          | 解像度高さ (px)                        |
 | `timestamp`         | DATETIME | NO       | -             | 撮影時刻                               |
+| `session_id`        | INTEGER  | YES      | NULL          | 取り込み元セッション (`sessions.id`)   |
 
 **Constraints**
 
 - `PRIMARY KEY (id)`
 - `FOREIGN KEY (visit_id) REFERENCES visits(id)`
+- `FOREIGN KEY (session_id) REFERENCES sessions(id)`
 
 **Indexes**
 
 - `idx_screenshots_visit_id (visit_id)`
 - `idx_screenshots_timestamp (timestamp)`
+- `idx_screenshots_session_id (session_id)`
+
+新規取り込みでは、ワールド外撮影を含む全行に `session_id` を保存する。旧スキーマからの移行時は、`visit_id` がある行だけ `visits.session_id` から補完する。`visit_id` が `NULL` の旧行は取り込み元を一意に特定できないため、`session_id` も `NULL` のまま保持する。
 
 ---
 
@@ -549,6 +584,7 @@ UNIQUE 制約による自動生成インデックスを除く、明示的に作�
 | `idx_notifications_received` | `notifications` | `received_at` | 時系列ソート                       |
 | `idx_screenshots_visit_id`   | `screenshots`   | `visit_id`    | `screenshots_detail` ビューの JOIN |
 | `idx_screenshots_timestamp`  | `screenshots`   | `timestamp`   | 時系列ソート                       |
+| `idx_screenshots_session_id` | `screenshots`   | `session_id`  | 再取り込み時のセッション単位削除   |
 | `idx_osc_session_id`         | `osc`           | `session_id`  | セッション JOIN                    |
 | `idx_osc_timestamp`          | `osc`           | `timestamp`   | 時系列ソート                       |
 
@@ -556,14 +592,15 @@ UNIQUE 制約による自動生成インデックスを除く、明示的に作�
 
 ## Initialization and PRAGMA
 
-`src-tauri/src/analyze/db.rs::init_main_db` がアプリ起動時と取り込み開始時に必ず実行される。発売前のため旧版 DB 互換マイグレーションは持たず、現在の DDL を正とする。
+`src-tauri/src/analyze/db.rs::init_main_db` がアプリ起動時と取り込み開始時に必ず実行される。現在の DDL を正とし、`CREATE TABLE IF NOT EXISTS` による追加テーブルと加算的な列移行を、既存データを保持したまま適用する。`screenshots.session_id` がない旧 DB では `PRAGMA table_info(screenshots)` で列を確認して追加し、`visit_id` がある行だけ親訪問の `session_id` を補完する。この処理とインデックス作成は冪等である。
 
 ```rust
 pub fn init_main_db(conn: &Connection) -> Result<()> {
     conn.execute_batch("PRAGMA journal_mode = WAL;")?;
     conn.execute_batch("PRAGMA foreign_keys = ON;")?;
-    conn.execute_batch(MAIN_SCHEMA)?;          // CREATE TABLE IF NOT EXISTS
-    conn.execute_batch(MAIN_VIEWS)?;           // CREATE VIEW IF NOT EXISTS
+    conn.execute_batch(MAIN_SCHEMA)?;
+    migrate_screenshot_session_ownership(conn)?;
+    conn.execute_batch(MAIN_VIEWS)?;
     Ok(())
 }
 ```

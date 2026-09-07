@@ -20,10 +20,13 @@ pub use parser::{
 
 use chrono::NaiveDateTime;
 use rusqlite::{params, Connection, Result, Savepoint, Transaction};
+use sha2::{Digest, Sha256};
 use std::fs;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
+
+use crate::utils::decode_log_line_lossy;
 
 /// インポートが意図的にキャンセルされた際にユーザーに返すメッセージ。
 ///
@@ -45,18 +48,6 @@ fn analyze_err<E: std::fmt::Display>(context: &str, err: E) -> String {
 /// SQL 以外のエラーは `SQLite` 形式のエラーにラップする。
 fn analyze_sqlite_err<E: std::fmt::Display>(context: &str, err: E) -> rusqlite::Error {
     rusqlite::Error::InvalidParameterName(analyze_err(context, err))
-}
-
-/// ログ1行の無効 UTF-8 バイトだけを置換し、行末改行を取り除く。
-fn decode_log_line_lossy(line: &[u8]) -> String {
-    let mut decoded = String::from_utf8_lossy(line).into_owned();
-    if decoded.ends_with('\n') {
-        decoded.pop();
-        if decoded.ends_with('\r') {
-            decoded.pop();
-        }
-    }
-    decoded
 }
 
 /// 正規の `SQLite` 形式キャンセルエラーを生成する。
@@ -173,6 +164,234 @@ fn source_name_for_archive(path: &Path) -> Option<String> {
     Some(file_name.trim_end_matches(".tar.zst").to_string())
 }
 
+/// ログ本文の内容同一性を判定する指紋。
+///
+/// 圧縮ファイル自体ではなく展開後の本文を対象にするため、tar のファイル時刻などが
+/// 変化しても同じログを再取り込みしない。SHA-256 と長さを併用し、単純なチェック
+/// サムの衝突やファイル時刻への依存を避ける。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LogFingerprint {
+    sha256: [u8; 32],
+    content_size: i64,
+}
+
+/// 管理対象ログの差分インポート結果。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiffImportSummary {
+    /// 処理対象として検出したログの総数。
+    pub total_count: usize,
+    /// ファイル単位でロールバックし、取り込めなかったログ名。
+    pub failed_filenames: Vec<String>,
+}
+
+/// ログファイルを開き、プレーン本文のリーダーをコールバックへ渡す。
+///
+/// `.tar.zst` は先頭の単一ログエントリを展開し、プレーンログは共有読み取りで開く。
+/// 指紋計算とパーサーで同じ入力解釈を共有する。
+fn with_log_content_reader<T, F>(log_path: &Path, callback: F) -> Result<T>
+where
+    F: FnOnce(&mut dyn Read) -> Result<T>,
+{
+    if log_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| value.ends_with(".tar.zst"))
+    {
+        let file = fs::File::open(log_path)
+            .map_err(|err| analyze_sqlite_err("圧縮ログを開けませんでした", err))?;
+        let decoder = zstd::stream::Decoder::new(file).map_err(|err| {
+            analyze_sqlite_err("圧縮ログの zstd デコーダーを初期化できませんでした", err)
+        })?;
+        let mut archive = tar::Archive::new(decoder);
+        let mut entries = archive.entries().map_err(|err| {
+            analyze_sqlite_err("圧縮ログのエントリ一覧を取得できませんでした", err)
+        })?;
+        let Some(entry) = entries.next() else {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "圧縮ログに解析対象がありませんでした".to_string(),
+            ));
+        };
+        let mut entry =
+            entry.map_err(|err| analyze_sqlite_err("圧縮ログのエントリを読めませんでした", err))?;
+        return callback(&mut entry);
+    }
+
+    // FILE_SHARE_READ により、VRChat が書き込み中のログでも読み取り可能にする。
+    #[cfg(windows)]
+    let mut file = {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows::Win32::Storage::FileSystem::FILE_SHARE_READ;
+        fs::OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ.0)
+            .open(log_path)
+            .map_err(|err| analyze_sqlite_err("ログファイルを開けませんでした", err))?
+    };
+    #[cfg(not(windows))]
+    let mut file = fs::File::open(log_path)
+        .map_err(|err| analyze_sqlite_err("ログファイルを開けませんでした", err))?;
+
+    callback(&mut file)
+}
+
+/// 展開後ログ本文をストリーミングし、取り込み判定用の指紋を計算する。
+fn fingerprint_log_content(log_path: &Path, cancel_status: &AtomicBool) -> Result<LogFingerprint> {
+    with_log_content_reader(log_path, |reader| {
+        let mut hasher = Sha256::new();
+        let mut content_size = 0_u64;
+        let mut buffer = vec![0_u8; 64 * 1024];
+
+        loop {
+            if cancel_status.load(Ordering::SeqCst) {
+                return Err(analyze_cancel_sqlite_err());
+            }
+            let bytes_read = reader
+                .read(&mut buffer)
+                .map_err(|err| analyze_sqlite_err("ログ本文を読み取れませんでした", err))?;
+            if bytes_read == 0 {
+                break;
+            }
+            hasher.update(&buffer[..bytes_read]);
+            content_size = content_size.checked_add(bytes_read as u64).ok_or_else(|| {
+                rusqlite::Error::InvalidParameterName(
+                    "ログ本文のサイズが上限を超えました".to_string(),
+                )
+            })?;
+        }
+
+        let content_size = i64::try_from(content_size).map_err(|_| {
+            rusqlite::Error::InvalidParameterName("ログ本文のサイズが上限を超えました".to_string())
+        })?;
+        Ok(LogFingerprint {
+            sha256: hasher.finalize().into(),
+            content_size,
+        })
+    })
+}
+
+/// DB に記録された指紋と現在のログ本文が一致するか確認する。
+///
+/// 旧版 DB には指紋行が存在しないため、その場合は `false` として一度だけ安全に
+/// 再構築し、現在内容に対応する指紋を登録する。
+fn imported_content_is_current(
+    conn: &Connection,
+    filename: &str,
+    fingerprint: &LogFingerprint,
+) -> Result<bool> {
+    conn.query_row(
+        "SELECT EXISTS(
+            SELECT 1
+            FROM imported_logs AS imported
+            JOIN sessions AS session ON session.log_name = imported.log_name
+            WHERE imported.log_name = ?1
+              AND imported.content_sha256 = ?2
+              AND imported.content_size = ?3
+         )",
+        params![filename, &fingerprint.sha256[..], fingerprint.content_size],
+        |row| row.get(0),
+    )
+}
+
+/// 同名ログから生成されたセッション所有データを削除する。
+///
+/// この関数は必ずファイル単位 savepoint 内で呼び、後続の再解析または指紋登録が
+/// 失敗した場合に旧データ一式を復元できるようにする。`find_users` は複数セッション
+/// で共有するユーザーマスターのため削除しない。
+fn delete_imported_session(conn: &Connection, filename: &str) -> Result<()> {
+    conn.execute("DELETE FROM imported_logs WHERE log_name = ?1", [filename])?;
+    conn.execute(
+        "DELETE FROM screenshots
+         WHERE session_id IN (
+                   SELECT id FROM sessions WHERE log_name = ?1
+               )
+            OR visit_id IN (
+                   SELECT visit.id
+                   FROM visits AS visit
+                   JOIN sessions AS session ON session.id = visit.session_id
+                   WHERE session.log_name = ?1
+               )",
+        [filename],
+    )?;
+    conn.execute(
+        "DELETE FROM with_users
+         WHERE visit_id IN (
+             SELECT visit.id
+             FROM visits AS visit
+             JOIN sessions AS session ON session.id = visit.session_id
+             WHERE session.log_name = ?1
+         )",
+        [filename],
+    )?;
+    conn.execute(
+        "DELETE FROM visits
+         WHERE session_id IN (SELECT id FROM sessions WHERE log_name = ?1)",
+        [filename],
+    )?;
+    conn.execute(
+        "DELETE FROM notifications
+         WHERE session_id IN (SELECT id FROM sessions WHERE log_name = ?1)",
+        [filename],
+    )?;
+    conn.execute(
+        "DELETE FROM osc
+         WHERE session_id IN (SELECT id FROM sessions WHERE log_name = ?1)",
+        [filename],
+    )?;
+    conn.execute(
+        "DELETE FROM subscription
+         WHERE session_id IN (SELECT id FROM sessions WHERE log_name = ?1)",
+        [filename],
+    )?;
+    conn.execute("DELETE FROM sessions WHERE log_name = ?1", [filename])?;
+    Ok(())
+}
+
+/// 正常に再構築できたログ本文の指紋をセッションへ紐付けて保存する。
+fn record_imported_content(
+    conn: &Connection,
+    filename: &str,
+    fingerprint: &LogFingerprint,
+) -> Result<()> {
+    conn.execute(
+        "INSERT INTO imported_logs (log_name, content_sha256, content_size)
+         VALUES (?1, ?2, ?3)",
+        params![filename, &fingerprint.sha256[..], fingerprint.content_size],
+    )?;
+    Ok(())
+}
+
+/// ファイル単位 savepoint 内での取り込み結果。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ImportOutcome {
+    Unchanged,
+    Imported,
+}
+
+/// 1件のログを内容ベースでスキップまたは再構築する。
+///
+/// 呼び出し元が渡す接続はファイル単位 savepoint であり、旧セッション削除、
+/// 再解析、指紋登録のいずれかが失敗すれば一式をロールバックする。
+fn import_log_in_savepoint<F>(
+    conn: &Connection,
+    log_path: &Path,
+    filename: &str,
+    cancel_status: &AtomicBool,
+    progress_callback: &mut F,
+) -> Result<ImportOutcome>
+where
+    F: FnMut(String, String),
+{
+    let fingerprint = fingerprint_log_content(log_path, cancel_status)?;
+    if imported_content_is_current(conn, filename, &fingerprint)? {
+        return Ok(ImportOutcome::Unchanged);
+    }
+
+    delete_imported_session(conn, filename)?;
+    parse_and_import(conn, log_path, filename, cancel_status, progress_callback)?;
+    record_imported_content(conn, filename, &fingerprint)?;
+    Ok(ImportOutcome::Imported)
+}
+
 /// スクリーンショット撮影イベントをメインデータベースに挿入する。
 fn insert_screenshot(
     tx: &Connection,
@@ -181,11 +400,20 @@ fn insert_screenshot(
     resolution_width: Option<i64>,
     resolution_height: Option<i64>,
     timestamp: &str,
+    session_id: i64,
 ) -> Result<()> {
     tx.execute(
-        "INSERT INTO screenshots (visit_id, file_path, resolution_width, resolution_height, timestamp)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![visit_id, file_path, resolution_width, resolution_height, timestamp],
+        "INSERT INTO screenshots
+         (visit_id, file_path, resolution_width, resolution_height, timestamp, session_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            visit_id,
+            file_path,
+            resolution_width,
+            resolution_height,
+            timestamp,
+            session_id
+        ],
     )?;
     Ok(())
 }
@@ -327,14 +555,16 @@ fn persist_notification(
 /// ロールバックし、部分データが残らないことを保証する。
 ///
 /// # Errors
-/// データベースを開けない、または初期化できない場合にエラーを返す。
+/// データベースを開けない、初期化できない、キャンセルされた、またはバッチ全体の
+/// 続行・確定ができない場合にエラーを返す。ファイル単位の失敗は、正常に取り込めた
+/// ファイルを確定したうえで `DiffImportSummary` に格納する。
 #[allow(clippy::too_many_lines)]
 pub fn run_diff_import<F>(
     main_db_path: &Path,
     archive_store_dir: &Path,
     cancel_status: &AtomicBool,
     mut progress_callback: F,
-) -> Result<(), String>
+) -> Result<DiffImportSummary, String>
 where
     F: FnMut(String, String),
 {
@@ -350,7 +580,10 @@ where
     let log_files = collect_log_files(archive_store_dir);
     if log_files.is_empty() {
         progress_callback("処理対象ログなし".to_string(), "0/0".to_string());
-        return Ok(());
+        return Ok(DiffImportSummary {
+            total_count: 0,
+            failed_filenames: Vec::new(),
+        });
     }
 
     progress_callback(
@@ -363,6 +596,7 @@ where
         .map_err(|e| analyze_err("メイン DB トランザクションを開始できませんでした", e))?;
 
     let total = log_files.len();
+    let mut failed_filenames = Vec::new();
     for (idx, log_path) in log_files.iter().enumerate() {
         if let Err(err) = ensure_not_canceled(cancel_status) {
             rollback_outer_transaction(main_tx, "解析中断時")?;
@@ -373,18 +607,6 @@ where
             continue;
         };
 
-        let already_processed: bool = main_tx
-            .query_row(
-                "SELECT EXISTS(SELECT 1 FROM sessions WHERE log_name = ?1)",
-                params![filename],
-                |row| row.get(0),
-            )
-            .map_err(|e| analyze_err("セッション存在確認に失敗しました", e))?;
-
-        if already_processed {
-            continue;
-        }
-
         progress_callback(
             format!("処理中: {filename}"),
             format_progress_fraction(idx, total),
@@ -394,21 +616,22 @@ where
             .savepoint()
             .map_err(|e| analyze_err("メイン DB savepoint を開始できませんでした", e))?;
 
-        match parse_and_import(
+        match import_log_in_savepoint(
             &main_sp,
             log_path,
             &filename,
             cancel_status,
             &mut progress_callback,
         ) {
-            Ok(()) => {
+            Ok(outcome) => {
                 main_sp
                     .commit()
                     .map_err(|e| analyze_err("メイン DB savepoint を確定できませんでした", e))?;
-                progress_callback(
-                    format!("取り込み完了: {filename}"),
-                    format_progress_fraction(idx + 1, total),
-                );
+                let status = match outcome {
+                    ImportOutcome::Unchanged => format!("スキップ（内容変更なし）: {filename}"),
+                    ImportOutcome::Imported => format!("取り込み完了: {filename}"),
+                };
+                progress_callback(status, format_progress_fraction(idx + 1, total));
             }
             Err(err) if err.to_string() == ANALYZE_CANCELED_MESSAGE => {
                 rollback_savepoint(main_sp, "解析中断時")?;
@@ -418,6 +641,7 @@ where
             Err(err) => {
                 rollback_savepoint(main_sp, "ファイル単位ロールバック時")?;
                 crate::utils::log_err(&format!("[StellaRecord] エラー ({filename}): {err}"));
+                failed_filenames.push(filename);
             }
         }
     }
@@ -431,11 +655,26 @@ where
         .commit()
         .map_err(|e| analyze_err("メイン DB 反映を確定できませんでした", e))?;
 
+    if !failed_filenames.is_empty() {
+        let failed_count = failed_filenames.len();
+        progress_callback(
+            format!("{failed_count}件の取り込みに失敗（成功分は保存済み）"),
+            format_progress_fraction(total - failed_count, total),
+        );
+        return Ok(DiffImportSummary {
+            total_count: total,
+            failed_filenames,
+        });
+    }
+
     progress_callback(
         "処理完了".to_string(),
         format_progress_fraction(total, total),
     );
-    Ok(())
+    Ok(DiffImportSummary {
+        total_count: total,
+        failed_filenames,
+    })
 }
 
 /// ログファイル（プレーンテキストまたは `.tar.zst` アーカイブ）を開き、
@@ -458,59 +697,15 @@ where
         return Err(analyze_cancel_sqlite_err());
     }
 
-    if log_path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .is_some_and(|value| value.ends_with(".tar.zst"))
-    {
-        let file = fs::File::open(log_path)
-            .map_err(|err| analyze_sqlite_err("圧縮ログを開けませんでした", err))?;
-        let decoder = zstd::stream::Decoder::new(file).map_err(|err| {
-            analyze_sqlite_err("圧縮ログの zstd デコーダーを初期化できませんでした", err)
-        })?;
-        let mut archive = tar::Archive::new(decoder);
-
-        let mut entries = archive.entries().map_err(|err| {
-            analyze_sqlite_err("圧縮ログのエントリ一覧を取得できませんでした", err)
-        })?;
-        let Some(entry) = entries.next() else {
-            return Err(rusqlite::Error::InvalidParameterName(
-                "圧縮ログに解析対象がありませんでした".to_string(),
-            ));
-        };
-        let mut entry =
-            entry.map_err(|err| analyze_sqlite_err("圧縮ログのエントリを読めませんでした", err))?;
-        return parse_and_import_reader(
+    with_log_content_reader(log_path, |reader| {
+        parse_and_import_reader(
             main_conn,
-            BufReader::new(&mut entry),
+            BufReader::new(reader),
             filename,
             cancel_status,
             progress_callback,
-        );
-    }
-
-    // FILE_SHARE_READ により、VRChat が書き込み中のログでも読み取り可能にする。
-    #[cfg(windows)]
-    let file = {
-        use std::os::windows::fs::OpenOptionsExt;
-        use windows::Win32::Storage::FileSystem::FILE_SHARE_READ;
-        fs::OpenOptions::new()
-            .read(true)
-            .share_mode(FILE_SHARE_READ.0)
-            .open(log_path)
-            .map_err(|err| analyze_sqlite_err("ログファイルを開けませんでした", err))?
-    };
-    #[cfg(not(windows))]
-    let file = fs::File::open(log_path)
-        .map_err(|err| analyze_sqlite_err("ログファイルを開けませんでした", err))?;
-
-    parse_and_import_reader(
-        main_conn,
-        BufReader::new(file),
-        filename,
-        cancel_status,
-        progress_callback,
-    )
+        )
+    })
 }
 
 /// ログストリーム1件を解析し、正規化データをメインデータベースに書き込む。
@@ -767,6 +962,7 @@ where
                     width,
                     height,
                     &ts_str,
+                    session_id,
                 )?;
             }
             continue;
@@ -864,8 +1060,8 @@ where
 /// ファイル単位の失敗はバッチ全体をロールバックする（ユーザーが明示的に
 /// 選択したファイルが壊れている場合、部分取り込みより失敗通知が適切なため）。
 ///
-/// 各ファイルを savepoint でラップし、不正なログをスキップ可能にしつつ
-/// キャンセル要求時にはコミット前にバッチ全体をロールバックする。
+/// 各ファイルを savepoint でラップし、不正なログまたはキャンセル要求を検出した場合は
+/// コミット前にバッチ全体をロールバックする。
 ///
 /// # Errors
 /// DB セットアップ失敗、バッチ全体のロールバック必要、またはコミット前の
@@ -907,22 +1103,6 @@ where
         let filename = source_name_for_archive(target_path)
             .ok_or_else(|| "対象ファイル名を解決できませんでした".to_string())?;
 
-        let already_processed: bool = main_tx
-            .query_row(
-                "SELECT EXISTS(SELECT 1 FROM sessions WHERE log_name = ?1)",
-                params![filename],
-                |row| row.get(0),
-            )
-            .map_err(|e| analyze_err("セッション存在確認に失敗しました", e))?;
-
-        if already_processed {
-            progress_callback(
-                format!("スキップ（DB登録済み）: {filename}"),
-                format_progress_fraction(index + 1, total),
-            );
-            continue;
-        }
-
         progress_callback(
             format!("処理中: {filename}"),
             format_progress_fraction(index + 1, total),
@@ -932,21 +1112,22 @@ where
             .savepoint()
             .map_err(|e| analyze_err("メイン DB savepoint を開始できませんでした", e))?;
 
-        match parse_and_import(
+        match import_log_in_savepoint(
             &main_sp,
             target_path,
             &filename,
             cancel_status,
             &mut progress_callback,
         ) {
-            Ok(()) => {
+            Ok(outcome) => {
                 main_sp
                     .commit()
                     .map_err(|e| analyze_err("メイン DB savepoint を確定できませんでした", e))?;
-                progress_callback(
-                    format!("取り込み完了: {filename}"),
-                    format_progress_fraction(index + 1, total),
-                );
+                let status = match outcome {
+                    ImportOutcome::Unchanged => format!("スキップ（内容変更なし）: {filename}"),
+                    ImportOutcome::Imported => format!("取り込み完了: {filename}"),
+                };
+                progress_callback(status, format_progress_fraction(index + 1, total));
             }
             Err(err) if err.to_string() == ANALYZE_CANCELED_MESSAGE => {
                 rollback_savepoint(main_sp, "解析中断時")?;
@@ -1153,15 +1334,28 @@ mod tests {
             .unwrap();
         assert_eq!(count, 1);
 
-        let (width, height): (Option<i64>, Option<i64>) = conn
+        let (width, height, screenshot_session_id, parsed_session_id): (
+            Option<i64>,
+            Option<i64>,
+            Option<i64>,
+            i64,
+        ) = conn
             .query_row(
-                "SELECT resolution_width, resolution_height FROM screenshots LIMIT 1",
+                "SELECT
+                    screenshot.resolution_width,
+                    screenshot.resolution_height,
+                    screenshot.session_id,
+                    session.id
+                 FROM screenshots AS screenshot
+                 JOIN sessions AS session ON session.log_name = 'screenshot_test.txt'
+                 LIMIT 1",
                 [],
-                |row| Ok((row.get(0).ok(), row.get(1).ok())),
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             )
             .unwrap();
         assert_eq!(width, Some(3840));
         assert_eq!(height, Some(2160));
+        assert_eq!(screenshot_session_id, Some(parsed_session_id));
     }
 
     #[test]
@@ -1322,6 +1516,378 @@ mod tests {
             )
             .unwrap();
         assert!(first_leave.is_some());
+    }
+
+    #[test]
+    fn diff_import_rebuilds_replaced_archive_and_skips_unchanged_content() {
+        let dir = tempfile::tempdir().unwrap();
+        let source_dir = dir.path().join("source");
+        let archive_dir = dir.path().join("archive");
+        let db_path = dir.path().join("stellarecord.db");
+        fs::create_dir_all(&source_dir).unwrap();
+        let source_path = source_dir.join("output_log_2025-04-30.txt");
+        let first_log = "\
+2025.04.30 20:00:00 Log        -  [Behaviour] Entering Room: World A
+2025.04.30 20:00:01 Log        -  [Behaviour] Joining wrld_aaa:111~public~region(jp)
+2025.04.30 20:05:00 Log        -  [Behaviour] OnLeftRoom
+";
+        fs::write(&source_path, first_log).unwrap();
+
+        assert_eq!(
+            crate::commands::archive::sync_source_logs_into_archive_store(
+                &source_dir,
+                &archive_dir
+            )
+            .unwrap(),
+            1
+        );
+        run_diff_import(&db_path, &archive_dir, &AtomicBool::new(false), |_, _| {}).unwrap();
+
+        let first_session_id: i64 = {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.query_row("SELECT id FROM sessions", [], |row| row.get(0))
+                .unwrap()
+        };
+
+        let mut unchanged_progress = Vec::new();
+        run_diff_import(
+            &db_path,
+            &archive_dir,
+            &AtomicBool::new(false),
+            |status, _| unchanged_progress.push(status),
+        )
+        .unwrap();
+        let unchanged_session_id: i64 = {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.query_row("SELECT id FROM sessions", [], |row| row.get(0))
+                .unwrap()
+        };
+        assert_eq!(unchanged_session_id, first_session_id);
+        assert!(unchanged_progress
+            .iter()
+            .any(|status| status.contains("スキップ（内容変更なし）")));
+
+        let extended_log = format!(
+            "{first_log}\
+2025.04.30 20:10:00 Log        -  [Behaviour] Entering Room: World B
+2025.04.30 20:10:01 Log        -  [Behaviour] Joining wrld_bbb:222~public~region(us)
+2025.04.30 20:15:00 Log        -  [Behaviour] OnLeftRoom
+"
+        );
+        fs::write(&source_path, extended_log).unwrap();
+        assert_eq!(
+            crate::commands::archive::sync_source_logs_into_archive_store(
+                &source_dir,
+                &archive_dir
+            )
+            .unwrap(),
+            1
+        );
+        run_diff_import(&db_path, &archive_dir, &AtomicBool::new(false), |_, _| {}).unwrap();
+
+        let conn = Connection::open(&db_path).unwrap();
+        let (session_count, visit_count, tracking_count): (i64, i64, i64) = conn
+            .query_row(
+                "SELECT
+                    (SELECT COUNT(*) FROM sessions),
+                    (SELECT COUNT(*) FROM visits),
+                    (SELECT COUNT(*) FROM imported_logs)",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        let rebuilt_session_id: i64 = conn
+            .query_row("SELECT id FROM sessions", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(session_count, 1);
+        assert_eq!(visit_count, 2);
+        assert_eq!(tracking_count, 1);
+        assert_ne!(rebuilt_session_id, first_session_id);
+    }
+
+    #[test]
+    fn diff_import_replaces_worldless_screenshot_with_new_session_owner() {
+        let dir = tempfile::tempdir().unwrap();
+        let source_dir = dir.path().join("source");
+        let archive_dir = dir.path().join("archive");
+        let db_path = dir.path().join("stellarecord.db");
+        fs::create_dir_all(&source_dir).unwrap();
+        let source_path = source_dir.join("output_log_2025-04-30.txt");
+        let first_log = "\
+2025.04.30 20:00:00 Log        -  VRChat starting
+2025.04.30 20:01:00 Log        -  [VRC Camera] Took screenshot to: C:\\Users\\test\\Pictures\\VRChat\\before_1920x1080.png
+";
+        fs::write(&source_path, first_log).unwrap();
+        crate::commands::archive::sync_source_logs_into_archive_store(&source_dir, &archive_dir)
+            .unwrap();
+        run_diff_import(&db_path, &archive_dir, &AtomicBool::new(false), |_, _| {}).unwrap();
+
+        let first_session_id: i64 = {
+            let conn = Connection::open(&db_path).unwrap();
+            let (session_id, screenshot_session_id, visit_id): (i64, Option<i64>, Option<i64>) =
+                conn.query_row(
+                    "SELECT session.id, screenshot.session_id, screenshot.visit_id
+                     FROM sessions AS session
+                     JOIN screenshots AS screenshot ON screenshot.session_id = session.id",
+                    [],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                )
+                .unwrap();
+            assert_eq!(screenshot_session_id, Some(session_id));
+            assert_eq!(visit_id, None);
+            session_id
+        };
+
+        let replacement_log = format!(
+            "{first_log}\
+2025.04.30 21:00:00 Log        -  Application status changed
+"
+        );
+        fs::write(&source_path, replacement_log).unwrap();
+        crate::commands::archive::sync_source_logs_into_archive_store(&source_dir, &archive_dir)
+            .unwrap();
+        run_diff_import(&db_path, &archive_dir, &AtomicBool::new(false), |_, _| {}).unwrap();
+
+        let conn = Connection::open(&db_path).unwrap();
+        let (session_count, screenshot_count): (i64, i64) = conn
+            .query_row(
+                "SELECT
+                    (SELECT COUNT(*) FROM sessions),
+                    (SELECT COUNT(*) FROM screenshots)",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        let (new_session_id, screenshot_session_id, visit_id, file_path): (
+            i64,
+            Option<i64>,
+            Option<i64>,
+            String,
+        ) = conn
+            .query_row(
+                "SELECT session.id, screenshot.session_id, screenshot.visit_id, screenshot.file_path
+                 FROM sessions AS session
+                 JOIN screenshots AS screenshot ON screenshot.session_id = session.id",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+
+        assert_eq!(session_count, 1);
+        assert_eq!(screenshot_count, 1);
+        assert_ne!(new_session_id, first_session_id);
+        assert_eq!(screenshot_session_id, Some(new_session_id));
+        assert_eq!(visit_id, None);
+        assert!(file_path.ends_with("before_1920x1080.png"));
+    }
+
+    #[test]
+    fn legacy_session_without_fingerprint_is_rebuilt_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let source_dir = dir.path().join("source");
+        let archive_dir = dir.path().join("archive");
+        let db_path = dir.path().join("stellarecord.db");
+        fs::create_dir_all(&source_dir).unwrap();
+        fs::write(
+            source_dir.join("output_log_2025-04-30.txt"),
+            "\
+2025.04.30 20:00:00 Log        -  [Behaviour] Entering Room: Current World
+2025.04.30 20:00:01 Log        -  [Behaviour] Joining wrld_current:111~public~region(jp)
+",
+        )
+        .unwrap();
+        crate::commands::archive::sync_source_logs_into_archive_store(&source_dir, &archive_dir)
+            .unwrap();
+
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            init_main_db(&conn).unwrap();
+            conn.execute(
+                "INSERT INTO sessions (log_name, start_time)
+                 VALUES ('output_log_2025-04-30.txt', '2025-04-30')",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO visits
+                 (session_id, world_name, instance_id, instance_type, join_time)
+                 VALUES (1, 'Stale World', 'old', 'public', '2025-04-30')",
+                [],
+            )
+            .unwrap();
+        }
+
+        run_diff_import(&db_path, &archive_dir, &AtomicBool::new(false), |_, _| {}).unwrap();
+
+        let conn = Connection::open(&db_path).unwrap();
+        let world_name: String = conn
+            .query_row("SELECT world_name FROM visits", [], |row| row.get(0))
+            .unwrap();
+        let tracking_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM imported_logs", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(world_name, "Current World");
+        assert_eq!(tracking_count, 1);
+    }
+
+    #[test]
+    fn diff_import_restores_previous_session_when_rebuild_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        let source_dir = dir.path().join("source");
+        let archive_dir = dir.path().join("archive");
+        let db_path = dir.path().join("stellarecord.db");
+        fs::create_dir_all(&source_dir).unwrap();
+        let source_path = source_dir.join("output_log_2025-04-30.txt");
+        let first_log = "\
+2025.04.30 20:00:00 Log        -  [VRC Camera] Took screenshot to: C:\\Users\\test\\Pictures\\VRChat\\preserved_1920x1080.png
+2025.04.30 20:01:00 Log        -  [Behaviour] Entering Room: Preserved World
+2025.04.30 20:01:01 Log        -  [Behaviour] Joining wrld_preserved:111~public~region(jp)
+";
+        fs::write(&source_path, first_log).unwrap();
+        crate::commands::archive::sync_source_logs_into_archive_store(&source_dir, &archive_dir)
+            .unwrap();
+        run_diff_import(&db_path, &archive_dir, &AtomicBool::new(false), |_, _| {}).unwrap();
+
+        let original_session_id: i64 = {
+            let conn = Connection::open(&db_path).unwrap();
+            let session_id = conn
+                .query_row("SELECT id FROM sessions", [], |row| row.get(0))
+                .unwrap();
+            conn.execute_batch(
+                "CREATE TRIGGER reject_reimported_visit
+                 BEFORE INSERT ON visits
+                 BEGIN
+                     SELECT RAISE(ABORT, 'forced reimport failure');
+                 END;",
+            )
+            .unwrap();
+            session_id
+        };
+
+        fs::write(
+            &source_path,
+            format!(
+                "{first_log}\
+2025.04.30 20:10:00 Log        -  [Behaviour] Entering Room: Rejected World
+2025.04.30 20:10:01 Log        -  [Behaviour] Joining wrld_rejected:222~public~region(us)
+"
+            ),
+        )
+        .unwrap();
+        crate::commands::archive::sync_source_logs_into_archive_store(&source_dir, &archive_dir)
+            .unwrap();
+
+        let summary =
+            run_diff_import(&db_path, &archive_dir, &AtomicBool::new(false), |_, _| {}).unwrap();
+        assert_eq!(summary.total_count, 1);
+        assert_eq!(summary.failed_filenames, vec!["output_log_2025-04-30.txt"]);
+
+        let conn = Connection::open(&db_path).unwrap();
+        let restored_session_id: i64 = conn
+            .query_row("SELECT id FROM sessions", [], |row| row.get(0))
+            .unwrap();
+        let worlds: Vec<String> = conn
+            .prepare("SELECT world_name FROM visits ORDER BY id")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .unwrap();
+        let tracking_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM imported_logs", [], |row| row.get(0))
+            .unwrap();
+        let (screenshot_count, screenshot_session_id, screenshot_visit_id, screenshot_path): (
+            i64,
+            Option<i64>,
+            Option<i64>,
+            String,
+        ) = conn
+            .query_row(
+                "SELECT
+                    (SELECT COUNT(*) FROM screenshots),
+                    session_id,
+                    visit_id,
+                    file_path
+                 FROM screenshots",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(restored_session_id, original_session_id);
+        assert_eq!(worlds, vec!["Preserved World"]);
+        assert_eq!(tracking_count, 1);
+        assert_eq!(screenshot_count, 1);
+        assert_eq!(screenshot_session_id, Some(original_session_id));
+        assert_eq!(screenshot_visit_id, None);
+        assert!(screenshot_path.ends_with("preserved_1920x1080.png"));
+    }
+
+    #[test]
+    fn diff_import_commits_successful_files_before_returning_failure_summary() {
+        let dir = tempfile::tempdir().unwrap();
+        let source_dir = dir.path().join("source");
+        let archive_dir = dir.path().join("archive");
+        let db_path = dir.path().join("stellarecord.db");
+        fs::create_dir_all(&source_dir).unwrap();
+        fs::write(
+            source_dir.join("output_log_2025-04-30.txt"),
+            "\
+2025.04.30 20:00:00 Log        -  [VRC Camera] Took screenshot to: C:\\Users\\test\\Pictures\\VRChat\\saved_1920x1080.png
+",
+        )
+        .unwrap();
+        fs::write(
+            source_dir.join("output_log_2025-05-01.txt"),
+            "\
+2025.05.01 20:00:00 Log        -  [Behaviour] Entering Room: Rejected World
+2025.05.01 20:00:01 Log        -  [Behaviour] Joining wrld_rejected:222~public~region(us)
+",
+        )
+        .unwrap();
+        crate::commands::archive::sync_source_logs_into_archive_store(&source_dir, &archive_dir)
+            .unwrap();
+
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            init_main_db(&conn).unwrap();
+            conn.execute_batch(
+                "CREATE TRIGGER reject_imported_visit
+                 BEFORE INSERT ON visits
+                 BEGIN
+                     SELECT RAISE(ABORT, 'forced import failure');
+                 END;",
+            )
+            .unwrap();
+        }
+
+        let summary =
+            run_diff_import(&db_path, &archive_dir, &AtomicBool::new(false), |_, _| {}).unwrap();
+        assert_eq!(summary.total_count, 2);
+        assert_eq!(summary.failed_filenames, vec!["output_log_2025-05-01.txt"]);
+
+        let conn = Connection::open(&db_path).unwrap();
+        let log_names: Vec<String> = conn
+            .prepare("SELECT log_name FROM sessions ORDER BY log_name")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .unwrap();
+        let (tracking_count, screenshot_count, visit_count): (i64, i64, i64) = conn
+            .query_row(
+                "SELECT
+                    (SELECT COUNT(*) FROM imported_logs),
+                    (SELECT COUNT(*) FROM screenshots),
+                    (SELECT COUNT(*) FROM visits)",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+
+        assert_eq!(log_names, vec!["output_log_2025-04-30.txt"]);
+        assert_eq!(tracking_count, 1);
+        assert_eq!(screenshot_count, 1);
+        assert_eq!(visit_count, 0);
     }
 
     #[test]

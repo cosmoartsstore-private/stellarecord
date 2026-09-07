@@ -72,7 +72,7 @@ StellaRecord は VRChat のゲームログを長期保存と検索可能な構�
 │  - ViewModels: 状態管理フック (use*State.ts)                  │
 │  - Services: Tauri invoke ラッパー                            │
 ├──────────────────────────────────────────────────────────────┤
-│ IPC Boundary (Tauri 2.2)                                     │
+│ IPC Boundary (Tauri 2.10)                                    │
 │  - 22 commands (invoke)                                      │
 │  - 4 event channels (listen)                                 │
 ├──────────────────────────────────────────────────────────────┤
@@ -636,6 +636,8 @@ WAL モードにより、書き込み中でも読み取り（ログビューア�
 
 ### Detected Events
 
+以下の11項目を検出する。`Entering Room` は `Joining` で訪問を確定するまでの補助状態として保持する。
+
 | Event          | Source Pattern                                        | Target Table                |
 | -------------- | ----------------------------------------------------- | --------------------------- |
 | Authentication | `User Authenticated: <name> (<usr_id>)`               | `sessions`                  |
@@ -664,12 +666,13 @@ WAL モードにより、書き込み中でも読み取り（ログビューア�
 
 ### Idempotency
 
-| Table           | Idempotency Key               | Conflict Resolution                                              |
-| --------------- | ----------------------------- | ---------------------------------------------------------------- |
-| `sessions`      | `log_name UNIQUE`             | `INSERT OR IGNORE`                                               |
-| `notifications` | `notif_id UNIQUE`             | `INSERT OR IGNORE`                                               |
-| `with_users`    | `UNIQUE(visit_id, vrchat_id)` | `INSERT OR IGNORE`                                               |
-| `find_users`    | `vrchat_id PRIMARY KEY`       | `ON CONFLICT DO UPDATE SET account_name = excluded.account_name` |
+| Table           | Idempotency Key                 | Conflict Resolution                                              |
+| --------------- | ------------------------------- | ---------------------------------------------------------------- |
+| `sessions`      | `log_name UNIQUE`               | 本文更新時はファイル単位 savepoint 内で関連データごと再構築      |
+| `imported_logs` | 展開後本文の SHA-256 + バイト長 | 内容一致時のみ取り込みを省略                                     |
+| `notifications` | `notif_id UNIQUE`               | `INSERT OR IGNORE`                                               |
+| `with_users`    | `UNIQUE(visit_id, vrchat_id)`   | `INSERT OR IGNORE`                                               |
+| `find_users`    | `vrchat_id PRIMARY KEY`         | `ON CONFLICT DO UPDATE SET account_name = excluded.account_name` |
 
 ---
 
@@ -682,5 +685,3 @@ WAL モードにより、書き込み中でも読み取り（ログビューア�
 | 多言語化未対応                                                                                                           | 日本語固定                                                          | i18n リソース外出しが必要                                                                                 |
 | Windows のみ対応                                                                                                         | macOS / Linux で動作不可                                            | プラットフォーム抽象化は `#[cfg(windows)]` で隔離済み                                                     |
 | コード署名なし                                                                                                           | SmartScreen 警告                                                    | 商用配布時に対応予定                                                                                      |
-
-過去の調査で問題なしと判定された項目と再確認済みの非問題は、`.claude/README.md` を参照。

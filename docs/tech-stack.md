@@ -46,8 +46,8 @@
 | Layer                 | Technology                                                        | Version      | License          |
 | --------------------- | ----------------------------------------------------------------- | ------------ | ---------------- |
 | Language              | [Rust](https://www.rust-lang.org/)                                | Edition 2021 | Apache-2.0 / MIT |
-| Application Framework | [tauri](https://crates.io/crates/tauri)                           | 2.2.4        | Apache-2.0 / MIT |
-| Tauri Build           | [tauri-build](https://crates.io/crates/tauri-build)               | 2.0.5        | Apache-2.0 / MIT |
+| Application Framework | [tauri](https://crates.io/crates/tauri)                           | 2.10.3       | Apache-2.0 / MIT |
+| Tauri Build           | [tauri-build](https://crates.io/crates/tauri-build)               | 2.5.6        | Apache-2.0 / MIT |
 | Tauri Shell Plugin    | [tauri-plugin-shell](https://crates.io/crates/tauri-plugin-shell) | 2.3.5        | Apache-2.0 / MIT |
 | Database              | [rusqlite](https://crates.io/crates/rusqlite) (`bundled` feature) | 0.38         | MIT              |
 | Date/Time             | [chrono](https://crates.io/crates/chrono)                         | 0.4          | Apache-2.0 / MIT |
@@ -59,6 +59,7 @@
 | Shell Integration     | [opener](https://crates.io/crates/opener)                         | 0.8          | Apache-2.0 / MIT |
 | Image Encoding        | [image](https://crates.io/crates/image) (PNG only)                | 0.25         | Apache-2.0 / MIT |
 | Base64                | [base64](https://crates.io/crates/base64)                         | 0.22         | Apache-2.0 / MIT |
+| Content Hash          | [sha2](https://crates.io/crates/sha2)                             | 0.10         | Apache-2.0 / MIT |
 | Serialization         | [serde](https://crates.io/crates/serde) (with `derive`)           | 1.0          | Apache-2.0 / MIT |
 
 ### Build and Distribution
@@ -73,28 +74,31 @@
 
 ### Quality and Tooling
 
-| Layer                | Technology                                                                                         | Version |
-| -------------------- | -------------------------------------------------------------------------------------------------- | ------- |
-| TS Linter            | [ESLint](https://eslint.org/) (flat config)                                                        | 9.39    |
-| TS Type-Aware Linter | [typescript-eslint](https://typescript-eslint.io/)                                                 | 8.48    |
-| React Linter         | [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react)                           | 7.37    |
-| React Hooks Linter   | [eslint-plugin-react-hooks](https://www.npmjs.com/package/eslint-plugin-react-hooks)               | 7.0     |
-| A11y Linter          | [eslint-plugin-jsx-a11y](https://www.npmjs.com/package/eslint-plugin-jsx-a11y)                     | 6.10    |
-| Code Quality Linter  | [eslint-plugin-unicorn](https://github.com/sindresorhus/eslint-plugin-unicorn)                     | 61.0    |
-| CSS Linter           | [Stylelint](https://stylelint.io/) (`stylelint-config-standard`)                                   | 16.25   |
-| Formatter            | [Prettier](https://prettier.io/)                                                                   | 3.6     |
-| Rust Linter          | clippy (workspace lints)                                                                           | bundled |
-| TS Test Runner       | [Vitest](https://vitest.dev/)                                                                      | 4.1     |
-| TS Coverage          | [@vitest/coverage-v8](https://www.npmjs.com/package/@vitest/coverage-v8)                           | 4.1     |
-| Rust Test            | `cargo test --lib` (組み込み `#[cfg(test)]`) + [tempfile](https://crates.io/crates/tempfile) (dev) | 3.x     |
-| CI                   | GitHub Actions (`.github/workflows/ci.yml`)                                                        | -       |
+| Layer                | Technology                                                                              | Version |
+| -------------------- | --------------------------------------------------------------------------------------- | ------- |
+| TS Linter            | [ESLint](https://eslint.org/) (flat config)                                             | 9.39    |
+| TS Type-Aware Linter | [typescript-eslint](https://typescript-eslint.io/)                                      | 8.48    |
+| React Linter         | [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react)                | 7.37    |
+| React Hooks Linter   | [eslint-plugin-react-hooks](https://www.npmjs.com/package/eslint-plugin-react-hooks)    | 7.0     |
+| A11y Linter          | [eslint-plugin-jsx-a11y](https://www.npmjs.com/package/eslint-plugin-jsx-a11y)          | 6.10    |
+| Code Quality Linter  | [eslint-plugin-unicorn](https://github.com/sindresorhus/eslint-plugin-unicorn)          | 61.0    |
+| CSS Linter           | [Stylelint](https://stylelint.io/) (`stylelint-config-standard`)                        | 16.25   |
+| Formatter            | [Prettier](https://prettier.io/)                                                        | 3.6     |
+| Rust Linter          | clippy (workspace lints)                                                                | bundled |
+| TS Test Runner       | [Vitest](https://vitest.dev/)                                                           | 4.1     |
+| TS Coverage          | [@vitest/coverage-v8](https://www.npmjs.com/package/@vitest/coverage-v8)                | 4.1     |
+| React Test Utilities | [@testing-library/react](https://testing-library.com/docs/react-testing-library/intro/) | 16.3    |
+| Test DOM             | [jsdom](https://github.com/jsdom/jsdom)                                                 | 29.1    |
+| Temporary Files      | [tempfile](https://crates.io/crates/tempfile)                                           | 3.x     |
+| Rust Test            | `cargo test --all-targets`                                                              | bundled |
+| CI                   | GitHub Actions (`.github/workflows/ci.yml`)                                             | -       |
 
 ### Testing and CI
 
-- **単体テスト**: Rust は組み込みの `#[cfg(test)]` モジュール (`cargo test --lib`)、フロントエンドは Vitest (`*.test.ts`) を採用。ファイル I/O テストには dev-dependency `tempfile` を使用する。
-- **カバレッジ**: フロントエンドは `@vitest/coverage-v8` (`npm run test:coverage`)。
-- **ローカル検証**: `npm run verify` で Prettier check → Stylelint → ESLint → Vitest → production build → rustfmt --check → clippy → cargo test を一括実行する。
-- **CI** (`.github/workflows/ci.yml`): master への push と master 宛 PR で起動。`rust` ジョブ (windows-latest) が `cargo fmt --all --check` / `cargo clippy --all-targets -- -D warnings` / `cargo test --lib` を、`frontend` ジョブ (ubuntu-latest) が `npm run format:check` / `npm run stylelint` / `npm run lint` / `npm run test` / `npm run build` を実行する。Rust toolchain は `rust-toolchain.toml` で 1.93.0 + rustfmt/clippy + x86_64-pc-windows-msvc にピン留め。
+- **単体テスト**: Rust は組み込みの `#[cfg(test)]` と統合テストを含む全ターゲット (`cargo test --all-targets`)、フロントエンドは Vitest (`*.test.ts` / `*.test.tsx`) を採用。`tempfile` は原子的なアーカイブ生成とファイル I/O テストで使用する。
+- **カバレッジ**: フロントエンドは `@vitest/coverage-v8` (`npm run test:coverage`) を使用し、`src` 配下の TypeScript / TSX 全体を集計対象とする。下限は Statements 20%、Branches 10%、Functions 12%、Lines 20% とし、改善前の水準への後退を防ぐ。
+- **ローカル検証**: `npm run verify` で Prettier check → Stylelint → ESLint → Vitest coverage → production build → rustfmt --check → clippy → cargo test を一括実行する。Tauri / NSIS の配布ビルドは `npm run tauri build` で別途確認する。
+- **CI** (`.github/workflows/ci.yml`): master への push と master 宛 PR で起動。`rust` ジョブ (windows-latest) が `cargo fmt --all --check` / `cargo clippy --locked --all-targets -- -D warnings` / `cargo test --locked --all-targets` を、`frontend` ジョブ (ubuntu-latest) が `npm run format:check` / `npm run stylelint` / `npm run lint` / `npm run test:coverage` / `npm run build` を実行する。Rust toolchain は `rust-toolchain.toml` で 1.93.0 + rustfmt/clippy + x86_64-pc-windows-msvc にピン留め。
 
 ---
 
@@ -284,7 +288,7 @@ VRChat ログ（数十 MB × 数百ファイル）を構造化保管し、横断
 
 **Rationale**
 
-- SQL の表現力で 9 テーブル + 3 ビュー + 10 インデックスの関係を自然に表現できる
+- SQL の表現力で 10 テーブル + 3 ビュー + 11 インデックスの関係を自然に表現できる
 - `bundled` feature により OS の SQLite ライブラリに依存しない（環境差を排除）
 - WAL モードで取り込み中（書き込み）と閲覧（読み取り）の並行動作が可能
 - DB プレビュー機能で `SELECT * FROM <table>` をそのまま UI に表示できる
@@ -354,7 +358,7 @@ VRChat の生ログ（数十〜数百 MB）を恒久保管する。圧縮率と�
 
 **Context**
 
-VRChat ログは非構造化テキスト。10 種類のイベント（Joining, OnPlayerJoined, Notification 等）を検出し、時系列依存（直前のワールド名を保持する等）を解決する必要がある。
+VRChat ログは非構造化テキスト。11 項目の検出パターン（うち Entering Room は訪問確定前の補助状態）を扱い、時系列依存（直前のワールド名を保持する等）を解決する必要がある。
 
 **Decision**
 

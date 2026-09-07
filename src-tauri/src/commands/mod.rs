@@ -64,7 +64,7 @@ fn emit_analyze_progress(app: &AppHandle, status: String, progress: String, is_r
 ///
 /// # Errors
 /// 設定が未定義でアーカイブ操作を続行できない場合にエラーを返す。
-fn get_data_dir() -> Result<PathBuf, String> {
+fn get_archive_store_dir() -> Result<PathBuf, String> {
     let setting = config::load_stellarecord_setting();
     setting
         .get_effective_archive_dir()
@@ -127,11 +127,6 @@ pub fn log_client_error(message: String) {
     let normalized = message.replace(['\r', '\n'], " ");
     let truncated: String = normalized.chars().take(4000).collect();
     utils::log_warn(&format!("frontend: {truncated}"));
-}
-
-/// 管理対象の `.tar.zst` アーカイブを格納するディレクトリを解決する。
-fn get_archive_store_dir() -> Result<PathBuf, String> {
-    get_data_dir()
 }
 
 #[cfg(test)]

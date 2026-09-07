@@ -1,9 +1,14 @@
-import type { ThemeMode } from './types';
-
 /** テーマ永続化に使用するブラウザストレージのキー */
 const themeStorageKey = 'stella-record-theme';
 
-const validThemes: ThemeMode[] = ['light', 'dark', 'midnight'];
+/** アプリがサポートするテーマの切替順 */
+export const themeModes = ['light', 'dark', 'midnight'] as const;
+
+export type ThemeMode = (typeof themeModes)[number];
+
+function isThemeMode(value: string | null): value is ThemeMode {
+  return themeModes.some((theme) => theme === value);
+}
 
 /** ブラウザストレージから初期テーマを読み込む（未設定時はlight） */
 export function readInitialTheme(): ThemeMode {
@@ -11,7 +16,7 @@ export function readInitialTheme(): ThemeMode {
     return 'light';
   }
   const stored = window.localStorage.getItem(themeStorageKey);
-  return validThemes.includes(stored as ThemeMode) ? (stored as ThemeMode) : 'light';
+  return isThemeMode(stored) ? stored : 'light';
 }
 
 /** 現在のテーマをブラウザストレージに保存する */

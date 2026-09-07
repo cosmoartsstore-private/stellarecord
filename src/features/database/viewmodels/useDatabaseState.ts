@@ -1,10 +1,8 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { DbTableSummary, TableData } from '../models/types';
 import { emptyTableData } from '../models/types';
 import { loadDbTableData, loadDbTables } from '../services/databaseService';
-import { addErrorToast } from '../../../shared/lib/errors';
-
-type AddToast = (msg: string) => void;
+import { addErrorToast, type AddToast } from '../../../shared/lib/errors';
 
 /** ソート状態（カラム名と方向） */
 export interface SortState {
@@ -25,25 +23,43 @@ export function useDatabaseState(addToast: AddToast) {
   const [isDbLoading, setIsDbLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [sortState, setSortState] = useState<SortState | null>(null);
+  const requestGenerationRef = useRef(0);
   // バックエンド側 (src-tauri/src/commands/database.rs の PAGE_SIZE) と一致させる必要がある
   const pageSize = 500;
 
-  /** 指定テーブルの1ページ分を取得してプレビュー状態を更新する */
-  const loadTableData = useCallback(
-    async (tableName: string, page = 0, sort?: SortState | null) => {
+  /** 同じ要求世代に属するテーブルデータだけをプレビュー状態へ反映する */
+  const loadTableDataForRequest = useCallback(
+    async (requestGeneration: number, tableName: string, page = 0, sort?: SortState | null) => {
+      if (requestGenerationRef.current !== requestGeneration) return;
       setCurrentTable(tableName);
       setCurrentPage(page);
       setIsDbLoading(true);
       try {
         const data = await loadDbTableData(tableName, page, sort?.column, sort?.dir);
-        setTableData(data);
+        if (requestGenerationRef.current === requestGeneration) {
+          setTableData(data);
+        }
       } catch (error) {
-        addErrorToast(addToast, 'DBテーブルデータ取得', 'データを読み込めませんでした', error);
+        if (requestGenerationRef.current === requestGeneration) {
+          addErrorToast(addToast, 'DBテーブルデータ取得', 'データを読み込めませんでした', error);
+        }
       } finally {
-        setIsDbLoading(false);
+        if (requestGenerationRef.current === requestGeneration) {
+          setIsDbLoading(false);
+        }
       }
     },
     [addToast],
+  );
+
+  /** 指定テーブルの1ページ分を取得してプレビュー状態を更新する */
+  const loadTableData = useCallback(
+    async (tableName: string, page = 0, sort?: SortState | null) => {
+      const requestGeneration = requestGenerationRef.current + 1;
+      requestGenerationRef.current = requestGeneration;
+      await loadTableDataForRequest(requestGeneration, tableName, page, sort);
+    },
+    [loadTableDataForRequest],
   );
 
   /** 現在選択中のテーブル内で指定ページに移動する */
@@ -75,9 +91,12 @@ export function useDatabaseState(addToast: AddToast) {
   /** テーブルカタログを再取得し、プレビュー対象を自動選択する */
   const loadDatabaseCatalog = useCallback(
     async (preferredTableName?: string) => {
+      const requestGeneration = requestGenerationRef.current + 1;
+      requestGenerationRef.current = requestGeneration;
       setIsDbLoading(true);
       try {
         const tables = await loadDbTables();
+        if (requestGenerationRef.current !== requestGeneration) return;
         setDbTables(tables);
         if (tables.length === 0) {
           setCurrentTable('');
@@ -90,18 +109,21 @@ export function useDatabaseState(addToast: AddToast) {
           (tables.some((table) => table.name === currentTable) ? currentTable : tables[0]?.name);
         if (nextTableName) {
           setSortState(null);
-          await loadTableData(nextTableName);
+          await loadTableDataForRequest(requestGeneration, nextTableName);
         }
       } catch (error) {
+        if (requestGenerationRef.current !== requestGeneration) return;
         addErrorToast(addToast, 'DBカタログ取得', 'DB一覧を取得できませんでした', error);
         setDbTables([]);
         setCurrentTable('');
         setTableData(emptyTableData);
       } finally {
-        setIsDbLoading(false);
+        if (requestGenerationRef.current === requestGeneration) {
+          setIsDbLoading(false);
+        }
       }
     },
-    [addToast, currentTable, loadTableData],
+    [addToast, currentTable, loadTableDataForRequest],
   );
 
   const totalPages = Math.ceil(tableData.total_rows / pageSize) || 1;

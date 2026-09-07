@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { StellaIcon, stellaIconNames } from '../../../shared/components/Icons';
+import { formatFileSize } from '../../../shared/lib/byteFormat';
 import type { DeletableLogInfo } from '../models/types';
 import shared from '../../../shared/styles/shared.module.css';
 import styles from './PolarisCleanupModal.module.css';
@@ -9,13 +10,6 @@ interface PolarisCleanupModalProps {
   logs: DeletableLogInfo[];
   onClose: () => void;
   onConfirm: (fileNames: string[]) => void;
-}
-
-/** バイト数を B / KB / MB の読みやすい文字列に変換する */
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${String(bytes)} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /** アーカイブ内容と一致したソースログの削除確認モーダル */
@@ -75,7 +69,7 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
             {isAllSelected ? 'すべて解除' : 'すべて選択'}
           </button>
           <span className={styles.listMeta}>
-            {String(selected.size)} / {String(logs.length)} 件 選択中 — {formatBytes(totalSize)}
+            {String(selected.size)} / {String(logs.length)} 件 選択中 — {formatFileSize(totalSize)}
           </span>
         </div>
 
@@ -97,7 +91,7 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
                   </svg>
                 </div>
                 <span className={styles.fileName}>{log.file_name}</span>
-                <span className={styles.fileSize}>{formatBytes(log.size_bytes)}</span>
+                <span className={styles.fileSize}>{formatFileSize(log.size_bytes)}</span>
               </button>
             );
           })}

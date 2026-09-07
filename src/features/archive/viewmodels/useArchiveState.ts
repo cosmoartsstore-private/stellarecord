@@ -56,6 +56,12 @@ export function useArchiveState() {
 
   /** 現在のTauriイベントリスナーの解除コールバック */
   const unlistenRef = useRef<(() => void) | null>(null);
+  /** close・ファイル切替後に旧ストリームの非同期処理を無効化する世代番号 */
+  const streamGenerationRef = useRef(0);
+
+  // フラッシュ間隔の間にチャンクを蓄積し、React更新を集約する
+  const pendingChunksRef = useRef<LogViewerChunk[]>([]);
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
    * 外部ファイルが選択されているかどうかを同期的に判定するための ref。
@@ -70,13 +76,16 @@ export function useArchiveState() {
 
   /** イベントリスナーを解除してチャンク受信を停止する */
   const stopStream = useCallback(() => {
-    unlistenRef.current?.();
+    streamGenerationRef.current += 1;
+    if (flushTimerRef.current) {
+      clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
+    pendingChunksRef.current = [];
+    const unlisten = unlistenRef.current;
     unlistenRef.current = null;
+    unlisten?.();
   }, []);
-
-  // フラッシュ間隔の間にチャンクを蓄積し、React更新を集約する
-  const pendingChunksRef = useRef<LogViewerChunk[]>([]);
-  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /** 蓄積チャンクを1回のsetLogViewerDataでReact状態に反映する */
   const flushChunks = useCallback(() => {
@@ -90,11 +99,31 @@ export function useArchiveState() {
   const openStreamForFile = useCallback(
     async (fileKey: string) => {
       stopStream();
-      if (flushTimerRef.current) {
-        clearTimeout(flushTimerRef.current);
-        flushTimerRef.current = null;
-      }
-      pendingChunksRef.current = [];
+      const streamGeneration = streamGenerationRef.current;
+      const unlisteners: (() => void)[] = [];
+      let isCleanedUp = false;
+
+      const cleanup = () => {
+        if (isCleanedUp) return;
+        isCleanedUp = true;
+        for (const unlisten of unlisteners.splice(0)) {
+          unlisten();
+        }
+        if (unlistenRef.current === cleanup) {
+          unlistenRef.current = null;
+        }
+      };
+      const registerUnlisten = (unlisten: () => void) => {
+        if (isCleanedUp) {
+          unlisten();
+          return;
+        }
+        unlisteners.push(unlisten);
+      };
+      const isCurrentGeneration = () => streamGenerationRef.current === streamGeneration;
+
+      // listen() の解決前にcloseされても、解決直後に購読を解除できるよう先に登録する。
+      unlistenRef.current = cleanup;
 
       flushSync(() => {
         setLogViewerData(emptyViewerData(fileKey));
@@ -103,34 +132,58 @@ export function useArchiveState() {
 
       const sessionId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
-      const unlistenChunk = await listen<LogViewerChunk>('log_viewer_chunk', (e) => {
-        if (e.payload.session_id !== sessionId) return;
-        pendingChunksRef.current.push(e.payload);
-        flushTimerRef.current ??= setTimeout(flushChunks, 100);
-      });
-
-      const unlistenDone = await listen<string>('log_viewer_done', (e) => {
-        if (e.payload !== sessionId) return;
-        if (flushTimerRef.current) {
-          clearTimeout(flushTimerRef.current);
-          flushTimerRef.current = null;
+      try {
+        const unlistenChunk = await listen<LogViewerChunk>('log_viewer_chunk', (e) => {
+          if (isCleanedUp || !isCurrentGeneration() || e.payload.session_id !== sessionId) return;
+          pendingChunksRef.current.push(e.payload);
+          flushTimerRef.current ??= setTimeout(() => {
+            if (isCleanedUp || !isCurrentGeneration()) {
+              flushTimerRef.current = null;
+              return;
+            }
+            flushChunks();
+          }, 100);
+        });
+        registerUnlisten(unlistenChunk);
+        if (!isCurrentGeneration()) {
+          cleanup();
+          return fileKey;
         }
-        flushChunks();
-        setIsLogViewerLoaded(true);
-        stopStream();
-      });
 
-      unlistenRef.current = () => {
-        unlistenChunk();
-        unlistenDone();
-      };
+        const unlistenDone = await listen<string>('log_viewer_done', (e) => {
+          if (isCleanedUp || !isCurrentGeneration() || e.payload !== sessionId) return;
+          if (flushTimerRef.current) {
+            clearTimeout(flushTimerRef.current);
+            flushTimerRef.current = null;
+          }
+          flushChunks();
+          setIsLogViewerLoaded(true);
+          cleanup();
+        });
+        registerUnlisten(unlistenDone);
+        if (!isCurrentGeneration()) {
+          cleanup();
+          return fileKey;
+        }
 
-      const isExternal = externalFilesRef.current.includes(fileKey);
-      const meta = isExternal
-        ? await startExternalLogViewerStream(fileKey, sessionId)
-        : await startLogViewerStream(fileKey, sessionId);
-      setLogViewerData((prev) => (prev ? { ...prev, source_name: meta.source_name } : prev));
-      return meta.archive_name;
+        const isExternal = externalFilesRef.current.includes(fileKey);
+        const meta = isExternal
+          ? await startExternalLogViewerStream(fileKey, sessionId)
+          : await startLogViewerStream(fileKey, sessionId);
+        if (isCurrentGeneration()) {
+          setLogViewerData((prev) => (prev ? { ...prev, source_name: meta.source_name } : prev));
+        }
+        return meta.archive_name;
+      } catch (error) {
+        if (isCurrentGeneration()) {
+          stopStream();
+          setLogViewerData(null);
+          setIsLogViewerLoaded(false);
+          throw error;
+        }
+        cleanup();
+        return fileKey;
+      }
     },
     [stopStream, flushChunks],
   );
@@ -201,10 +254,6 @@ export function useArchiveState() {
   useEffect(() => {
     return () => {
       stopStream();
-      if (flushTimerRef.current) {
-        clearTimeout(flushTimerRef.current);
-        flushTimerRef.current = null;
-      }
     };
   }, [stopStream]);
 

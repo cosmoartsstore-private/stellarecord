@@ -3425,6 +3425,7 @@ dependencies = [
  "regex",
  "rusqlite",
  "serde",
+ "sha2",
  "tar",
  "tauri",
  "tauri-build",

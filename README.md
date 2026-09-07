@@ -1,7 +1,7 @@
 # StellaRecord
 
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6)](https://www.microsoft.com/windows)
-[![Tauri](https://img.shields.io/badge/Tauri-2.2-24C8DB)](https://tauri.app/)
+[![Tauri](https://img.shields.io/badge/Tauri-2.10-24C8DB)](https://tauri.app/)
 [![React](https://img.shields.io/badge/React-19-61DAFB)](https://react.dev/)
 [![Rust](https://img.shields.io/badge/Rust-2021-DEA584)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-Proprietary-lightgrey)](#license)
@@ -41,7 +41,7 @@ WebView2 (Edge) + Rust の Tauri v2 アーキテクチャで実装され、外�
 ## Features
 
 - 生ログの `.tar.zst` 圧縮アーカイブ化（zstd 圧縮レベル 3）
-- 行単位パーサによる VRChat ログの SQLite 構造化保管（9 テーブル + 3 ビュー、検出イベント 10 種）
+- 行単位パーサによる VRChat ログの SQLite 構造化保管（10 テーブル + 3 ビュー、検出パターン 11 項目）
 - 圧縮アーカイブを展開せずストリーム閲覧する仮想スクロール対応のログビューア
 - カテゴリ／ログレベルフィルタおよび DB キーワードハイライト
 - アーカイブ容量警告ラインの設定とストレージメーター
@@ -71,7 +71,7 @@ WebView2 (Edge) + Rust の Tauri v2 アーキテクチャで実装され、外�
 | Layer                 | Technology                | Version      |
 | --------------------- | ------------------------- | ------------ |
 | Language              | Rust                      | Edition 2021 |
-| Application Framework | Tauri                     | 2.2.4        |
+| Application Framework | Tauri                     | 2.10         |
 | Database              | rusqlite (bundled SQLite) | 0.38         |
 | Compression           | zstd                      | 0.13         |
 | Archive Format        | tar                       | 0.4          |
@@ -102,7 +102,7 @@ WebView2 (Edge) + Rust の Tauri v2 アーキテクチャで実装され、外�
 │  │                                                     │    │
 │  │   WebView2 (Chromium)             Rust Backend      │    │
 │  │   ─────────────────────────       ───────────────   │    │
-│  │   React 19 + TypeScript      ◀──▶ Tauri 2.2         │    │
+│  │   React 19 + TypeScript      ◀──▶ Tauri 2.10        │    │
 │  │   Vite 7                  IPC     rusqlite 0.38     │    │
 │  │   @tanstack/react-virtual         tar + zstd        │    │
 │  │   CSS Modules                     windows-rs 0.58   │    │
@@ -131,12 +131,13 @@ WebView2 (Edge) + Rust の Tauri v2 アーキテクチャで実装され、外�
 
 - Windows 10 (1809 以降) または Windows 11 (x64)
 - Microsoft Edge WebView2 Runtime（Windows 10 1809 以降は OS 標準同梱）
+- Polaris（任意。元ログの自動同期と同期済み元ログの削除機能を使用する場合のみ必要）
 - 約 50 MB のディスク空き容量（ログアーカイブストアは別途）
 
 ### Build
 
 - [Node.js](https://nodejs.org/) 20.19 以上、または 22.12 以上（Vite 7 の要求バージョン）
-- [Rust](https://rustup.rs/) toolchain（stable、edition 2021）
+- [Rust](https://rustup.rs/) 1.93.0 toolchain（edition 2021）
 - Windows SDK（`windows` crate のビルドに必要）
 
 ---
@@ -179,8 +180,8 @@ npm run lint                              # ESLint (typescript-eslint strict)
 npm run format:check                      # Prettier check
 npm run stylelint                         # Stylelint
 npm run build                             # TypeScript + Vite production build
-cargo clippy --workspace --all-targets    # Rust clippy（unwrap/expect/panic = deny）
-npm run verify                            # Full local quality gate
+cargo clippy --workspace --all-targets -- -D warnings
+npm run verify                            # カバレッジを含むローカル品質ゲート（インストーラ生成を除く）
 ```
 
 ---

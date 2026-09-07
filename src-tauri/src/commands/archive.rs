@@ -95,21 +95,36 @@ fn open_source_log_for_read(path: &Path) -> Result<fs::File, String> {
 /// インポートやログビューア処理がソース名を使い続けられる。
 /// zstd 圧縮レベル 3 は圧縮速度と圧縮率のバランスに優れ、テキストログに対して
 /// 十分な圧縮率を達成しつつリアルタイム同期を妨げない。
+#[cfg(test)]
 fn compress_single_file(src: &Path, dst: &Path) -> Result<(), String> {
     let output = fs::File::create(dst).map_err(|err| utils::command_create_err(dst, err))?;
-    let encoder = zstd::stream::Encoder::new(output, 3)
-        .map_err(|err| utils::command_err("zstd エンコーダーを初期化できませんでした", err))?
-        .auto_finish();
-    let mut tar = tar::Builder::new(encoder);
+    compress_single_file_to_output(src, output)
+}
 
+/// 開かれた出力ファイルへ単一ログを圧縮し、エンコーダーとファイルを明示的に確定する。
+///
+/// `auto_finish` の Drop 時エラーを捨てず、zstd 終端と OS バッファの同期に成功した
+/// ファイルだけを最終アーカイブ名へ昇格できるようにする。
+fn compress_single_file_to_output(src: &Path, output: fs::File) -> Result<(), String> {
+    let mut encoder = zstd::stream::Encoder::new(output, 3)
+        .map_err(|err| utils::command_err("zstd エンコーダーを初期化できませんでした", err))?;
     let file_name = src
         .file_name()
         .ok_or_else(|| format!("ファイル名を解決できませんでした [{}]", src.display()))?;
     let mut input = open_source_log_for_read(src)?;
-    tar.append_file(file_name, &mut input)
-        .map_err(|err| utils::command_err("tar アーカイブへ追加できませんでした", err))?;
-    tar.finish()
-        .map_err(|err| utils::command_err("tar アーカイブを確定できませんでした", err))?;
+    {
+        let mut tar = tar::Builder::new(&mut encoder);
+        tar.append_file(file_name, &mut input)
+            .map_err(|err| utils::command_err("tar アーカイブへ追加できませんでした", err))?;
+        tar.finish()
+            .map_err(|err| utils::command_err("tar アーカイブを確定できませんでした", err))?;
+    }
+    let output = encoder
+        .finish()
+        .map_err(|err| utils::command_err("zstd アーカイブを確定できませんでした", err))?;
+    output
+        .sync_all()
+        .map_err(|err| utils::command_err("アーカイブをディスクへ同期できませんでした", err))?;
     Ok(())
 }
 
@@ -454,6 +469,57 @@ fn replace_file_atomically(temp_path: &Path, target_path: &Path) -> Result<(), S
     Ok(())
 }
 
+/// 一時ファイルへアーカイブを完全生成してから最終名へ昇格する。
+///
+/// 新規作成でも最終パスへ直接書かない。圧縮・同期・リネームのいずれかが失敗した
+/// 場合は `TempPath` が一時ファイルを除去し、最終名に部分ファイルを残さない。
+fn write_archive_safely(
+    source_path: &Path,
+    target_path: &Path,
+    mode: ArchiveSyncMode,
+) -> Result<(), String> {
+    let parent = target_path.parent().unwrap_or_else(|| Path::new("."));
+    let target_name = target_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| {
+            format!(
+                "アーカイブファイル名を解決できませんでした [{}]",
+                target_path.display()
+            )
+        })?;
+    let staged = tempfile::Builder::new()
+        .prefix(&format!(".{target_name}."))
+        .suffix(".tmp")
+        .tempfile_in(parent)
+        .map_err(|err| utils::command_create_err(parent, err))?;
+    let (output, temp_path) = staged.into_parts();
+    let temp_path_buf = temp_path.to_path_buf();
+
+    compress_single_file_to_output(source_path, output)?;
+
+    match mode {
+        ArchiveSyncMode::Create => {
+            fs::rename(&temp_path_buf, target_path).map_err(|err| {
+                utils::command_err(
+                    &format!(
+                        "新規アーカイブを最終名へ移動できませんでした [{}]",
+                        target_path.display()
+                    ),
+                    err,
+                )
+            })?;
+        }
+        ArchiveSyncMode::Replace => {
+            replace_file_atomically(&temp_path_buf, target_path)?;
+        }
+    }
+
+    // rename 後は元の一時パスが存在しないため、TempPath の Drop は何も削除しない。
+    drop(temp_path);
+    Ok(())
+}
+
 /// ソースログを管理された `Data` アーカイブストアに同期する。
 ///
 /// 元ログは削除もリネームもしない。`StellaRecord` は自身の `.tar.zst`
@@ -467,16 +533,7 @@ pub(crate) fn sync_source_logs_into_archive_store(
 
     let plans = collect_pending_archive_sync_plans(source_dir, archive_store_dir)?;
     for plan in &plans {
-        match plan.mode {
-            ArchiveSyncMode::Create => {
-                compress_single_file(&plan.source_path, &plan.archive_path)?;
-            }
-            ArchiveSyncMode::Replace => {
-                let temp_path = plan.archive_path.with_extension("tmp");
-                compress_single_file(&plan.source_path, &temp_path)?;
-                replace_file_atomically(&temp_path, &plan.archive_path)?;
-            }
-        }
+        write_archive_safely(&plan.source_path, &plan.archive_path, plan.mode)?;
     }
 
     Ok(plans.len())
@@ -513,16 +570,6 @@ fn encode_log_category_u8(category: &str) -> u8 {
     }
 }
 
-/// ログビューア用に 1 行分のバイト列を UTF-8 として表示文字列へ変換する。
-///
-/// `VRChat` ログは UTF-8 前提だが、破損バイトを含む古いログでビューア全体が
-/// 途中終了しないよう、無効バイトだけを U+FFFD に置換して後続行を表示し続ける。
-fn decode_log_line_lossy(bytes: &[u8]) -> String {
-    let line = bytes.strip_suffix(b"\n").unwrap_or(bytes);
-    let line = line.strip_suffix(b"\r").unwrap_or(line);
-    String::from_utf8_lossy(line).into_owned()
-}
-
 /// `.tar.zst` アーカイブの最初の tar エントリのソースファイル名だけを取得する。
 ///
 /// アーカイブ内容は展開せず、ヘッダーのみ読み取る。
@@ -553,10 +600,12 @@ fn read_archive_source_name(archive_path: &Path) -> Result<String, String> {
         .map(str::to_string)
 }
 
-/// ログビューア行分類用に DB 内容から導出されたマーカーテキスト。
+/// DB 内容から導出されたログビューアのハイライト文字列。
+///
+/// カテゴリはタイムスタンプと行構造から決定するため、マーカー自体にはカテゴリを
+/// 持たせない。同じユーザー名が join/left の両方に現れても分類へ影響しない。
 #[derive(Clone)]
 struct DbKeywordMarker {
-    category: String,
     text: String,
 }
 
@@ -648,7 +697,7 @@ fn collect_db_log_categories(
     Ok(categories)
 }
 
-/// キーワードベースの行マッチング用に DB 行から表示名と URL 断片を収集する。
+/// キーワードハイライト用に DB 行から表示名とメッセージを収集する。
 ///
 /// マーカーは最長優先でソートし、行に複数の候補文字列が含まれる場合
 /// （例: ワールド名の部分文字列であるプレイヤー名）に最も具体的なマッチが
@@ -660,33 +709,25 @@ fn collect_db_keyword_markers(
     let mut markers = Vec::new();
 
     let sql = "
-        SELECT world_name, 'world'
+        SELECT world_name
           FROM visits
          WHERE session_id IN (SELECT id FROM sessions WHERE log_name = ?1)
            AND world_name IS NOT NULL AND trim(world_name) <> ''
-        UNION ALL
-        SELECT fu.account_name, 'player_join'
+        UNION
+        SELECT fu.account_name
           FROM with_users wu
           JOIN find_users fu ON fu.vrchat_id = wu.vrchat_id
           JOIN visits v ON v.id = wu.visit_id
           JOIN sessions s ON s.id = v.session_id
          WHERE s.log_name = ?1
            AND fu.account_name IS NOT NULL AND trim(fu.account_name) <> ''
-        UNION ALL
-        SELECT fu.account_name, 'player_left'
-          FROM with_users wu
-          JOIN find_users fu ON fu.vrchat_id = wu.vrchat_id
-          JOIN visits v ON v.id = wu.visit_id
-          JOIN sessions s ON s.id = v.session_id
-         WHERE s.log_name = ?1 AND wu.leave_time IS NOT NULL
-           AND fu.account_name IS NOT NULL AND trim(fu.account_name) <> ''
-        UNION ALL
-        SELECT message, 'notification'
+        UNION
+        SELECT message
           FROM notifications
          WHERE session_id IN (SELECT id FROM sessions WHERE log_name = ?1)
            AND message IS NOT NULL AND trim(message) <> ''
-        UNION ALL
-        SELECT sender_name, 'notification'
+        UNION
+        SELECT sender_name
           FROM notifications
          WHERE session_id IN (SELECT id FROM sessions WHERE log_name = ?1)
            AND sender_name IS NOT NULL AND trim(sender_name) <> ''
@@ -697,18 +738,15 @@ fn collect_db_keyword_markers(
         .map_err(|err| utils::command_err("キーワード抽出クエリを準備できませんでした", err))?;
 
     let rows = stmt
-        .query_map([source_name], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })
+        .query_map([source_name], |row| row.get::<_, String>(0))
         .map_err(|err| utils::command_err("キーワード抽出クエリを実行できませんでした", err))?;
 
     for row in rows {
         match row {
-            Ok((text, category)) => {
+            Ok(text) => {
                 let trimmed = text.trim();
                 if trimmed.len() >= 2 {
                     markers.push(DbKeywordMarker {
-                        category,
                         text: trimmed.to_string(),
                     });
                 }
@@ -720,8 +758,14 @@ fn collect_db_keyword_markers(
     }
 
     // 最長優先ソートにより、行スキャン時に最も具体的なキーワードが優先される。
-    markers.sort_by(|left, right| right.text.len().cmp(&left.text.len()));
-    markers.dedup_by(|left, right| left.category == right.category && left.text == right.text);
+    markers.sort_by(|left, right| {
+        right
+            .text
+            .len()
+            .cmp(&left.text.len())
+            .then_with(|| left.text.cmp(&right.text))
+    });
+    markers.dedup_by(|left, right| left.text == right.text);
     Ok(markers)
 }
 
@@ -737,14 +781,16 @@ fn resolve_db_category(
 ) -> Option<String> {
     let matched = db_categories.get(timestamp)?;
 
-    let preferred = if analyze::RE_PLAYER_JOIN_COMPLETE.is_match(line) {
+    if analyze::RE_PLAYER_JOIN_COMPLETE.is_match(line) {
         // OnPlayerJoinComplete は join_time と同一秒に出力されることが多いので
         // player_join のヒットに便乗して player_ready を別カテゴリとして付与する。
-        if matched.iter().any(|category| category == "player_join") {
-            return Some("player_ready".to_string());
-        }
-        None
-    } else if analyze::RE_PLAYER_JOIN.is_match(line) {
+        return matched
+            .iter()
+            .any(|category| category == "player_join")
+            .then(|| "player_ready".to_string());
+    }
+
+    let preferred = if analyze::RE_PLAYER_JOIN.is_match(line) {
         Some("player_join")
     } else if analyze::RE_PLAYER_LEFT.is_match(line) {
         Some("player_left")
@@ -758,9 +804,10 @@ fn resolve_db_category(
     };
 
     if let Some(expected) = preferred {
-        if matched.iter().any(|category| category == expected) {
-            return Some(expected.to_string());
-        }
+        return matched
+            .iter()
+            .any(|category| category == expected)
+            .then(|| expected.to_string());
     }
 
     matched.first().cloned()
@@ -802,6 +849,25 @@ fn classify_text_category(line: &str) -> Option<&'static str> {
         return Some("world");
     }
     None
+}
+
+/// ログビューア行のカテゴリを安定した優先順位で解決する。
+///
+/// 範囲分類を最優先し、次に DB の同一時刻候補と行構造が一致するカテゴリを採用する。
+/// DB 候補が行構造と矛盾する場合はテキスト判定へ戻し、キーワード一致は分類に使わない。
+fn resolve_viewer_category(
+    line: &str,
+    timestamp: &str,
+    active_range_category: Option<&str>,
+    db_categories: Option<&HashMap<String, Vec<String>>>,
+) -> String {
+    active_range_category
+        .map(str::to_string)
+        .or_else(|| {
+            db_categories.and_then(|categories| resolve_db_category(line, timestamp, categories))
+        })
+        .or_else(|| classify_text_category(line).map(str::to_string))
+        .unwrap_or_else(|| "plain".to_string())
 }
 
 /// 複数行にまたがる DB 関連ブロックを継続中であることを表す。
@@ -918,7 +984,7 @@ fn emit_log_viewer_chunks(
             }
         }
 
-        let line = decode_log_line_lossy(&line_buffer);
+        let line = utils::decode_log_line_lossy(&line_buffer);
         // 既存の範囲ブロックの終了判定。終了行は範囲外扱いで、終了が成立した時点で
         // 範囲を解除してから当該行を分類する（インデント解除した行は範囲に含めない）。
         if let Some(block) = active_range.as_ref() {
@@ -972,7 +1038,7 @@ fn emit_log_viewer_chunks(
             classify_log_level(&line)
         };
 
-        // DB キーワードマーカーを引いてハイライトとカテゴリを決定する。
+        // DB キーワードマーカーはハイライト専用。カテゴリ分類には使用しない。
         let keyword_marker = if timestamp.is_empty() {
             None
         } else {
@@ -983,21 +1049,15 @@ fn emit_log_viewer_chunks(
 
         // カテゴリ優先順位:
         //   1. 範囲ブロックが進行中ならその範囲カテゴリ（複数行を同じカテゴリに統一）
-        //   2. DB キーワードマーカーのカテゴリ
-        //   3. DB タイムスタンプヒントのカテゴリ
-        //   4. 行テキストからの揮発性分類（未取り込みの外部ログでもカテゴリ地色を付与）
-        //   5. 上記いずれも該当しなければ "plain"
-        let category = active_range
-            .as_ref()
-            .map(|block| block.category.to_string())
-            .or_else(|| keyword_marker.map(|marker| marker.category.clone()))
-            .or_else(|| {
-                db_categories
-                    .as_ref()
-                    .and_then(|cat_map| resolve_db_category(&line, &timestamp, cat_map))
-            })
-            .or_else(|| classify_text_category(&line).map(str::to_string))
-            .unwrap_or_else(|| "plain".to_string());
+        //   2. DB タイムスタンプ候補と行構造が一致するカテゴリ
+        //   3. 行テキストからの分類（未取り込みの外部ログでもカテゴリ地色を付与）
+        //   4. 上記いずれも該当しなければ "plain"
+        let category = resolve_viewer_category(
+            &line,
+            &timestamp,
+            active_range.as_ref().map(|block| block.category),
+            db_categories.as_ref(),
+        );
 
         // ハイライト（キーワード強調）は DB マーカーがマッチした場合のみ付与する。
         // カテゴリ地色は未取り込みログでも classify_text_category で付くが、ハイライトは
@@ -1699,6 +1759,39 @@ mod tests {
         assert_eq!(entry_path.to_str().unwrap(), "output_log_2025-04-30.txt");
     }
 
+    #[test]
+    fn safe_create_failure_leaves_no_final_or_temp_archive() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing_source = dir.path().join("output_log_missing.txt");
+        let target = dir.path().join("output_log_missing.txt.tar.zst");
+
+        let result = write_archive_safely(&missing_source, &target, ArchiveSyncMode::Create);
+
+        assert!(result.is_err());
+        assert!(!target.exists(), "失敗時に最終名を残してはならない");
+        let remaining_names: Vec<_> = fs::read_dir(dir.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            remaining_names.is_empty(),
+            "失敗した一時アーカイブも除去される"
+        );
+    }
+
+    #[test]
+    fn safe_replace_failure_preserves_existing_archive() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing_source = dir.path().join("output_log_missing.txt");
+        let target = dir.path().join("output_log_missing.txt.tar.zst");
+        fs::write(&target, b"existing archive").unwrap();
+
+        let result = write_archive_safely(&missing_source, &target, ArchiveSyncMode::Replace);
+
+        assert!(result.is_err());
+        assert_eq!(fs::read(&target).unwrap(), b"existing archive");
+    }
+
     // ── build_archive_sync_plan ──
 
     #[test]
@@ -1816,14 +1909,6 @@ mod tests {
         assert_eq!(encode_log_category_u8("plain"), 0);
     }
 
-    // ── decode_log_line_lossy (ビューア: invalid UTF-8 行で停止しない) ──
-
-    #[test]
-    fn decode_log_line_lossy_replaces_invalid_utf8_and_trims_newline() {
-        let line = decode_log_line_lossy(b"ok\xffnext\r\n");
-        assert_eq!(line, "ok\u{fffd}next");
-    }
-
     // ── detect_range_block_start (純粋: 複数行ブロック検出) ──
 
     #[test]
@@ -1859,16 +1944,14 @@ mod tests {
     fn keyword_marker_finds_substring() {
         let markers = vec![
             DbKeywordMarker {
-                category: "world".to_string(),
                 text: "Cozy Lounge".to_string(),
             },
             DbKeywordMarker {
-                category: "player_join".to_string(),
                 text: "StarGazer".to_string(),
             },
         ];
         let found = resolve_db_keyword_marker("Entering Room: Cozy Lounge", &markers).unwrap();
-        assert_eq!(found.category, "world");
+        assert_eq!(found.text, "Cozy Lounge");
         assert!(resolve_db_keyword_marker("no match here", &markers).is_none());
     }
 
@@ -1900,6 +1983,55 @@ mod tests {
         // 行が特定カテゴリにマッチしなくても、タイムスタンプ登録があれば先頭を返す
         let category = resolve_db_category("unrelated line", "2025.04.30 20:15:30", &db);
         assert_eq!(category.as_deref(), Some("world"));
+    }
+
+    #[test]
+    fn viewer_category_uses_line_structure_independently_of_highlight_marker() {
+        let timestamp = "2025-04-30 20:15:35";
+        let mut db = std::collections::HashMap::new();
+        db.insert(
+            timestamp.to_string(),
+            vec!["player_join".to_string(), "player_left".to_string()],
+        );
+        let markers = vec![DbKeywordMarker {
+            text: "StarGazer".to_string(),
+        }];
+
+        let joined = "[Behaviour] OnPlayerJoined StarGazer (usr_def456)".to_string();
+        let left = "[Behaviour] OnPlayerLeft StarGazer (usr_def456)".to_string();
+        let ready = "[Behaviour] OnPlayerJoinComplete StarGazer".to_string();
+        assert!(resolve_db_keyword_marker(&joined, &markers).is_some());
+        assert!(resolve_db_keyword_marker(&left, &markers).is_some());
+        assert!(resolve_db_keyword_marker(&ready, &markers).is_some());
+        assert_eq!(
+            resolve_viewer_category(&joined, timestamp, None, Some(&db)),
+            "player_join"
+        );
+        assert_eq!(
+            resolve_viewer_category(&left, timestamp, None, Some(&db)),
+            "player_left"
+        );
+        assert_eq!(
+            resolve_viewer_category(&ready, timestamp, None, Some(&db)),
+            "player_ready"
+        );
+    }
+
+    #[test]
+    fn viewer_category_falls_back_to_text_when_db_kind_conflicts() {
+        let timestamp = "2025-04-30 20:15:35";
+        let mut db = std::collections::HashMap::new();
+        db.insert(timestamp.to_string(), vec!["player_join".to_string()]);
+        let left = "[Behaviour] OnPlayerLeft StarGazer (usr_def456)";
+
+        assert_eq!(
+            resolve_viewer_category(left, timestamp, None, Some(&db)),
+            "player_left"
+        );
+        assert_eq!(
+            resolve_viewer_category(left, timestamp, Some("notification"), Some(&db)),
+            "notification"
+        );
     }
 
     // ── collect_directory_size (一時ディレクトリ: 再帰サイズ集計) ──
@@ -2038,9 +2170,7 @@ mod tests {
         let markers = collect_db_keyword_markers(&conn, "log.txt").unwrap();
 
         // ワールド名とユーザー名が収集される
-        assert!(markers
-            .iter()
-            .any(|m| m.text == "Cozy Lounge" && m.category == "world"));
+        assert!(markers.iter().any(|m| m.text == "Cozy Lounge"));
         assert!(markers.iter().any(|m| m.text == "StarGazer"));
         // 最長優先ソート: 先頭は後続以上の長さ
         for pair in markers.windows(2) {

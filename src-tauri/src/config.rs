@@ -10,6 +10,13 @@ use crate::utils;
 const STELLA_RECORD_KEY: &str = "Software\\CosmoArtsStore\\StellaRecord";
 const POLARIS_KEY: &str = "Software\\CosmoArtsStore\\Polaris";
 
+/// 起動時ログ取り込みについて、ユーザーが選択した許可状態。
+#[derive(Debug, Clone, Copy, Default)]
+pub struct StartupImportPreference {
+    pub enabled: bool,
+    pub preference_set: bool,
+}
+
 /// HKCU 配下のキーを開く。存在しない場合は `None` を返す。
 fn open_key(path: &str) -> Option<RegKey> {
     RegKey::predef(HKEY_CURRENT_USER).open_subkey(path).ok()
@@ -151,6 +158,31 @@ fn load_stellarecord_setting_from(key_path: &str) -> StellaRecordSetting {
 /// レジストリキーへの書き込みに失敗した場合にエラーを返す。
 pub fn save_stellarecord_setting(setting: &StellaRecordSetting) -> Result<(), String> {
     save_stellarecord_setting_to(STELLA_RECORD_KEY, setting)
+}
+
+/// 起動時ログ取り込みの許可状態をレジストリから読み込む。
+pub fn load_startup_import_preference() -> StartupImportPreference {
+    let Some(key) = open_key(STELLA_RECORD_KEY) else {
+        return StartupImportPreference::default();
+    };
+
+    StartupImportPreference {
+        enabled: read_bool(&key, "StartupImportEnabled", false),
+        preference_set: read_bool(&key, "StartupImportPreferenceSet", false),
+    }
+}
+
+/// 起動時ログ取り込みの選択結果をレジストリへ保存する。
+///
+/// 許可状態を先に書き、回答済み状態を最後に書くことで、途中失敗時に未回答のまま
+/// 起動時取り込みが有効になることを防ぐ。
+pub fn save_startup_import_preference(enabled: bool) -> Result<(), String> {
+    let key = create_key(STELLA_RECORD_KEY)?;
+    key.set_value("StartupImportEnabled", &u32::from(enabled))
+        .map_err(|e| utils::command_err("起動時ログ取り込み設定の書き込みに失敗しました", e))?;
+    key.set_value("StartupImportPreferenceSet", &1u32)
+        .map_err(|e| utils::command_err("起動時ログ取り込み設定の確定に失敗しました", e))?;
+    Ok(())
 }
 
 /// 指定されたレジストリキーパスに `StellaRecord` 設定を保存する。

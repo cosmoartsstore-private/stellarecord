@@ -1,0 +1,31 @@
+.dialog {
+  max-width: 680px;
+}
+
+.description {
+  margin: 0 0 1.25rem;
+  color: var(--text-main);
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+
+.locationPanel {
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-card-soft);
+}
+
+.note {
+  margin: 1rem 0 1.5rem;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  line-height: 1.65;
+}
+
+@media (width <= 640px) {
+  .locationPanel {
+    padding: 0.85rem;
+    border-radius: 12px;
+  }
+}

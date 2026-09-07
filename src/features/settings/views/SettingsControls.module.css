@@ -1,22 +1,169 @@
-.inlineSettingRow {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: default;
+.settingsRoot {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 1.15rem;
 }
 
-.inlineSettingLabel {
+.section {
+  min-width: 0;
+}
+
+.sectionTitle {
+  margin: 0 0 0.5rem;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.settingGroup {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-card-soft);
+}
+
+.settingRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1.5rem;
+  min-width: 0;
+  padding: 0.9rem 1rem;
+}
+
+.settingRow + .settingRow {
+  border-top: 1px solid var(--border);
+}
+
+.settingCopy {
+  min-width: 0;
+}
+
+.settingName {
+  display: block;
+  margin: 0;
+  color: var(--text-main);
+  font-size: 0.86rem;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.settingDescription {
+  margin: 0.2rem 0 0;
+  color: var(--text-dim);
+  font-size: 0.76rem;
+  line-height: 1.55;
+}
+
+.themeSelect {
+  width: 160px;
+  min-height: 36px;
+  padding: 0.45rem 2rem 0.45rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-main);
+  font-family: var(--font-sans);
   font-size: 0.8rem;
   font-weight: 700;
-  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.themeSelect:focus-visible,
+.numberInput:focus-visible {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 1px;
+}
+
+.switchControl {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+.switchInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
   white-space: nowrap;
 }
 
-.inlineNumberInput {
-  width: 100px;
-  padding: 0.4rem 0.6rem;
-  border-radius: 10px;
+.switchTrack {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--bg-card);
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.switchThumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition:
+    transform 0.18s ease,
+    background 0.18s ease;
+}
+
+.switchState {
+  min-width: 2em;
+  color: var(--text-dim);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.switchInput:checked + .switchTrack {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.switchInput:checked + .switchTrack .switchThumb {
+  background: #fff;
+  transform: translateX(18px);
+}
+
+.switchInput:focus-visible + .switchTrack {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.switchInput:disabled + .switchTrack,
+.switchInput:disabled ~ .switchState {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.numberControl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.numberInput {
+  width: 108px;
+  min-height: 36px;
+  padding: 0.45rem 0.65rem;
   border: 1px solid var(--border);
+  border-radius: 10px;
   background: var(--bg-card);
   color: var(--text-main);
   font-family: var(--font-mono);
@@ -25,74 +172,48 @@
   text-align: right;
 }
 
-.inlineNumberInput:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-
-.inlineUnit {
-  font-size: 0.8rem;
+.numberUnit {
   color: var(--text-dim);
-  font-weight: 700;
+  font-size: 0.76rem;
+  font-weight: 800;
 }
 
-.inlineToggleRow {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  cursor: default;
-}
-
-.autoStartBtn {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  height: 34px;
-  padding: 0 0.85rem;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg-card-soft);
-  color: var(--text-dim);
+.saveButton {
+  min-height: 36px;
+  padding: 0.45rem 0.9rem;
+  border-radius: 10px;
   font-size: 0.8rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition:
-    background 0.2s,
-    border-color 0.2s,
-    color 0.2s;
-  white-space: nowrap;
 }
 
-.autoStartBtn svg {
-  width: 16px;
-  height: 16px;
-  fill: currentcolor;
+.locationRow {
+  display: block;
 }
 
-.autoStartBtn:hover {
-  border-color: var(--border-strong);
-}
-
-.autoStartBtnOn {
-  background: var(--accent-gradient);
-  border-color: transparent;
-  color: #fff;
+.locationRow > .settingName {
+  margin-bottom: 0.65rem;
 }
 
 @media (width <= 640px) {
-  .inlineSettingRow {
-    flex-wrap: wrap;
+  .settingsRoot {
+    gap: 1rem;
   }
 
-  .inlineNumberInput {
-    width: 60px;
-    padding: 0.35rem 0.5rem;
-    font-size: 0.78rem;
+  .settingRow {
+    grid-template-columns: 1fr;
+    align-items: start;
+    gap: 0.7rem;
+    padding: 0.85rem;
   }
 
-  .autoStartBtn {
-    height: 30px;
-    padding: 0 0.65rem;
-    font-size: 0.75rem;
+  .themeSelect {
+    width: 100%;
+  }
+
+  .switchControl {
+    justify-self: start;
+  }
+
+  .numberControl {
+    justify-content: flex-start;
   }
 }

@@ -10,8 +10,8 @@ winreg        = "0.52"
 chrono        = { version = "0.4", features = ["serde"] }
 rusqlite      = { version = "0.38", features = ["bundled"] }
 regex         = "1"
-tauri         = { version = "2.2.4", features = [] }
-tauri-build   = { version = "2.0.5", features = [] }
+tauri         = { version = "2.10", features = [] }
+tauri-build   = { version = "2.5", features = [] }
 tauri-plugin-shell  = "2.3.5"
 opener        = "0.8"
 

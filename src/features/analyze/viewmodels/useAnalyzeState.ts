@@ -7,9 +7,7 @@ import {
   onAnalyzeFinished,
   onAnalyzeProgress,
 } from '../services/analyzeService';
-import { addErrorToast } from '../../../shared/lib/errors';
-
-type AddToast = (msg: string) => void;
+import { addErrorToast, type AddToast } from '../../../shared/lib/errors';
 
 /** ストレージメーターの初期表示用ゼロ値 */
 const emptyStorageStatus: StorageStatus = {

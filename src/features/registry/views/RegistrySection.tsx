@@ -1,20 +1,105 @@
-import type { AppCard, RegistryCatalog } from '../models/types';
+import type { AppCard, LauncherViewMode, RegistryCatalog } from '../models/types';
 import shared from '../../../shared/styles/shared.module.css';
 import { StellaIcon, stellaIconNames } from '../../../shared/components/Icons';
-import { LauncherFallbackIcon } from './RegistryIcons';
 import styles from './RegistrySection.module.css';
 
 /** ランチャーパネルのProps */
 interface RegistrySectionProps {
   registryApps: RegistryCatalog;
-  launcherViewMode: 'list' | 'card';
+  launcherViewMode: LauncherViewMode;
   isReloading: boolean;
-  onSetLauncherViewMode: (viewMode: 'list' | 'card') => void;
+  onSetLauncherViewMode: (viewMode: LauncherViewMode) => void;
   onLaunchApp: (app: AppCard) => void;
   onOpenFolder: (app: AppCard) => void;
   onUnregisterApp: (app: AppCard) => void;
   onRegisterApp: () => void;
   onReload: () => void;
+}
+
+interface LauncherItemProps {
+  app: AppCard;
+  viewMode: LauncherViewMode;
+  onLaunch: (app: AppCard) => void;
+  onOpenFolder: (app: AppCard) => void;
+  onUnregister: (app: AppCard) => void;
+}
+
+/** アイコン未登録時に表示するプレースホルダー */
+function LauncherFallbackIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="icon-svg">
+      <path d="M16,9H19L14,16L9,9H12V5H16M11,2H13V4H11V2M15,19V17H17V19H15M11,19V17H13V19H11M7,19V17H9V19H7Z" />
+    </svg>
+  );
+}
+
+/** 表示形式に応じた1件分のランチャー項目 */
+function LauncherItem({ app, viewMode, onLaunch, onOpenFolder, onUnregister }: LauncherItemProps) {
+  const isList = viewMode === 'list';
+  const icon = (
+    <div className={isList ? styles.launcherListIcon : styles.launcherCardLargeIcon}>
+      {app.icon_data ? (
+        <img src={`data:image/png;base64,${app.icon_data}`} alt="" />
+      ) : (
+        <LauncherFallbackIcon />
+      )}
+    </div>
+  );
+  const copy = (
+    <div className={isList ? styles.launcherListCopy : styles.launcherCardLargeCopy}>
+      <h4>{app.name}</h4>
+      <p className={app.description ? undefined : styles.noDescription}>
+        {app.description || '説明なし'}
+      </p>
+    </div>
+  );
+
+  return (
+    <article className={isList ? styles.launcherListItem : styles.launcherCardLarge}>
+      {isList ? (
+        <div className={styles.launcherListMain}>
+          {icon}
+          {copy}
+        </div>
+      ) : (
+        <>
+          {icon}
+          {copy}
+        </>
+      )}
+      <div className={isList ? styles.launcherListActions : styles.launcherCardLargeActions}>
+        <button
+          className={
+            isList
+              ? `${shared.btn} ${shared.primary}`
+              : `${shared.btn} ${shared.primary} ${styles.launcherLaunchButton}`
+          }
+          onClick={() => {
+            onLaunch(app);
+          }}
+        >
+          起動
+        </button>
+        <button
+          className={shared.btn}
+          onClick={() => {
+            onOpenFolder(app);
+          }}
+        >
+          フォルダを開く
+        </button>
+        <button
+          className={styles.deleteButton}
+          onClick={() => {
+            onUnregister(app);
+          }}
+          aria-label="登録解除"
+        >
+          <StellaIcon name={stellaIconNames.trash} />
+        </button>
+      </div>
+    </article>
+  );
 }
 
 /** リスト/カード切替・リロード・アプリ操作を備えたランチャーパネル */
@@ -30,15 +115,6 @@ export function RegistrySection({
   onReload,
 }: RegistrySectionProps) {
   const allApps = registryApps.apps;
-
-  /** Base64 PNGアイコンを描画する（未設定時はフォールバックアイコン） */
-  const renderLauncherIcon = (app: AppCard) => {
-    if (app.icon_data) {
-      // icon_dataは登録元アプリがDBにBase64 PNGとして格納
-      return <img src={`data:image/png;base64,${app.icon_data}`} alt="" />;
-    }
-    return <LauncherFallbackIcon />;
-  };
 
   return (
     <div className={`${styles.root} ${shared.viewContainer}`}>
@@ -88,90 +164,19 @@ export function RegistrySection({
           <div className={styles.launcherEmptyState}>登録されているアプリはありません</div>
         )}
 
-        {allApps.length > 0 && launcherViewMode === 'list' && (
-          <div className={styles.launcherList}>
+        {allApps.length > 0 && (
+          <div
+            className={launcherViewMode === 'list' ? styles.launcherList : styles.launcherCardGrid}
+          >
             {allApps.map((app) => (
-              <article key={app.path} className={styles.launcherListItem}>
-                <div className={styles.launcherListMain}>
-                  <div className={styles.launcherListIcon}>{renderLauncherIcon(app)}</div>
-                  <div className={styles.launcherListCopy}>
-                    <h4>{app.name}</h4>
-                    <p className={app.description ? undefined : styles.noDescription}>
-                      {app.description || 'No description'}
-                    </p>
-                  </div>
-                </div>
-                <div className={styles.launcherListActions}>
-                  <button
-                    className={`${shared.btn} ${shared.primary}`}
-                    onClick={() => {
-                      onLaunchApp(app);
-                    }}
-                  >
-                    起動
-                  </button>
-                  <button
-                    className={shared.btn}
-                    onClick={() => {
-                      onOpenFolder(app);
-                    }}
-                  >
-                    フォルダを開く
-                  </button>
-                  <button
-                    className={styles.deleteButton}
-                    onClick={() => {
-                      onUnregisterApp(app);
-                    }}
-                    aria-label="登録解除"
-                  >
-                    <StellaIcon name={stellaIconNames.trash} />
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-
-        {allApps.length > 0 && launcherViewMode === 'card' && (
-          <div className={styles.launcherCardGrid}>
-            {allApps.map((app) => (
-              <article key={app.path} className={styles.launcherCardLarge}>
-                <div className={styles.launcherCardLargeIcon}>{renderLauncherIcon(app)}</div>
-                <div className={styles.launcherCardLargeCopy}>
-                  <h4>{app.name}</h4>
-                  <p className={app.description ? undefined : styles.noDescription}>
-                    {app.description || 'No description'}
-                  </p>
-                </div>
-                <div className={styles.launcherCardLargeActions}>
-                  <button
-                    className={`${shared.btn} ${shared.primary} ${styles.launcherLaunchButton}`}
-                    onClick={() => {
-                      onLaunchApp(app);
-                    }}
-                  >
-                    起動
-                  </button>
-                  <button
-                    className={shared.btn}
-                    onClick={() => {
-                      onOpenFolder(app);
-                    }}
-                  >
-                    フォルダを開く
-                  </button>
-                  <button
-                    className={styles.deleteButton}
-                    onClick={() => {
-                      onUnregisterApp(app);
-                    }}
-                    aria-label="登録解除"
-                  >
-                    <StellaIcon name={stellaIconNames.trash} />
-                  </button>
-                </div>
-              </article>
+              <LauncherItem
+                key={app.path}
+                app={app}
+                viewMode={launcherViewMode}
+                onLaunch={onLaunchApp}
+                onOpenFolder={onOpenFolder}
+                onUnregister={onUnregisterApp}
+              />
             ))}
           </div>
         )}

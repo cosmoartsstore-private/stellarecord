@@ -13,6 +13,24 @@
   --gap-lg: 2rem;
 }
 
+.stella-record-root {
+  /* テーマ間で不変のセマンティックトークン。 */
+  --danger: #ef4444;
+  --btn-primary-shadow: none;
+  --btn-primary-hover-shadow: none;
+  --terminal-world: #60a5fa;
+  --terminal-notification: #facc15;
+  --terminal-player-join: #4ade80;
+  --terminal-player-left: #f87171;
+  --terminal-warning: #fb923c;
+  --terminal-error: #ef4444;
+  --terminal-highlight-text: #fff;
+
+  /* 共有スタイルへ渡すエイリアス。 */
+  --sr-shared-body-background: var(--bg-gradient);
+  --sr-shared-body-color: var(--text-main);
+}
+
 /* ─── リセット ─────────────────────────────────────── */
 
 * {

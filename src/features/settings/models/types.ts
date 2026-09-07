@@ -6,5 +6,10 @@ export interface ManagementSettings {
   archive_limit_mb: number;
 }
 
-/** サポートされる3つのテーマバリアント */
-export type ThemeMode = 'light' | 'dark' | 'midnight';
+/** 起動時ログ取り込みの許可状態と、利用者へ表示する保存先 */
+export interface StartupImportSettings {
+  enabled: boolean;
+  preference_set: boolean;
+  log_archive_path: string;
+  database_path: string;
+}

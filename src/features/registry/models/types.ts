@@ -7,6 +7,9 @@ export interface AppCard {
   icon_data?: string;
 }
 
+/** ランチャーの表示形式 */
+export type LauncherViewMode = 'list' | 'card';
+
 /** ランチャーが扱うアプリ一覧。区別なしの平坦リスト。 */
 export interface RegistryCatalog {
   apps: AppCard[];
