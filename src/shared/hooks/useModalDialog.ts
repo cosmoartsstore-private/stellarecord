@@ -9,6 +9,7 @@ export function useModalDialog() {
 
   useEffect(() => {
     if (!dialogRef.current?.open) dialogRef.current?.showModal();
+    dialogRef.current?.querySelector<HTMLElement>('[autofocus]')?.focus();
   }, []);
 
   return dialogRef;
