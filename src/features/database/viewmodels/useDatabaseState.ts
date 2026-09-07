@@ -24,6 +24,7 @@ export function useDatabaseState(addToast: AddToast) {
   const [currentPage, setCurrentPage] = useState(0);
   const [sortState, setSortState] = useState<SortState | null>(null);
   const requestGenerationRef = useRef(0);
+  const committedTableRef = useRef('');
   // バックエンド側 (src-tauri/src/commands/database.rs の PAGE_SIZE) と一致させる必要がある
   const pageSize = 500;
 
@@ -31,10 +32,12 @@ export function useDatabaseState(addToast: AddToast) {
   const loadTableDataForRequest = useCallback(
     async (requestGeneration: number, tableName: string, page = 0, sort?: SortState | null) => {
       if (requestGenerationRef.current !== requestGeneration) return;
+      setCurrentTable(tableName);
       setIsDbLoading(true);
       try {
         const data = await loadDbTableData(tableName, page, sort?.column, sort?.dir);
         if (requestGenerationRef.current === requestGeneration) {
+          committedTableRef.current = tableName;
           setCurrentTable(tableName);
           setCurrentPage(page);
           setSortState(sort ?? null);
@@ -42,6 +45,7 @@ export function useDatabaseState(addToast: AddToast) {
         }
       } catch (error) {
         if (requestGenerationRef.current === requestGeneration) {
+          setCurrentTable(committedTableRef.current);
           addErrorToast(addToast, 'DBテーブルデータ取得', 'データを読み込めませんでした', error);
         }
       } finally {
@@ -99,6 +103,7 @@ export function useDatabaseState(addToast: AddToast) {
         if (requestGenerationRef.current !== requestGeneration) return;
         setDbTables(tables);
         if (tables.length === 0) {
+          committedTableRef.current = '';
           setCurrentTable('');
           setCurrentPage(0);
           setSortState(null);
@@ -115,6 +120,7 @@ export function useDatabaseState(addToast: AddToast) {
       } catch (error) {
         if (requestGenerationRef.current !== requestGeneration) return;
         addErrorToast(addToast, 'DBカタログ取得', 'DB一覧を取得できませんでした', error);
+        committedTableRef.current = '';
         setDbTables([]);
         setCurrentTable('');
         setCurrentPage(0);
