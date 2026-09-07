@@ -3,7 +3,11 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { renderHighlightedBody } from '../models/logFormat';
 import { parseArchiveDate } from '../models/archiveFormat';
 import { formatFileSize } from '../../../shared/lib/byteFormat';
-import { useModalDialog } from '../../../shared/hooks/useModalDialog';
+import {
+  closeDialog,
+  closeDialogOnBackdrop,
+  useModalDialog,
+} from '../../../shared/hooks/useModalDialog';
 import type { ArchiveFileItem, LogViewerData } from '../models/types';
 import shared from '../../../shared/styles/shared.module.css';
 import styles from './LogViewerModal.module.css';
@@ -97,14 +101,9 @@ export function LogViewerModal({
   onClose,
 }: LogViewerModalProps) {
   const listRef = useRef<HTMLDivElement>(null);
-  const titleRef = useRef<HTMLHeadingElement>(null);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
-  const { dialogRef, closeDialog, handleCancel, handleBackdropMouseDown } = useModalDialog({
-    onClose,
-    initialFocusRef: titleRef,
-    shouldCloseOnBackdrop: true,
-  });
+  const dialogRef = useModalDialog();
 
   const hasExternalFiles = externalFiles.length > 0;
 
@@ -200,8 +199,8 @@ export function LogViewerModal({
       className={`${styles.root} ${shared.modalOverlay} ${shared.fullscreen}`}
       aria-labelledby="log-viewer-title"
       aria-describedby="log-viewer-source"
-      onCancel={handleCancel}
-      onMouseDown={handleBackdropMouseDown}
+      onClose={onClose}
+      onMouseDown={closeDialogOnBackdrop}
     >
       <div className={`${styles.content} ${shared.modalContent}`}>
         {/* ── サイドバー ── */}
@@ -288,7 +287,7 @@ export function LogViewerModal({
         <div className={styles.main}>
           <div className={styles.mainHeader}>
             <div className={styles.mainHeaderCopy}>
-              <h3 ref={titleRef} id="log-viewer-title" className={styles.mainTitle} tabIndex={-1}>
+              <h3 id="log-viewer-title" className={styles.mainTitle} tabIndex={-1} autoFocus>
                 ログビューア
               </h3>
               <p id="log-viewer-source" className={styles.mainSub}>

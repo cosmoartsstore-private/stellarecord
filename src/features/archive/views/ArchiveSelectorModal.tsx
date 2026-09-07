@@ -1,6 +1,6 @@
 import { useRef, type KeyboardEvent, type MouseEvent } from 'react';
 import { StellaIcon, stellaIconNames } from '../../../shared/components/Icons';
-import { useModalDialog } from '../../../shared/hooks/useModalDialog';
+import { closeDialog, useModalDialog } from '../../../shared/hooks/useModalDialog';
 import { formatFileSize } from '../../../shared/lib/byteFormat';
 import type { ArchiveFileItem } from '../models/types';
 import shared from '../../../shared/styles/shared.module.css';
@@ -29,12 +29,8 @@ export function ArchiveSelectorModal({
   onFileAction,
   onConfirm,
 }: ArchiveSelectorModalProps) {
-  const titleRef = useRef<HTMLHeadingElement>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const { dialogRef, closeDialog, handleCancel } = useModalDialog({
-    onClose,
-    initialFocusRef: titleRef,
-  });
+  const dialogRef = useModalDialog();
 
   /** 矢印キーと Home / End でファイル項目間のフォーカスを移動する。 */
   const handleItemKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
@@ -67,12 +63,12 @@ export function ArchiveSelectorModal({
       className={`${styles.root} ${shared.modalOverlay} ${shared.fullscreen}`}
       aria-labelledby="archive-selector-title"
       aria-describedby="archive-selector-description"
-      onCancel={handleCancel}
+      onClose={onClose}
     >
       <div className={`${styles.content} ${shared.modalContent}`}>
         <div className={styles.header}>
           <div>
-            <h3 ref={titleRef} id="archive-selector-title" tabIndex={-1}>
+            <h3 id="archive-selector-title" tabIndex={-1} autoFocus>
               復元
             </h3>
             <p id="archive-selector-description">取り込むログを選択してください</p>

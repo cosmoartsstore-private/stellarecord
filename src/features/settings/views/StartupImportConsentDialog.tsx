@@ -1,5 +1,5 @@
 import shared from '../../../shared/styles/shared.module.css';
-import { useModalDialog } from '../../../shared/hooks/useModalDialog';
+import { preventDialogCancel, useModalDialog } from '../../../shared/hooks/useModalDialog';
 import { DataLocationList } from './DataLocationList';
 import styles from './StartupImportConsentDialog.module.css';
 
@@ -14,7 +14,7 @@ interface StartupImportConsentDialogProps {
 /** 初回起動時に、ログ取り込みの保存先と継続実行について確認する。 */
 export function StartupImportConsentDialog(props: StartupImportConsentDialogProps) {
   const { logArchivePath, databasePath, isSaving, onAllow, onDecline } = props;
-  const { dialogRef, handleCancel } = useModalDialog();
+  const dialogRef = useModalDialog();
 
   return (
     <dialog
@@ -22,7 +22,7 @@ export function StartupImportConsentDialog(props: StartupImportConsentDialogProp
       className={shared.modalOverlay}
       aria-labelledby="startup-import-title"
       aria-describedby="startup-import-description startup-import-note"
-      onCancel={handleCancel}
+      onCancel={preventDialogCancel}
     >
       <section className={`${shared.modalContent} ${styles.dialog}`}>
         <h3 id="startup-import-title">起動時のログ取り込み</h3>

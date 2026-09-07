@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { useModalDialog } from '../../../shared/hooks/useModalDialog';
+import { closeDialog, useModalDialog } from '../../../shared/hooks/useModalDialog';
 import shared from '../../../shared/styles/shared.module.css';
 import styles from './RegistrySection.module.css';
 import { extractExeDisplayName, pickExeFile } from '../services/registryService';
@@ -14,11 +14,7 @@ export function RegisterAppModal({ onClose, onConfirm }: RegisterAppModalProps) 
   const [path, setPath] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const titleRef = useRef<HTMLHeadingElement>(null);
-  const { dialogRef, closeDialog, handleCancel } = useModalDialog({
-    onClose,
-    initialFocusRef: titleRef,
-  });
+  const dialogRef = useModalDialog();
 
   // 直前に自動補完で入れた名前。ユーザーが手動編集した場合は ref と現値が乖離するため、
   // 次の exe 選択時に上書きしてよいかどうかを判定できる。
@@ -57,10 +53,10 @@ export function RegisterAppModal({ onClose, onConfirm }: RegisterAppModalProps) 
       className={shared.modalOverlay}
       aria-labelledby="register-app-title"
       aria-describedby="register-app-description"
-      onCancel={handleCancel}
+      onClose={onClose}
     >
       <div className={shared.modalContent}>
-        <h3 ref={titleRef} id="register-app-title" tabIndex={-1}>
+        <h3 id="register-app-title" tabIndex={-1} autoFocus>
           アプリを登録
         </h3>
         <p id="register-app-description">ランチャーから起動する実行ファイルを登録します。</p>

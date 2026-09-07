@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
 import { open } from '@tauri-apps/plugin-shell';
 import { StellaIcon, stellaIconNames } from '../shared/components/Icons';
-import { useModalDialog } from '../shared/hooks/useModalDialog';
+import { closeDialog, closeDialogOnBackdrop, useModalDialog } from '../shared/hooks/useModalDialog';
 import shared from '../shared/styles/shared.module.css';
 import styles from './CreditModal.module.css';
 import avatarSrc from '../assets/avatar.jpg';
@@ -48,12 +48,7 @@ export function CreditButton() {
 /** 制作者情報・アプリバージョン・外部リンクを表示するクレジットモーダル本体。 */
 function CreditModal({ onClose }: { onClose: () => void }) {
   const [version, setVersion] = useState('');
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const { dialogRef, closeDialog, handleCancel, handleBackdropMouseDown } = useModalDialog({
-    onClose,
-    initialFocusRef: closeButtonRef,
-    shouldCloseOnBackdrop: true,
-  });
+  const dialogRef = useModalDialog();
 
   useEffect(() => {
     void getVersion().then(setVersion);
@@ -69,19 +64,19 @@ function CreditModal({ onClose }: { onClose: () => void }) {
       ref={dialogRef}
       className={shared.modalOverlay}
       aria-labelledby="credit-title"
-      onCancel={handleCancel}
-      onMouseDown={handleBackdropMouseDown}
+      onClose={onClose}
+      onMouseDown={closeDialogOnBackdrop}
     >
       <div className={`${shared.modalContent} ${styles.modal}`}>
         <h3 id="credit-title" className={styles.visuallyHidden}>
           クレジット
         </h3>
         <button
-          ref={closeButtonRef}
           type="button"
           className={styles.closeButton}
           onClick={closeDialog}
           aria-label="クレジットを閉じる"
+          autoFocus
         >
           <StellaIcon name={stellaIconNames.close} />
         </button>

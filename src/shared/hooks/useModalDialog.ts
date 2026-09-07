@@ -1,56 +1,30 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  type MouseEvent,
-  type RefObject,
-  type SyntheticEvent,
-} from 'react';
-
-interface ModalDialogOptions {
-  onClose?: () => void;
-  initialFocusRef?: RefObject<HTMLElement | null>;
-  shouldCloseOnBackdrop?: boolean;
-}
+import { useEffect, useRef, type MouseEvent, type SyntheticEvent } from 'react';
 
 /**
- * ネイティブ dialog の表示、フォーカス移動、Escape、背景クリックを統一する。
- * onClose がない必須回答ダイアログでは Escape を抑止する。
+ * ネイティブ dialog をモーダルとして表示する。
+ * 初期フォーカスは各ダイアログの autoFocus 属性で指定する。
  */
-export function useModalDialog(options: ModalDialogOptions = {}) {
-  const { onClose, initialFocusRef, shouldCloseOnBackdrop = false } = options;
+export function useModalDialog() {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (!dialog.open) dialog.showModal();
-    initialFocusRef?.current?.focus();
+    if (!dialogRef.current?.open) dialogRef.current?.showModal();
+  }, []);
 
-    return () => {
-      if (dialog.open) dialog.close();
-    };
-  }, [initialFocusRef]);
+  return dialogRef;
+}
 
-  const closeDialog = useCallback(() => {
-    if (dialogRef.current?.open) dialogRef.current.close();
-    onClose?.();
-  }, [onClose]);
+/** 操作元を含む最寄りの dialog を閉じ、ブラウザ標準のフォーカス復元を実行する。 */
+export function closeDialog(event: MouseEvent<HTMLElement>) {
+  event.currentTarget.closest('dialog')?.close();
+}
 
-  const handleCancel = useCallback(
-    (event: SyntheticEvent<HTMLDialogElement>) => {
-      event.preventDefault();
-      if (onClose) closeDialog();
-    },
-    [closeDialog, onClose],
-  );
+/** dialog 本体の背景が押された場合だけ閉じる。 */
+export function closeDialogOnBackdrop(event: MouseEvent<HTMLDialogElement>) {
+  if (event.target === event.currentTarget) event.currentTarget.close();
+}
 
-  const handleBackdropMouseDown = useCallback(
-    (event: MouseEvent<HTMLDialogElement>) => {
-      if (shouldCloseOnBackdrop && event.target === event.currentTarget) closeDialog();
-    },
-    [closeDialog, shouldCloseOnBackdrop],
-  );
-
-  return { dialogRef, closeDialog, handleCancel, handleBackdropMouseDown };
+/** 必須回答ダイアログの Escape によるキャンセルを抑止する。 */
+export function preventDialogCancel(event: SyntheticEvent<HTMLDialogElement>) {
+  event.preventDefault();
 }

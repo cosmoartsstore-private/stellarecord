@@ -1,6 +1,10 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { StellaIcon, stellaIconNames } from '../../../shared/components/Icons';
-import { useModalDialog } from '../../../shared/hooks/useModalDialog';
+import {
+  closeDialog,
+  closeDialogOnBackdrop,
+  useModalDialog,
+} from '../../../shared/hooks/useModalDialog';
 import { formatFileSize } from '../../../shared/lib/byteFormat';
 import type { DeletableLogInfo } from '../models/types';
 import shared from '../../../shared/styles/shared.module.css';
@@ -17,12 +21,7 @@ interface PolarisCleanupModalProps {
 export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanupModalProps) {
   // 一括削除が一般的なため、初期状態で全ファイルを選択
   const [selected, setSelected] = useState<Set<string>>(new Set(logs.map((l) => l.file_name)));
-  const titleRef = useRef<HTMLHeadingElement>(null);
-  const { dialogRef, closeDialog, handleCancel, handleBackdropMouseDown } = useModalDialog({
-    onClose,
-    initialFocusRef: titleRef,
-    shouldCloseOnBackdrop: true,
-  });
+  const dialogRef = useModalDialog();
 
   const isAllSelected = selected.size === logs.length;
 
@@ -54,8 +53,8 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
       className={shared.modalOverlay}
       aria-labelledby="polaris-cleanup-title"
       aria-describedby="polaris-cleanup-description polaris-cleanup-notice"
-      onCancel={handleCancel}
-      onMouseDown={handleBackdropMouseDown}
+      onClose={onClose}
+      onMouseDown={closeDialogOnBackdrop}
     >
       <div className={`${shared.modalContent} ${styles.content}`}>
         <div className={styles.header}>
@@ -63,7 +62,7 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
             <StellaIcon name={stellaIconNames.alert} />
           </div>
           <div>
-            <h3 ref={titleRef} id="polaris-cleanup-title" className={styles.title} tabIndex={-1}>
+            <h3 id="polaris-cleanup-title" className={styles.title} tabIndex={-1} autoFocus>
               元ログ削除
             </h3>
             <p id="polaris-cleanup-description" className={styles.subtitle}>
