@@ -9,7 +9,7 @@ export function useModalDialog() {
 
   useEffect(() => {
     if (!dialogRef.current?.open) dialogRef.current?.showModal();
-    dialogRef.current?.querySelector<HTMLElement>('[autofocus]')?.focus();
+    document.getElementById(dialogRef.current?.getAttribute('aria-labelledby') ?? '')?.focus();
   }, []);
 
   return dialogRef;
