@@ -3,8 +3,9 @@ import type { ManagementSettings } from '../models/types';
 import { loadManagementSettings as loadManagementSettingsCommand, saveManagementSettings as saveManagementSettingsCommand } from '../services/settingsService';
 import { UserFacingError } from '../../../shared/lib/errors';
 
-/** Backend設定読み込み前に使用する安全なデフォルト値 */
-const defaultManagementSettings: ManagementSettings = { startup_enabled: false, startup_preference_set: false, archive_limit_mb: 300 };
+/** Backend設定読込前の容量値と画面の下書きで共有する既定値。 */
+const defaultArchiveLimitMb = 300;
+const defaultManagementSettings: ManagementSettings = { startup_enabled: false, startup_preference_set: false, archive_limit_mb: defaultArchiveLimitMb };
 
 const maxArchiveLimitMb = 10_485_760;
 
@@ -23,7 +24,7 @@ function parseArchiveLimit(draft: string): number | null {
 export function useSettingsState() {
   const [managementSettings, setManagementSettings] =
     useState<ManagementSettings>(defaultManagementSettings);
-  const [archiveLimitDraft, setArchiveLimitDraft] = useState('300');
+  const [archiveLimitDraft, setArchiveLimitDraft] = useState(String(defaultArchiveLimitMb));
   const [isStartupEnabledDraft, setIsStartupEnabledDraft] = useState(false);
   const persistedSettingsRef = useRef<ManagementSettings | null>(null);
   const settingsLoadPromiseRef = useRef<Promise<ManagementSettings> | null>(null);

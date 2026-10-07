@@ -40,6 +40,20 @@ describe('useSettingsState', () => {
     vi.useRealTimers();
   });
 
+  it('初回読込前は既定容量を表示し、取得後は永続設定へ更新する', async () => {
+    const settingsResponse = createDeferred<ManagementSettings>();
+    loadManagementSettingsMock.mockReturnValueOnce(settingsResponse.promise);
+    const { result } = renderHook(() => useSettingsState());
+    expect(result.current.archiveLimitDraft).toBe('300');
+    expect(result.current.isStartupEnabledDraft).toBe(false);
+    await act(async () => {
+      await vi.runOnlyPendingTimersAsync();
+      settingsResponse.resolve({ startup_enabled: true, startup_preference_set: true, archive_limit_mb: 800 });
+    });
+    expect(result.current.archiveLimitDraft).toBe('800');
+    expect(result.current.isStartupEnabledDraft).toBe(true);
+  });
+
   it('容量下書きが不正でもstartup切替時は最後に読み込んだ容量を保存する', async () => {
     const { result } = renderHook(() => useSettingsState());
 
