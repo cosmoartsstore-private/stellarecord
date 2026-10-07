@@ -1,8 +1,5 @@
 import { useState } from 'react';
-import {
-  getDeletableSourceLogs,
-  deleteSourceLogs,
-} from '../features/analyze/services/analyzeService';
+import { getDeletableSourceLogs, deleteSourceLogs } from '../features/analyze/services/analyzeService';
 import type { DeletableLogInfo } from '../features/analyze/models/types';
 import type { ArchiveFileItem } from '../features/archive/models/types';
 import { addErrorToast, type AddToast } from '../shared/lib/errors';
@@ -31,20 +28,7 @@ interface UseAppModalsOptions {
  * ここに委譲する。呼び出し側は modals.xxx のパターンで操作する
  */
 export function useAppModals(options: UseAppModalsOptions) {
-  const {
-    addToast,
-    openEnhancedSync,
-    executeEnhancedSync,
-    openLogViewerSelection,
-    openSelectedLogViewer,
-    closeLogViewer,
-    setAnalyzeRunning,
-    batchSelectedFiles,
-    clearBatchSelection,
-    selectExternalLogFiles,
-    clearExternalLogFiles,
-    externalFiles,
-  } = options;
+  const { addToast, openEnhancedSync, executeEnhancedSync, openLogViewerSelection, openSelectedLogViewer, closeLogViewer, setAnalyzeRunning, batchSelectedFiles, clearBatchSelection, selectExternalLogFiles, clearExternalLogFiles, externalFiles } = options;
 
   const [isArchiveSelectorVisible, setIsArchiveSelectorVisible] = useState(false);
   const [isLogViewerModalVisible, setIsLogViewerModalVisible] = useState(false);
@@ -75,12 +59,7 @@ export function useAppModals(options: UseAppModalsOptions) {
       await executeEnhancedSync(targets);
     } catch (error) {
       setAnalyzeRunning(false);
-      addErrorToast(
-        addToast,
-        '選択アーカイブ取り込み開始',
-        '取り込みを開始できませんでした',
-        error,
-      );
+      addErrorToast(addToast, '選択アーカイブ取り込み開始', '取り込みを開始できませんでした', error);
     }
   };
 
@@ -94,12 +73,7 @@ export function useAppModals(options: UseAppModalsOptions) {
       }
       setIsLogViewerModalVisible(true);
       openSelectedLogViewer(files[0].name).catch((error: unknown) => {
-        addErrorToast(
-          addToast,
-          '最新アーカイブログ閲覧開始',
-          'ログの読み込みを開始できませんでした',
-          error,
-        );
+        addErrorToast(addToast, '最新アーカイブログ閲覧開始', 'ログの読み込みを開始できませんでした', error);
       });
     } catch (error) {
       addErrorToast(addToast, 'ログビューア一覧取得', 'ログビューアを開けませんでした', error);
@@ -109,12 +83,7 @@ export function useAppModals(options: UseAppModalsOptions) {
   /** モーダルを閉じずに別のファイルに切り替える */
   const handleViewerNavigateToFile = (fileKey: string) => {
     openSelectedLogViewer(fileKey).catch((error: unknown) => {
-      addErrorToast(
-        addToast,
-        'ログビューアファイル切替',
-        'ログの読み込みを開始できませんでした',
-        error,
-      );
+      addErrorToast(addToast, 'ログビューアファイル切替', 'ログの読み込みを開始できませんでした', error);
     });
   };
 
@@ -143,20 +112,10 @@ export function useAppModals(options: UseAppModalsOptions) {
         return;
       }
       openSelectedLogViewer(files[0].name).catch((error: unknown) => {
-        addErrorToast(
-          addToast,
-          '既定アーカイブログ閲覧開始',
-          'ログの読み込みを開始できませんでした',
-          error,
-        );
+        addErrorToast(addToast, '既定アーカイブログ閲覧開始', 'ログの読み込みを開始できませんでした', error);
       });
     } catch (error) {
-      addErrorToast(
-        addToast,
-        '既定アーカイブフォルダ切替',
-        '既定フォルダへ切り替えられませんでした',
-        error,
-      );
+      addErrorToast(addToast, '既定アーカイブフォルダ切替', '既定フォルダへ切り替えられませんでした', error);
     }
   };
 

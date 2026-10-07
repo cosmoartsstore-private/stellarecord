@@ -1,20 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { UnlistenFn } from '@tauri-apps/api/event';
 import type { StorageStatus } from '../models/types';
-import {
-  cancelAnalyze,
-  loadStorageStatus,
-  onAnalyzeFinished,
-  onAnalyzeProgress,
-} from '../services/analyzeService';
+import { cancelAnalyze, loadStorageStatus, onAnalyzeFinished, onAnalyzeProgress } from '../services/analyzeService';
 import { addErrorToast, type AddToast } from '../../../shared/lib/errors';
 
 /** ストレージメーターの初期表示用ゼロ値 */
-const emptyStorageStatus: StorageStatus = {
-  current: 0,
-  limit: 0,
-  percent: 0,
-};
+const emptyStorageStatus: StorageStatus = { current: 0, limit: 0, percent: 0 };
 
 /**
  * 解析の進捗管理・ストレージポーリング・キャンセル制御を統括するフック
@@ -28,7 +19,7 @@ export function useAnalyzeState(addToast: AddToast) {
   const [analyzeStatus, setAnalyzeStatus] = useState('');
   const [storageStatus, setStorageStatus] = useState<StorageStatus>(emptyStorageStatus);
 
-  /** バックエンドからアーカイブサイズを取得する（タイマーおよび同期完了時に呼ばれる） */
+  /** Backendからアーカイブサイズを取得する（タイマーおよび同期完了時に呼ばれる） */
   const pollStorage = useCallback(async () => {
     try {
       const [current, limit] = await loadStorageStatus();
@@ -76,7 +67,7 @@ export function useAnalyzeState(addToast: AddToast) {
     };
   }, [pollStorage]);
 
-  /** 解析の中断を要求する（実際の停止タイミングはバックエンドが決定する） */
+  /** 解析の中断を要求する（実際の停止タイミングはBackendが決定する） */
   const handleCancelSync = useCallback(async () => {
     try {
       await cancelAnalyze();

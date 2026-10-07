@@ -1,15 +1,15 @@
-//! `StellaRecord` Tauri バックエンド。
+//! `StellaRecord` Tauri Backend。
 //!
 //! `VRChat` ログデータを管理する Tauri v2 デスクトップアプリの Rust 側。
 //! 以下のモジュールを提供する:
 //!
 //! - **analyze** -- `VRChat` ログ解析と `SQLite` 取り込みパイプライン。
-//! - **commands** -- React フロントエンドから呼び出される Tauri IPC コマンドハンドラ。
-//! - **config** -- レジストリベースの設定読み書き。
-//! - **models** -- バックエンドとフロントエンド間でやり取りする共有データ構造体。
+//! - **commands** -- React Frontendから呼び出される Tauri IPC コマンドハンドラ。
+//! - **config** -- registryベースの設定読み書き。
+//! - **models** -- `Backend`と`Frontend`間でやり取りする共有データ構造体。
 //! - **platform** -- Windows 固有のユーティリティ（パニックフック、多重起動防止、
-//!   レジストリ、プロセス起動）。
-//! - **utils** -- ログ出力、エラー整形、レジストリ参照、イベント送信ヘルパー。
+//!   registry、プロセス起動）。
+//! - **utils** -- ログ出力、エラー整形、registry参照、イベント送信ヘルパー。
 
 pub mod analyze;
 pub mod commands;
@@ -21,12 +21,12 @@ pub mod utils;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-use tauri::{WebviewUrl, WebviewWindowBuilder};
+use tauri::{ WebviewUrl, WebviewWindowBuilder };
 
 /// 長時間実行される解析タスクの共有状態。
 ///
-/// キャンセルフラグと実行中フラグを `AtomicBool` で保持し、フロントエンドの
-/// 表示状態に依存せずバックエンド境界で取り込みワーカーを1本に制限する。
+/// キャンセルフラグと実行中フラグを `AtomicBool` で保持し、Frontendの
+/// 表示状態に依存せずBackend境界で取り込みワーカーを1本に制限する。
 pub struct AnalyzeCancelStatus {
     pub cancel: Arc<AtomicBool>,
     pub running: Arc<AtomicBool>,
@@ -37,10 +37,7 @@ pub struct AnalyzeCancelStatus {
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .manage(AnalyzeCancelStatus {
-            cancel: Arc::new(AtomicBool::new(false)),
-            running: Arc::new(AtomicBool::new(false)),
-        })
+        .manage(AnalyzeCancelStatus { cancel: Arc::new(AtomicBool::new(false)), running: Arc::new(AtomicBool::new(false)), })
         .invoke_handler(tauri::generate_handler![
             commands::archive::list_archive_files,
             commands::archive::read_archive_log_viewer,
@@ -68,10 +65,7 @@ pub fn run() {
             commands::log_client_error,
         ])
         .setup(|app| {
-            let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
-                .title("STELLA RECORD")
-                .inner_size(1280.0, 800.0)
-                .maximized(true);
+            let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default()).title("STELLA RECORD").inner_size(1280.0, 800.0).maximized(true);
 
             if let Some(install_dir) = utils::get_stellarecord_install_dir() {
                 builder = builder.data_directory(install_dir.join("Data").join("EBWebView"));
@@ -95,7 +89,7 @@ pub fn run() {
 #[cfg(windows)]
 fn show_error_dialog(msg: &str) {
     use windows::core::HSTRING;
-    use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
+    use windows::Win32::UI::WindowsAndMessaging::{ MessageBoxW, MB_ICONERROR, MB_OK };
 
     let text = HSTRING::from(msg);
     let caption = HSTRING::from("StellaRecord");

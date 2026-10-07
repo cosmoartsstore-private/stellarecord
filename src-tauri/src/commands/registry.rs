@@ -4,7 +4,7 @@ use std::path::Path;
 
 use rusqlite::params;
 
-use crate::{platform, utils};
+use crate::{ platform, utils };
 
 use super::open_initialized_main_db;
 
@@ -33,8 +33,7 @@ pub fn extract_exe_display_name(path: String) -> Result<String, String> {
     if !exe_path.is_file() {
         return Err("指定されたファイルが見つかりません。".to_string());
     }
-    platform::read_exe_display_name(exe_path)
-        .ok_or_else(|| "実行ファイルから表示名を取得できませんでした。".to_string())
+    platform::read_exe_display_name(exe_path).ok_or_else(|| "実行ファイルから表示名を取得できませんでした。".to_string())
 }
 
 /// 任意の exe をランチャーに登録する。
@@ -63,20 +62,10 @@ pub fn register_app(path: String, name: String, description: String) -> Result<(
 
 /// `apps` テーブルへアプリ1件を挿入する。
 ///
-/// 接続を引数で受け取ることで、レジストリや実 DB を経由せずインメモリ DB に対して
+/// 接続を引数で受け取ることで、registryや実 DB を経由せずインメモリ DB に対して
 /// 挿入と UNIQUE 制約違反時のエラーメッセージ整形を検証できる。
-fn insert_app_record(
-    conn: &rusqlite::Connection,
-    name: &str,
-    description: &str,
-    path: &str,
-    icon: Option<&[u8]>,
-) -> Result<(), String> {
-    conn.execute(
-        "INSERT INTO apps (name, description, path, icon) VALUES (?1, ?2, ?3, ?4)",
-        params![name, description, path, icon],
-    )
-    .map_err(|e| {
+fn insert_app_record(conn: &rusqlite::Connection, name: &str, description: &str, path: &str, icon: Option<&[u8]>,) -> Result<(), String> {
+    conn.execute("INSERT INTO apps (name, description, path, icon) VALUES (?1, ?2, ?3, ?4)", params![name, description, path, icon],).map_err(|e| {
         if let rusqlite::Error::SqliteFailure(err, _) = &e {
             if err.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE {
                 return "同じパスのアプリが既に登録されています。".to_string();
@@ -101,9 +90,7 @@ pub fn unregister_app(path: String) -> Result<(), String> {
 ///
 /// 接続を引数で受け取ることで、削除と「該当なし」時のエラー分岐をインメモリ DB で検証できる。
 fn delete_app_record(conn: &rusqlite::Connection, path: &str) -> Result<(), String> {
-    let affected = conn
-        .execute("DELETE FROM apps WHERE path = ?1", params![path])
-        .map_err(|e| utils::command_err("アプリの登録解除に失敗しました", e))?;
+    let affected = conn.execute("DELETE FROM apps WHERE path = ?1", params![path]).map_err(|e| utils::command_err("アプリの登録解除に失敗しました", e))?;
 
     if affected == 0 {
         return Err("該当するアプリが見つかりません。".to_string());

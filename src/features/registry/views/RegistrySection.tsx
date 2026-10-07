@@ -27,9 +27,7 @@ interface LauncherItemProps {
 /** アイコン未登録時に表示するプレースホルダー */
 function LauncherFallbackIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="icon-svg">
-      <path d="M16,9H19L14,16L9,9H12V5H16M11,2H13V4H11V2M15,19V17H17V19H15M11,19V17H13V19H11M7,19V17H9V19H7Z" />
-    </svg>
+    <svg viewBox="0 0 24 24" className="icon-svg"><path d="M16,9H19L14,16L9,9H12V5H16M11,2H13V4H11V2M15,19V17H17V19H15M11,19V17H13V19H11M7,19V17H9V19H7Z" /></svg>
   );
 }
 
@@ -68,36 +66,23 @@ function LauncherItem({ app, viewMode, onLaunch, onOpenFolder, onUnregister }: L
         </>
       )}
       <div className={isList ? styles.launcherListActions : styles.launcherCardLargeActions}>
-        <button
-          type="button"
-          className={
+        <button type="button" className={
             isList
               ? `${shared.btn} ${shared.primary}`
               : `${shared.btn} ${shared.primary} ${styles.launcherLaunchButton}`
-          }
-          onClick={() => {
+          } onClick={() => {
             onLaunch(app);
-          }}
-        >
+          }}>
           起動
         </button>
-        <button
-          type="button"
-          className={shared.btn}
-          onClick={() => {
+        <button type="button" className={shared.btn} onClick={() => {
             onOpenFolder(app);
-          }}
-        >
+          }}>
           フォルダを開く
         </button>
-        <button
-          type="button"
-          className={styles.deleteButton}
-          onClick={() => {
+        <button type="button" className={styles.deleteButton} onClick={() => {
             onUnregister(app);
-          }}
-          aria-label={`${app.name} の登録を解除`}
-        >
+          }} aria-label={`${app.name} の登録を解除`}>
           <StellaIcon name={stellaIconNames.trash} />
         </button>
       </div>
@@ -106,17 +91,7 @@ function LauncherItem({ app, viewMode, onLaunch, onOpenFolder, onUnregister }: L
 }
 
 /** リスト/カード切替・リロード・アプリ操作を備えたランチャーパネル */
-export function RegistrySection({
-  registryApps,
-  launcherViewMode,
-  isReloading,
-  onSetLauncherViewMode,
-  onLaunchApp,
-  onOpenFolder,
-  onUnregisterApp,
-  onRegisterApp,
-  onReload,
-}: RegistrySectionProps) {
+export function RegistrySection({ registryApps, launcherViewMode, isReloading, onSetLauncherViewMode, onLaunchApp, onOpenFolder, onUnregisterApp, onRegisterApp, onReload }: RegistrySectionProps) {
   const allApps = registryApps.apps;
 
   return (
@@ -126,43 +101,22 @@ export function RegistrySection({
           <h2>ランチャー</h2>
           <div className={styles.headerActions}>
             <div className={styles.launcherViewSwitch}>
-              <button
-                type="button"
-                className={`${styles.launcherViewButton} ${launcherViewMode === 'list' ? styles.active : ''}`}
-                onClick={() => {
+              <button type="button" className={`${styles.launcherViewButton} ${launcherViewMode === 'list' ? styles.active : ''}`} onClick={() => {
                   onSetLauncherViewMode('list');
-                }}
-                aria-label="リスト表示"
-                aria-pressed={launcherViewMode === 'list'}
-              >
+                }} aria-label="リスト表示" aria-pressed={launcherViewMode === 'list'}>
                 <StellaIcon name={stellaIconNames.list} />
               </button>
-              <button
-                type="button"
-                className={`${styles.launcherViewButton} ${launcherViewMode === 'card' ? styles.active : ''}`}
-                onClick={() => {
+              <button type="button" className={`${styles.launcherViewButton} ${launcherViewMode === 'card' ? styles.active : ''}`} onClick={() => {
                   onSetLauncherViewMode('card');
-                }}
-                aria-label="カード表示"
-                aria-pressed={launcherViewMode === 'card'}
-              >
+                }} aria-label="カード表示" aria-pressed={launcherViewMode === 'card'}>
                 <StellaIcon name={stellaIconNames.grid} />
               </button>
             </div>
-            <button
-              type="button"
-              className={`${shared.btn} ${shared.primary}`}
-              onClick={onRegisterApp}
-            >
+            <button type="button" className={`${shared.btn} ${shared.primary}`} onClick={onRegisterApp}>
               <StellaIcon name={stellaIconNames.plus} />
               登録
             </button>
-            <button
-              type="button"
-              className={`${shared.btn} ${styles.reloadButton}`}
-              onClick={onReload}
-              disabled={isReloading}
-            >
+            <button type="button" className={`${shared.btn} ${styles.reloadButton}`} onClick={onReload} disabled={isReloading}>
               <span className={`${styles.reloadIcon} ${isReloading ? styles.reloadIconSpin : ''}`}>
                 <StellaIcon name={stellaIconNames.refresh} />
               </span>
@@ -177,19 +131,8 @@ export function RegistrySection({
         )}
 
         {allApps.length > 0 && (
-          <div
-            className={launcherViewMode === 'list' ? styles.launcherList : styles.launcherCardGrid}
-          >
-            {allApps.map((app) => (
-              <LauncherItem
-                key={app.path}
-                app={app}
-                viewMode={launcherViewMode}
-                onLaunch={onLaunchApp}
-                onOpenFolder={onOpenFolder}
-                onUnregister={onUnregisterApp}
-              />
-            ))}
+          <div className={launcherViewMode === 'list' ? styles.launcherList : styles.launcherCardGrid}>
+            {allApps.map((app) => (<LauncherItem key={app.path} app={app} viewMode={launcherViewMode} onLaunch={onLaunchApp} onOpenFolder={onOpenFolder} onUnregister={onUnregisterApp} />))}
           </div>
         )}
       </div>

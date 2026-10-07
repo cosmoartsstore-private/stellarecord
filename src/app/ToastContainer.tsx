@@ -12,9 +12,7 @@ export function ToastContainer({ toasts }: ToastContainerProps) {
     <div className={styles.toastContainer}>
       {toasts.map((toast) => (
         <div key={toast.id} className={styles.toast}>
-          <div className={styles.toastIcon}>
-            <StellaIcon name={stellaIconNames.info} />
-          </div>
+          <div className={styles.toastIcon}><StellaIcon name={stellaIconNames.info} /></div>
           <div className={styles.toastMsg}>{toast.msg}</div>
         </div>
       ))}

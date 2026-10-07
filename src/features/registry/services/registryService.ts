@@ -7,19 +7,17 @@ export const launchExternalApp = (appPath: string) => invoke('launch_external_ap
 /** 指定パスをOSのファイルエクスプローラで開く */
 export const openFolder = (path: string) => invoke('open_folder', { path });
 
-/** ランチャー画面用のアプリレジストリカタログを取得する */
+/** ランチャー画面用のアプリregistryカタログを取得する */
 export const loadRegistryCatalog = () => invoke<RegistryCatalog>('read_registry_catalog');
 
 /** ネイティブファイルダイアログで exe ファイルを選択する */
 export const pickExeFile = () => invoke<string | null>('pick_exe_file');
 
 /** exe の VersionInfo から表示名（FileDescription / ProductName / ファイル名）を取得する */
-export const extractExeDisplayName = (path: string) =>
-  invoke<string>('extract_exe_display_name', { path });
+export const extractExeDisplayName = (path: string) => invoke<string>('extract_exe_display_name', { path });
 
 /** サードパーティアプリをランチャーに登録する */
-export const registerApp = (path: string, name: string, description: string) =>
-  invoke('register_app', { path, name, description });
+export const registerApp = (path: string, name: string, description: string) => invoke('register_app', { path, name, description });
 
 /** サードパーティアプリの登録を解除する */
 export const unregisterApp = (path: string) => invoke('unregister_app', { path });

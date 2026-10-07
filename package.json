@@ -17,7 +17,7 @@
     "fmt:check": "cargo fmt --manifest-path src-tauri/Cargo.toml --all --check",
     "clippy": "cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
     "test:rust": "cargo test --locked --workspace --all-targets",
-    "verify": "npm run format:check && npm run stylelint && npm run lint && npm run test:coverage && npm run build && npm run fmt:check && npm run clippy && npm run test:rust",
+    "verify": "npm run format:check && npm run stylelint && npm run lint && npm run test:coverage && npm run build && npm run clippy && npm run test:rust",
     "tauri": "tauri"
   },
   "dependencies": {

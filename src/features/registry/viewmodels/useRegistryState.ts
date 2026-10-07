@@ -3,11 +3,9 @@ import type { RegistryCatalog } from '../models/types';
 import { loadRegistryCatalog } from '../services/registryService';
 
 /** データ取得前に使用する空のカタログ */
-const emptyRegistryCatalog: RegistryCatalog = {
-  apps: [],
-};
+const emptyRegistryCatalog: RegistryCatalog = { apps: [] };
 
-/** レジストリアプリカタログの取得・リロードを管理するフック */
+/** registryアプリカタログの取得・リロードを管理するフック */
 export function useRegistryState() {
   const [registryApps, setRegistryApps] = useState<RegistryCatalog>(emptyRegistryCatalog);
   const [isReloading, setIsReloading] = useState(false);
@@ -44,10 +42,5 @@ export function useRegistryState() {
     };
   }, [loadRegistryState]);
 
-  return {
-    registryApps,
-    isReloading,
-    reloadRegistry,
-    refreshRegistry: loadRegistryState,
-  };
+  return { registryApps, isReloading, reloadRegistry, refreshRegistry: loadRegistryState };
 }

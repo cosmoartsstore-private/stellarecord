@@ -5,7 +5,7 @@ export interface StorageStatus {
   percent: number;
 }
 
-/** Rustバックエンドが発行する解析進捗ペイロード */
+/** RustBackendが発行する解析進捗ペイロード */
 export interface AnalyzeProgressEvent {
   status: string;
   progress: string;

@@ -20,19 +20,7 @@ interface DatabaseSectionProps {
 }
 
 /** サイドバーテーブル選択とページネーション付きの読み取り専用DBプレビュー */
-export function DatabaseSection({
-  dbTables,
-  currentTable,
-  tableData,
-  isDbLoading,
-  currentPage,
-  totalPages,
-  pageSize,
-  sortState,
-  onSelectTable,
-  onGoToPage,
-  onToggleSort,
-}: DatabaseSectionProps) {
+export function DatabaseSection({ dbTables, currentTable, tableData, isDbLoading, currentPage, totalPages, pageSize, sortState, onSelectTable, onGoToPage, onToggleSort }: DatabaseSectionProps) {
   const [isPhysicalNames, setIsPhysicalNames] = useState(false);
 
   const selectedTableSummary = dbTables.find((table) => table.name === currentTable) ?? null;
@@ -47,15 +35,9 @@ export function DatabaseSection({
   const renderSidebarItem = (table: DbTableSummary) => {
     const isActive = currentTable === table.name;
     return (
-      <button
-        key={table.name}
-        type="button"
-        onClick={() => {
+      <button key={table.name} type="button" onClick={() => {
           onSelectTable(table.name);
-        }}
-        aria-pressed={isActive}
-        className={`${styles.tableItem} ${isActive ? styles.tableItemActive : ''}`}
-      >
+        }} aria-pressed={isActive} className={`${styles.tableItem} ${isActive ? styles.tableItemActive : ''}`}>
         <span className={styles.tableItemLabel}>{isPhysicalNames ? table.name : table.label}</span>
       </button>
     );
@@ -71,14 +53,9 @@ export function DatabaseSection({
         <div className={styles.sidebar}>
           <div className={styles.sidebarTop}>
             <div className={styles.sidebarLabel}>テーブル一覧</div>
-            <button
-              type="button"
-              className={styles.nameToggle}
-              onClick={() => {
+            <button type="button" className={styles.nameToggle} onClick={() => {
                 setIsPhysicalNames((prev) => !prev);
-              }}
-              aria-pressed={isPhysicalNames}
-            >
+              }} aria-pressed={isPhysicalNames}>
               {isPhysicalNames ? 'Physical' : 'Logical'}
             </button>
           </div>
@@ -117,29 +94,17 @@ export function DatabaseSection({
             </div>
             {tableData.total_rows > 0 && (
               <div className={styles.pagination}>
-                <button
-                  type="button"
-                  className={shared.btn}
-                  onClick={() => {
+                <button type="button" className={shared.btn} onClick={() => {
                     onGoToPage(currentPage - 1);
-                  }}
-                  disabled={isDbLoading || currentPage === 0}
-                  aria-label="前のページ"
-                >
+                  }} disabled={isDbLoading || currentPage === 0} aria-label="前のページ">
                   ←
                 </button>
                 <span className={styles.paginationInfo}>
                   {String(currentPage + 1)} / {String(totalPages)}
                 </span>
-                <button
-                  type="button"
-                  className={shared.btn}
-                  onClick={() => {
+                <button type="button" className={shared.btn} onClick={() => {
                     onGoToPage(currentPage + 1);
-                  }}
-                  disabled={isDbLoading || currentPage >= totalPages - 1}
-                  aria-label="次のページ"
-                >
+                  }} disabled={isDbLoading || currentPage >= totalPages - 1} aria-label="次のページ">
                   →
                 </button>
               </div>
@@ -156,31 +121,19 @@ export function DatabaseSection({
                     {tableData.columns.map((column) => {
                       const isSorted = sortState?.column === column.name;
                       return (
-                        <th
-                          key={column.name}
-                          className={styles.sortableHeader}
-                          aria-sort={
+                        <th key={column.name} className={styles.sortableHeader} aria-sort={
                             isSorted
                               ? sortState.dir === 'asc'
                                 ? 'ascending'
                                 : 'descending'
                               : 'none'
-                          }
-                        >
-                          <button
-                            type="button"
-                            className={styles.sortButton}
-                            onClick={() => {
+                          }>
+                          <button type="button" className={styles.sortButton} onClick={() => {
                               onToggleSort(column.name);
-                            }}
-                            aria-label={`${column.label}で並べ替え`}
-                          >
+                            }} aria-label={`${column.label}で並べ替え`}>
                             <span className={styles.columnLabel}>
                               {column.label}
-                              <span
-                                aria-hidden="true"
-                                className={`${styles.sortArrow} ${isSorted ? styles.sortArrowActive : ''}`}
-                              >
+                              <span aria-hidden="true" className={`${styles.sortArrow} ${isSorted ? styles.sortArrowActive : ''}`}>
                                 {isSorted ? (sortState.dir === 'asc' ? '▲' : '▼') : '▲'}
                               </span>
                             </span>
@@ -193,24 +146,18 @@ export function DatabaseSection({
                 <tbody>
                   {tableData.columns.length === 0 && (
                     <tr>
-                      <td colSpan={1} className={styles.empty}>
-                        テーブルを選択してください
-                      </td>
+                      <td colSpan={1} className={styles.empty}>テーブルを選択してください</td>
                     </tr>
                   )}
                   {tableData.columns.length > 0 && tableData.rows.length === 0 && (
                     <tr>
-                      <td colSpan={tableData.columns.length} className={styles.empty}>
-                        データが存在しません
-                      </td>
+                      <td colSpan={tableData.columns.length} className={styles.empty}>データが存在しません</td>
                     </tr>
                   )}
                   {tableData.rows.map((row, rowIndex) => (
                     <tr key={`${tableData.name}-${String(rowIndex)}`}>
                       {row.map((cell, cellIndex) => (
-                        <td key={`${tableData.name}-${String(rowIndex)}-${String(cellIndex)}`}>
-                          {cell}
-                        </td>
+                        <td key={`${tableData.name}-${String(rowIndex)}-${String(cellIndex)}`}>{cell}</td>
                       ))}
                     </tr>
                   ))}

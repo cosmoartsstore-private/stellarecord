@@ -1,4 +1,4 @@
-//! フロントエンドから `invoke()` で呼び出される Tauri v2 コマンドハンドラ。
+//! Frontendから `invoke()` で呼び出される Tauri v2 コマンドハンドラ。
 //!
 //! 各サブモジュールがドメイン別にコマンドをグループ化する。
 //! 共有型とパス解決ヘルパーはこの親モジュールに配置する。
@@ -30,7 +30,7 @@ const ONE_MB_BYTES: u64 = 1024 * 1024;
 /// UI の設定ダイアログに公開する管理設定。
 ///
 /// `StellaRecord` と Polaris 両方の設定値を1つのペイロードにまとめ、
-/// フロントエンドが1画面でアーカイブ容量とスタートアップ動作を編集できるようにする。
+/// Frontendが1画面でアーカイブ容量とスタートアップ動作を編集できるようにする。
 #[derive(Serialize)]
 pub struct ManagementSettings {
     /// `StellaRecord` を OS のスタートアップに登録するかどうか。
@@ -41,87 +41,67 @@ pub struct ManagementSettings {
     pub archive_limit_mb: u64,
 }
 
-/// フロントエンドが期待する共有の解析進捗イベントを送出する。
+/// Frontendが期待する共有の解析進捗イベントを送出する。
 ///
 /// コマンド層でイベントフォーマットを集約し、全インポートエントリポイントが
 /// 同一のペイロード形式で状態を報告する。
 fn emit_analyze_progress(app: &AppHandle, status: String, progress: String, is_running: bool) {
-    utils::emit_event_warn(
-        app,
-        "analyze-progress",
-        AnalyzePayload {
-            status,
-            progress,
-            is_running,
-        },
-    );
+    utils::emit_event_warn(app, "analyze-progress", AnalyzePayload { status, progress, is_running, },);
 }
 
-/// `StellaRecord` が管理する圧縮ログ用データディレクトリを解決する。
+/// `StellaRecord` が管理する圧縮ログ用データdirectoryを解決する。
 ///
 /// # 戻り値
-/// `StellaRecord` 設定からのデータディレクトリパス。
+/// `StellaRecord` 設定からのデータdirectoryパス。
 ///
 /// # Errors
 /// 設定が未定義でアーカイブ操作を続行できない場合にエラーを返す。
 fn get_archive_store_dir() -> Result<PathBuf, String> {
     let setting = config::load_stellarecord_setting();
-    setting
-        .get_effective_archive_dir()
-        .ok_or_else(|| "Data ディレクトリが見つかりません。".to_string())
+    setting.get_effective_archive_dir().ok_or_else(|| "Data ディレクトリが見つかりません。".to_string())
 }
 
-/// コピー元として使用する Polaris 管理のログアーカイブディレクトリを解決する。
+/// コピー元として使用する Polaris 管理のログアーカイブdirectoryを解決する。
 fn get_source_log_dir() -> Result<PathBuf, String> {
-    let polaris_dir = utils::get_polaris_install_dir().ok_or_else(|| {
-        "Polaris のインストール先が見つかりません。レジストリを確認してください。".to_string()
-    })?;
+    let polaris_dir = utils::get_polaris_install_dir().ok_or_else(|| { "Polaris のインストール先が見つかりません。レジストリを確認してください。".to_string() })?;
     Ok(polaris_dir.join("Data").join("archive"))
 }
 
 /// `StellaRecord` の実効メインデータベースパスを解決する。
 ///
-/// 明示的にレジストリで指定されたパスの場合、親ディレクトリが存在しない可能性が
+/// 明示的にregistryで指定されたパスの場合、親directoryが存在しない可能性が
 /// あるため、必要に応じて作成する。
 fn get_db_path() -> Result<PathBuf, String> {
     let setting = config::load_stellarecord_setting();
-    let path = setting
-        .get_effective_db_path()
-        .ok_or_else(|| "データベースパスが見つかりません。".to_string())?;
+    let path = setting.get_effective_db_path().ok_or_else(|| "データベースパスが見つかりません。".to_string())?;
     ensure_parent_dir(&path)?;
     Ok(path)
 }
 
-/// メイン DB を開き、現行スキーマを初期化してから返す。
+/// メイン DB を開き、現行schemaを初期化してから返す。
 ///
 /// ランチャー登録など、取り込み前にも DB テーブルを必要とするコマンドで使用する。
 fn open_initialized_main_db() -> Result<Connection, String> {
     let db_path = get_db_path()?;
     let conn = Connection::open(&db_path).map_err(|err| utils::command_open_err(&db_path, err))?;
-    analyze::init_main_db(&conn)
-        .map_err(|err| utils::command_err("メイン DB を初期化できませんでした", err))?;
+    analyze::init_main_db(&conn).map_err(|err| utils::command_err("メイン DB を初期化できませんでした", err))?;
     Ok(conn)
 }
 
-/// パスの親ディレクトリが存在しない場合に再帰的に作成する。
+/// パスの親directoryが存在しない場合に再帰的に作成する。
 ///
-/// パスを引数で受け取ることで、レジストリ解決を経由せず一時ディレクトリで
-/// 親ディレクトリ生成ロジックを検証できる。
+/// パスを引数で受け取ることで、registry解決を経由せず一時directoryで
+/// 親directory生成ロジックを検証できる。
 fn ensure_parent_dir(path: &std::path::Path) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         if !parent.exists() {
-            fs::create_dir_all(parent).map_err(|err| {
-                format!(
-                    "データベースディレクトリを作成できませんでした [{}]: {err}",
-                    parent.display()
-                )
-            })?;
+            fs::create_dir_all(parent).map_err(|err| { format!("データベースディレクトリを作成できませんでした [{}]: {err}", parent.display()) })?;
         }
     }
     Ok(())
 }
 
-/// フロントエンドで捕捉した詳細エラーをアプリログへ記録する。
+/// Frontendで捕捉した詳細エラーをアプリログへ記録する。
 #[tauri::command]
 pub fn log_client_error(message: String) {
     let normalized = message.replace(['\r', '\n'], " ");

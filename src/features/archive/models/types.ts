@@ -1,8 +1,8 @@
 /**
  * アーカイブ機能の共有型定義
  *
- * levels / categories の数値列挙はRustバックエンド側の定義に準拠。
- * フロントエンドでは LEVEL_KEYS / CATEGORY_KEYS 配列を介してCSSクラスにマッピングする
+ * levels / categories の数値列挙はRustBackend側の定義に準拠。
+ * Frontendでは LEVEL_KEYS / CATEGORY_KEYS 配列を介してCSSクラスにマッピングする
  */
 
 /** ログビューアのストリーム開始時にTauri IPCから返されるメタ情報 */
@@ -26,11 +26,11 @@ export interface LogViewerChunk {
   levels: number[];
   categories: number[];
   raw_lines: string[];
-  /** バックエンドが検出したハイライト対象キーワード（該当なしの行はnull） */
+  /** Backendが検出したハイライト対象キーワード（該当なしの行はnull） */
   highlights: (string | null)[];
 }
 
-/** ストリーミングチャンクを蓄積して構築するログビューア表示状態（フロントエンド専用） */
+/** ストリーミングチャンクを蓄積して構築するログビューア表示状態（Frontend専用） */
 export interface LogViewerData {
   archive_name: string;
   source_name: string;

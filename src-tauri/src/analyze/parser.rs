@@ -29,22 +29,15 @@ fn compile_regex(pattern: &str, name: &str) -> Regex {
 }
 
 /// ログ行先頭のタイムスタンプにマッチする。
-pub static RE_TIME: LazyLock<Regex> =
-    LazyLock::new(|| compile_regex(r"^(\d{4}\.\d{2}\.\d{2} \d{2}:\d{2}:\d{2})", "RE_TIME"));
+pub static RE_TIME: LazyLock<Regex> = LazyLock::new(|| compile_regex(r"^(\d{4}\.\d{2}\.\d{2} \d{2}:\d{2}:\d{2})", "RE_TIME"));
 
 /// セッションごとに1回出現するユーザー認証行にマッチする。
 /// 例: `User Authenticated: Name (usr_xxxx)`
-pub static RE_USER_AUTH: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"User Authenticated: (.*?) \((usr_[a-f0-9\-]+)\)",
-        "RE_USER_AUTH",
-    )
-});
+pub static RE_USER_AUTH: LazyLock<Regex> = LazyLock::new(|| { compile_regex(r"User Authenticated: (.*?) \((usr_[a-f0-9\-]+)\)", "RE_USER_AUTH",) });
 
 /// 参加行の直前に出現するワールド名行にマッチする。
 /// 例: `[Behaviour] Entering Room: World Name`
-pub static RE_ENTERING: LazyLock<Regex> =
-    LazyLock::new(|| compile_regex(r"\[Behaviour\] Entering Room: (.*)", "RE_ENTERING"));
+pub static RE_ENTERING: LazyLock<Regex> = LazyLock::new(|| compile_regex(r"\[Behaviour\] Entering Room: (.*)", "RE_ENTERING"));
 
 /// ワールド参加行にマッチする。
 /// 例: `[Behaviour] Joining wrld_xxx:74156~private(usr_xxx)~region(jp)`
@@ -52,65 +45,33 @@ pub static RE_ENTERING: LazyLock<Regex> =
 /// 詳細フィールド分解は [`parse_location`] で行う。
 /// group インスタンスのように `~groupAccessType(...)~region(...)` と
 /// `region` 直前に別セグメントが挟まる形にも対応する。
-pub static RE_JOINING: LazyLock<Regex> =
-    LazyLock::new(|| compile_regex(r"\[Behaviour\] Joining (wrld_\S+)", "RE_JOINING"));
+pub static RE_JOINING: LazyLock<Regex> = LazyLock::new(|| compile_regex(r"\[Behaviour\] Joining (wrld_\S+)", "RE_JOINING"));
 
 /// 退室マーカーにマッチする。
-pub static RE_LEFT_ROOM: LazyLock<Regex> =
-    LazyLock::new(|| compile_regex(r"\[Behaviour\] OnLeftRoom", "RE_LEFT_ROOM"));
+pub static RE_LEFT_ROOM: LazyLock<Regex> = LazyLock::new(|| compile_regex(r"\[Behaviour\] OnLeftRoom", "RE_LEFT_ROOM"));
 
 /// プレイヤー参加行にマッチする。
 /// 例: `[Behaviour] OnPlayerJoined Name (usr_xxxx)`
-pub static RE_PLAYER_JOIN: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"\[Behaviour\] OnPlayerJoined (.*?) \((usr_[a-f0-9\-]+)\)",
-        "RE_PLAYER_JOIN",
-    )
-});
+pub static RE_PLAYER_JOIN: LazyLock<Regex> = LazyLock::new(|| { compile_regex(r"\[Behaviour\] OnPlayerJoined (.*?) \((usr_[a-f0-9\-]+)\)", "RE_PLAYER_JOIN",) });
 
 /// プレイヤー退出行にマッチする。
-pub static RE_PLAYER_LEFT: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"\[Behaviour\] OnPlayerLeft (.*?) \((usr_[a-f0-9\-]+)\)",
-        "RE_PLAYER_LEFT",
-    )
-});
+pub static RE_PLAYER_LEFT: LazyLock<Regex> = LazyLock::new(|| { compile_regex(r"\[Behaviour\] OnPlayerLeft (.*?) \((usr_[a-f0-9\-]+)\)", "RE_PLAYER_LEFT",) });
 
 /// プレイヤーが使用アバターを切り替えた行にマッチする。
 /// キャプチャ1はプレイヤー表示名、2はアバター名。
-pub static RE_AVATAR_SWITCH: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"\[Behaviour\] Switching (.*?) to avatar (.+)$",
-        "RE_AVATAR_SWITCH",
-    )
-});
+pub static RE_AVATAR_SWITCH: LazyLock<Regex> = LazyLock::new(|| { compile_regex(r"\[Behaviour\] Switching (.*?) to avatar (.+)$", "RE_AVATAR_SWITCH",) });
 
 /// 旧形式のアバターダウンロード完了行から `Friend:0` / `Friend:1` を抽出する。
 /// 2026.1.3 以降の `Dist` 形式には一致せず、判定不能として扱われる。
-pub static RE_AVATAR_DOWNLOAD_FRIEND: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"\[AssetBundleDownloadManager\] Download for avatar \([^)]*Friend:([01])[^)]*\)",
-        "RE_AVATAR_DOWNLOAD_FRIEND",
-    )
-});
+pub static RE_AVATAR_DOWNLOAD_FRIEND: LazyLock<Regex> = LazyLock::new(|| { compile_regex(r"\[AssetBundleDownloadManager\] Download for avatar \([^)]*Friend:([01])[^)]*\)", "RE_AVATAR_DOWNLOAD_FRIEND",) });
 
 /// アバター展開完了行にマッチする。
 /// キャプチャ1は `アバター名 by 作者名` の全体であり、作者名を装着者とは解釈しない。
-pub static RE_AVATAR_UNPACK: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"\[AssetBundleDownloadManager\] \[\d+\] Unpacking Avatar \((.*)\)$",
-        "RE_AVATAR_UNPACK",
-    )
-});
+pub static RE_AVATAR_UNPACK: LazyLock<Regex> = LazyLock::new(|| { compile_regex(r"\[AssetBundleDownloadManager\] \[\d+\] Unpacking Avatar \((.*)\)$", "RE_AVATAR_UNPACK",) });
 
 /// ワールド入室後に出力されるローカルプレイヤー分類行にマッチする。
 /// 例: `[Behaviour] Initialized PlayerAPI "Name" is local`
-pub static RE_IS_LOCAL: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r#"\[Behaviour\] Initialized PlayerAPI "(.*?)" is (local|remote)"#,
-        "RE_IS_LOCAL",
-    )
-});
+pub static RE_IS_LOCAL: LazyLock<Regex> = LazyLock::new(|| { compile_regex(r#"\[Behaviour\] Initialized PlayerAPI "(.*?)" is (local|remote)"#, "RE_IS_LOCAL",) });
 
 /// 受信通知行にマッチする。
 /// 例: `Received Notification: <Notification from username:Name, sender user id:usr_xxx ...>`
@@ -118,55 +79,30 @@ pub static RE_IS_LOCAL: LazyLock<Regex> = LazyLock::new(|| {
 /// 5は `created_at`、6はメッセージ本文。
 /// `id` プレフィックスは通知種別で異なり、通常通知は `not_`、フレンドリクエストは `frq_`。
 pub static RE_NOTIFICATION: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r#"Received Notification: <Notification from username:([^,]*), sender user id:([^ ]*) to [^ ]+ of type: ([^,]+), id: ((?:not|frq)_[a-f0-9\-]+), created at: ([^,]+),[^>]*message: "([^"]*)"\s*>"#,
-        "RE_NOTIFICATION",
-    )
+    compile_regex(r#"Received Notification: <Notification from username:([^,]*), sender user id:([^ ]*) to [^ ]+ of type: ([^,]+), id: ((?:not|frq)_[a-f0-9\-]+), created at: ([^,]+),[^>]*message: "([^"]*)"\s*>"#, "RE_NOTIFICATION",)
 });
 
 /// 通知の JSON 風ペイロードから `worldId` 値を抽出する。
-pub static RE_NOTIFICATION_WORLD_ID: LazyLock<Regex> =
-    LazyLock::new(|| compile_regex(r"worldId=(wrld_[^,}]+)", "RE_NOTIFICATION_WORLD_ID"));
+pub static RE_NOTIFICATION_WORLD_ID: LazyLock<Regex> = LazyLock::new(|| compile_regex(r"worldId=(wrld_[^,}]+)", "RE_NOTIFICATION_WORLD_ID"));
 
 /// 通知の JSON 風ペイロードから `worldName` 値を抽出する。
-pub static RE_NOTIFICATION_WORLD_NAME: LazyLock<Regex> =
-    LazyLock::new(|| compile_regex(r"worldName=([^,}]+)", "RE_NOTIFICATION_WORLD_NAME"));
+pub static RE_NOTIFICATION_WORLD_NAME: LazyLock<Regex> = LazyLock::new(|| compile_regex(r"worldName=([^,}]+)", "RE_NOTIFICATION_WORLD_NAME"));
 
 /// プレイヤーのロード完了を示す「OnPlayerJoinComplete」行にマッチする。
-pub static RE_PLAYER_JOIN_COMPLETE: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"\[Behaviour\] OnPlayerJoinComplete (.+)",
-        "RE_PLAYER_JOIN_COMPLETE",
-    )
-});
+pub static RE_PLAYER_JOIN_COMPLETE: LazyLock<Regex> = LazyLock::new(|| { compile_regex(r"\[Behaviour\] OnPlayerJoinComplete (.+)", "RE_PLAYER_JOIN_COMPLETE",) });
 
 /// セッション開始時に出力される `VRChat`+ サブスクリプション状態行にマッチする。
-pub static RE_SUBSCRIPTION_STATUS: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"Get VRChat Subscription Details! Subscription Id:([^ ]*) active:(True|False) desc:(.*)",
-        "RE_SUBSCRIPTION_STATUS",
-    )
-});
+pub static RE_SUBSCRIPTION_STATUS: LazyLock<Regex> = LazyLock::new(|| { compile_regex(r"Get VRChat Subscription Details! Subscription Id:([^ ]*) active:(True|False) desc:(.*)", "RE_SUBSCRIPTION_STATUS",) });
 
 /// VRC Camera が出力するスクリーンショット撮影行にマッチする。
 /// 例: `[VRC Camera] Took screenshot to: C:\...\VRChat_2025-10-21_00-59-15.520_3840x2160.png`
 /// キャプチャ1は `file_path`、2は `width`、3は `height`。
-pub static RE_SCREENSHOT: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"\[VRC Camera\] Took screenshot to: (.+_(\d+)x(\d+)\.\w+)",
-        "RE_SCREENSHOT",
-    )
-});
+pub static RE_SCREENSHOT: LazyLock<Regex> = LazyLock::new(|| { compile_regex(r"\[VRC Camera\] Took screenshot to: (.+_(\d+)x(\d+)\.\w+)", "RE_SCREENSHOT",) });
 
 /// OSC サービス検出行にマッチする。
 /// 例: `Found new OSC Service: OyasumiVR at 127.0.0.1:61080`
 /// キャプチャ1は `service_name`、2は `ip_address`、3は `port`。
-pub static RE_OSC_FOUND: LazyLock<Regex> = LazyLock::new(|| {
-    compile_regex(
-        r"Found new OSC Service: (.+?) at ([\d.]+):(\d+)",
-        "RE_OSC_FOUND",
-    )
-});
+pub static RE_OSC_FOUND: LazyLock<Regex> = LazyLock::new(|| { compile_regex(r"Found new OSC Service: (.+?) at ([\d.]+):(\d+)", "RE_OSC_FOUND",) });
 
 /// 括弧で囲まれた汎用 `usr_...` 識別子にマッチする。
 static RE_USR: LazyLock<Regex> = LazyLock::new(|| compile_regex(r"\((usr_[^)]+)\)", "RE_USR"));
@@ -458,10 +394,7 @@ pub fn parse_access_type(access_raw: &str) -> (Option<String>, Option<String>) {
         None
     };
 
-    let instance_owner = RE_USR
-        .captures(access_raw)
-        .and_then(|c| c.get(1))
-        .map(|m| m.as_str().to_string());
+    let instance_owner = RE_USR.captures(access_raw).and_then(|c| c.get(1)).map(|m| m.as_str().to_string());
 
     (access_type, instance_owner)
 }
@@ -476,10 +409,7 @@ pub fn parse_access_type(access_raw: &str) -> (Option<String>, Option<String>) {
 /// # 戻り値
 /// 通知を収集すべき場合は `true`。
 pub fn is_collectible_notification(notif_type: &str) -> bool {
-    matches!(
-        notif_type.trim(),
-        "boop" | "friendRequest" | "requestInvite" | "invite" | "group"
-    )
+    matches!(notif_type.trim(), "boop" | "friendRequest" | "requestInvite" | "invite" | "group")
 }
 
 /// `VRChat` ロケーション文字列から解析された構造化ロケーションメタデータ。
@@ -522,10 +452,7 @@ pub fn parse_location(location: &str) -> ParsedLocation {
     }
 
     for part in parts {
-        if let Some(region) = part
-            .strip_prefix("region(")
-            .and_then(|value| value.strip_suffix(')'))
-        {
+        if let Some(region) = part.strip_prefix("region(").and_then(|value| value.strip_suffix(')')) {
             result.region = Some(region.to_string());
         }
     }

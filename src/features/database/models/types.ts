@@ -7,14 +7,14 @@ export interface DbTableSummary {
   is_view: boolean;
 }
 
-/** プレビューカラムのUI表示名とヘルプテキスト */
+/** プレビューcolumnのUI表示名とヘルプテキスト */
 interface DbColumnMeta {
   name: string;
   label: string;
   description: string;
 }
 
-/** バックエンドから返されるテーブルプレビューのペイロード */
+/** Backendから返されるテーブルプレビューのペイロード */
 export interface TableData {
   name: string;
   label: string;

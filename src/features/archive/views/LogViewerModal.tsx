@@ -3,11 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { renderHighlightedBody } from '../models/logFormat';
 import { parseArchiveDate } from '../models/archiveFormat';
 import { formatFileSize } from '../../../shared/lib/byteFormat';
-import {
-  closeDialog,
-  closeDialogOnBackdrop,
-  useModalDialog,
-} from '../../../shared/hooks/useModalDialog';
+import { closeDialog, closeDialogOnBackdrop, useModalDialog } from '../../../shared/hooks/useModalDialog';
 import type { ArchiveFileItem, LogViewerData } from '../models/types';
 import shared from '../../../shared/styles/shared.module.css';
 import styles from './LogViewerModal.module.css';
@@ -16,43 +12,18 @@ const zoomMin = 0.5;
 const zoomMax = 2.5;
 
 /** フィルタチップ定義 — クリックで仮想リストを該当行に絞り込む */
-const CHIPS: { key: string; label: string; colorClass: string; matchKeys?: string[] }[] = [
-  { key: 'world', label: 'ワールド', colorClass: styles.legendWorld },
-  { key: 'notification', label: '通知', colorClass: styles.legendNotification },
-  {
-    key: 'player',
-    label: '入退室',
-    colorClass: styles.legendPlayerJoin,
-    matchKeys: ['player-join', 'player-ready', 'player-left'],
-  },
-  { key: 'warning', label: '警告', colorClass: styles.legendWarning },
-  { key: 'error', label: 'エラー', colorClass: styles.legendError },
-  { key: 'debug', label: 'デバッグ', colorClass: styles.legendDebug },
-];
+const CHIPS: { key: string; label: string; colorClass: string; matchKeys?: string[] }[] = [{ key: 'world', label: 'ワールド', colorClass: styles.legendWorld }, { key: 'notification', label: '通知', colorClass: styles.legendNotification }, { key: 'player', label: '入退室', colorClass: styles.legendPlayerJoin, matchKeys: ['player-join', 'player-ready', 'player-left'] }, { key: 'warning', label: '警告', colorClass: styles.legendWarning }, { key: 'error', label: 'エラー', colorClass: styles.legendError }, { key: 'debug', label: 'デバッグ', colorClass: styles.legendDebug }];
 
-const categoryClassMap: Record<string, string> = {
-  world: styles.categoryWorld,
-  notification: styles.categoryNotification,
-  'player-join': styles.categoryPlayerJoin,
-  'player-ready': styles.categoryPlayerReady,
-  'player-left': styles.categoryPlayerLeft,
-  'debug-system': styles.categoryDebugSystem,
-};
+const categoryClassMap: Record<string, string> = { world: styles.categoryWorld, notification: styles.categoryNotification, 'player-join': styles.categoryPlayerJoin, 'player-ready': styles.categoryPlayerReady, 'player-left': styles.categoryPlayerLeft, 'debug-system': styles.categoryDebugSystem };
 
-const levelClassMap: Record<string, string> = {
-  error: styles.levelError,
-  warning: styles.levelWarning,
-  debug: styles.levelDebug,
-  plain: styles.levelPlain,
-  info: styles.levelInfo,
-};
+const levelClassMap: Record<string, string> = { error: styles.levelError, warning: styles.levelWarning, debug: styles.levelDebug, plain: styles.levelPlain, info: styles.levelInfo };
 const zoomStep = 0.1;
 const baseLineHeight = 22;
 
-/** バックエンドの数値ログレベルをCSSクラスキー文字列にマッピング */
+/** Backendの数値ログレベルをCSSクラスキー文字列にマッピング */
 const levelKeys = ['plain', 'info', 'warning', 'error', 'debug'] as const;
 /**
- * バックエンドの数値カテゴリを CSS クラスキー文字列にマッピング。
+ * Backendの数値カテゴリを CSS クラスキー文字列にマッピング。
  * Rust 側 `encode_log_category_u8` の番号と必ず一致させること。
  */
 const categoryKeys = [
@@ -89,17 +60,7 @@ interface LogViewerModalProps {
  * サイドバーナビ・カテゴリ/ログレベルフィルタ付きのフルスクリーンログビューアモーダル
  * 10万行超のレンダリングに @tanstack/react-virtual を使用
  */
-export function LogViewerModal({
-  logViewerData,
-  archiveFiles,
-  externalFiles,
-  isLoading,
-  isLoaded,
-  onNavigateToFile,
-  onPickExternalFiles,
-  onClearExternalFiles,
-  onClose,
-}: LogViewerModalProps) {
+export function LogViewerModal({ logViewerData, archiveFiles, externalFiles, isLoading, isLoaded, onNavigateToFile, onPickExternalFiles, onClearExternalFiles, onClose }: LogViewerModalProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -158,12 +119,7 @@ export function LogViewerModal({
 
   const estimatedLineHeight = Math.round(baseLineHeight * zoomLevel);
 
-  const virtualizer = useVirtualizer({
-    count: displayCount,
-    getScrollElement: () => listRef.current,
-    estimateSize: () => estimatedLineHeight,
-    overscan: 10,
-  });
+  const virtualizer = useVirtualizer({ count: displayCount, getScrollElement: () => listRef.current, estimateSize: () => estimatedLineHeight, overscan: 10 });
 
   // ズーム変更時に仮想レイアウトを再計算
   useEffect(() => {
@@ -179,13 +135,7 @@ export function LogViewerModal({
     const categoryKey = categoryKeys[logViewerData.categories[i] ?? 0] ?? 'plain';
     const highlight = logViewerData.highlights[i] ?? null;
     return (
-      <div
-        key={key}
-        style={{ ...extraStyle, fontSize: zoomFontSize }}
-        className={`${styles.line} ${categoryClassMap[categoryKey] ?? ''} ${levelClassMap[levelKey] ?? ''}`}
-      >
-        {renderHighlightedBody(rawLine, highlight, styles.highlight)}
-      </div>
+      <div key={key} style={{ ...extraStyle, fontSize: zoomFontSize }} className={`${styles.line} ${categoryClassMap[categoryKey] ?? ''} ${levelClassMap[levelKey] ?? ''}`}>{renderHighlightedBody(rawLine, highlight, styles.highlight)}</div>
     );
   };
 
@@ -194,14 +144,7 @@ export function LogViewerModal({
   const sidebarCount = sidebarFiles.length + (hasExternalFiles ? archiveFiles.length : 0);
 
   return (
-    <dialog
-      ref={dialogRef}
-      className={`${styles.root} ${shared.modalOverlay} ${shared.fullscreen}`}
-      aria-labelledby="log-viewer-title"
-      aria-describedby="log-viewer-source"
-      onClose={onClose}
-      onMouseDown={closeDialogOnBackdrop}
-    >
+    <dialog ref={dialogRef} className={`${styles.root} ${shared.modalOverlay} ${shared.fullscreen}`} aria-labelledby="log-viewer-title" aria-describedby="log-viewer-source" onClose={onClose} onMouseDown={closeDialogOnBackdrop}>
       <div className={`${styles.content} ${shared.modalContent}`}>
         {/* ── サイドバー ── */}
         <aside className={styles.sidebar}>
@@ -210,23 +153,9 @@ export function LogViewerModal({
             <span className={styles.sidebarCount}>{sidebarCount} 件</span>
           </div>
           <div className={styles.sidebarFolderSwitcher}>
-            <button
-              type="button"
-              className={styles.sidebarFolderButton}
-              onClick={onPickExternalFiles}
-              disabled={isLoading}
-            >
-              ファイルを選択
-            </button>
+            <button type="button" className={styles.sidebarFolderButton} onClick={onPickExternalFiles} disabled={isLoading}>ファイルを選択</button>
             {hasExternalFiles && (
-              <button
-                type="button"
-                className={styles.sidebarFolderButton}
-                onClick={onClearExternalFiles}
-                disabled={isLoading}
-              >
-                選択を解除
-              </button>
+              <button type="button" className={styles.sidebarFolderButton} onClick={onClearExternalFiles} disabled={isLoading}>選択を解除</button>
             )}
           </div>
           <div className={styles.sidebarList}>
@@ -238,16 +167,9 @@ export function LogViewerModal({
                   const name = fileNameFromPath(filePath);
                   const date = parseArchiveDate(name);
                   return (
-                    <button
-                      key={filePath}
-                      type="button"
-                      className={`${styles.sidebarItem} ${isActive ? styles.sidebarItemActive : ''}`}
-                      onClick={() => {
+                    <button key={filePath} type="button" className={`${styles.sidebarItem} ${isActive ? styles.sidebarItemActive : ''}`} onClick={() => {
                         if (!isActive && !isLoading) onNavigateToFile(filePath);
-                      }}
-                      disabled={isLoading && !isActive}
-                      aria-current={isActive ? 'true' : undefined}
-                    >
+                      }} disabled={isLoading && !isActive} aria-current={isActive ? 'true' : undefined}>
                       <span className={styles.sidebarItemDate}>{date ?? name}</span>
                     </button>
                   );
@@ -262,20 +184,11 @@ export function LogViewerModal({
                 const isActive = file.name === logViewerData.archive_name;
                 const date = parseArchiveDate(file.name);
                 return (
-                  <button
-                    key={file.name}
-                    type="button"
-                    className={`${styles.sidebarItem} ${isActive ? styles.sidebarItemActive : ''}`}
-                    onClick={() => {
+                  <button key={file.name} type="button" className={`${styles.sidebarItem} ${isActive ? styles.sidebarItemActive : ''}`} onClick={() => {
                       if (!isActive && !isLoading) onNavigateToFile(file.name);
-                    }}
-                    disabled={isLoading && !isActive}
-                    aria-current={isActive ? 'true' : undefined}
-                  >
+                    }} disabled={isLoading && !isActive} aria-current={isActive ? 'true' : undefined}>
                     <span className={styles.sidebarItemDate}>{date ?? file.name}</span>
-                    <span className={styles.sidebarItemSize}>
-                      {formatFileSize(file.size_bytes)}
-                    </span>
+                    <span className={styles.sidebarItemSize}>{formatFileSize(file.size_bytes)}</span>
                   </button>
                 );
               })
@@ -287,12 +200,8 @@ export function LogViewerModal({
         <div className={styles.main}>
           <div className={styles.mainHeader}>
             <div className={styles.mainHeaderCopy}>
-              <h3 id="log-viewer-title" className={styles.mainTitle} tabIndex={-1} autoFocus>
-                ログビューア
-              </h3>
-              <p id="log-viewer-source" className={styles.mainSub}>
-                {logViewerData.source_name}
-              </p>
+              <h3 id="log-viewer-title" className={styles.mainTitle} tabIndex={-1} autoFocus>ログビューア</h3>
+              <p id="log-viewer-source" className={styles.mainSub}>{logViewerData.source_name}</p>
             </div>
             <div className={styles.mainHeaderMeta}>
               <span className={`${styles.lineCount} ${!isLoaded ? styles.lineCountLoading : ''}`}>
@@ -308,15 +217,9 @@ export function LogViewerModal({
 
           <div className={styles.legend}>
             {CHIPS.map((chip) => (
-              <button
-                key={chip.key}
-                type="button"
-                className={`${styles.legendItem} ${chip.colorClass} ${activeFilter === chip.key ? styles.legendItemActive : ''}`}
-                aria-pressed={activeFilter === chip.key}
-                onClick={() => {
+              <button key={chip.key} type="button" className={`${styles.legendItem} ${chip.colorClass} ${activeFilter === chip.key ? styles.legendItemActive : ''}`} aria-pressed={activeFilter === chip.key} onClick={() => {
                   setActiveFilter((prev) => (prev === chip.key ? null : chip.key));
-                }}
-              >
+                }}>
                 {chip.label}
               </button>
             ))}
@@ -330,33 +233,20 @@ export function LogViewerModal({
               </div>
             )}
 
-            <div
-              style={{
-                height: `${String(virtualizer.getTotalSize())}px`,
+            <div style={{ height: `${String(virtualizer.getTotalSize())}px`,
                 minWidth: '100%',
-                position: 'relative',
-              }}
-            >
+                position: 'relative', }}>
               {virtualizer.getVirtualItems().map((virtualItem) => {
                 const actualIndex = filteredIndices
                   ? (filteredIndices[virtualItem.index] ?? virtualItem.index)
                   : virtualItem.index;
-                return renderLine(actualIndex, virtualItem.index, {
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  minWidth: '100%',
-                  width: 'max-content',
-                  transform: `translateY(${String(virtualItem.start)}px)`,
-                });
+                return renderLine(actualIndex, virtualItem.index, { position: 'absolute', top: 0, left: 0, minWidth: '100%', width: 'max-content', transform: `translateY(${String(virtualItem.start)}px)`, });
               })}
             </div>
           </div>
 
           <div className={shared.modalActions}>
-            <button type="button" className={shared.btn} onClick={closeDialog}>
-              閉じる
-            </button>
+            <button type="button" className={shared.btn} onClick={closeDialog}>閉じる</button>
           </div>
         </div>
       </div>

@@ -17,29 +17,17 @@ export function StartupImportConsentDialog(props: StartupImportConsentDialogProp
   const dialogRef = useModalDialog();
 
   return (
-    <dialog
-      ref={dialogRef}
-      className={shared.modalOverlay}
-      aria-labelledby="startup-import-title"
-      aria-describedby="startup-import-description startup-import-note"
-      onCancel={preventDialogCancel}
-    >
+    <dialog ref={dialogRef} className={shared.modalOverlay} aria-labelledby="startup-import-title" aria-describedby="startup-import-description startup-import-note" onCancel={preventDialogCancel}>
       <section className={`${shared.modalContent} ${styles.dialog}`}>
         <h3 id="startup-import-title">起動時のログ取り込み</h3>
-        {/* prettier-ignore */}
         <p id="startup-import-description" className={styles.description}>StellaRecord は起動時に Polaris のログをログ保存先へコピーし、その内容を読み取って DB へ保存します。この読み取りを許可しますか。</p>
 
-        <div className={styles.locationPanel}>
-          <DataLocationList logArchivePath={logArchivePath} databasePath={databasePath} />
-        </div>
+        <div className={styles.locationPanel}><DataLocationList logArchivePath={logArchivePath} databasePath={databasePath} /></div>
 
-        {/* prettier-ignore */}
         <p id="startup-import-note" className={styles.note}>許可すると、次回以降もアプリ起動時に自動で取り込みます。ログと DB を StellaRecord から外部サーバーへ送信することはありません。</p>
 
         <div className={shared.modalActions}>
-          {/* prettier-ignore */}
           <button type="button" className={shared.btn} onClick={onDecline} disabled={isSaving} autoFocus>読み取らない</button>
-          {/* prettier-ignore */}
           <button type="button" className={`${shared.btn} ${shared.primary}`} onClick={onAllow} disabled={isSaving}>読み取りを許可</button>
         </div>
       </section>

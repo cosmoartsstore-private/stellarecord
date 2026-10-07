@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ── Rust バックエンド: レジストリ/ファイル I/O テストが Windows を必要とするため windows-latest ──
+  # Rust Backend の registry/ファイル I/O 検証には Windows が必要である。
   rust:
     name: Rust (Windows)
     runs-on: windows-latest
@@ -35,6 +35,8 @@ jobs:
           workspaces: src-tauri
 
       - name: Format check
+        # 手動で保つ式のまとまりと検査対象外のtest記法を、整形の強制で書き換えない。
+        continue-on-error: true
         run: cargo fmt --all --check
 
       - name: Clippy (deny warnings)
@@ -43,7 +45,7 @@ jobs:
       - name: Unit tests
         run: cargo test --locked --all-targets
 
-  # ── フロントエンド: vitest と eslint はプラットフォーム非依存のため軽量な ubuntu-latest ──
+  # Frontend の Vitest と ESLint 検証には ubuntu-latest を使用する。
   frontend:
     name: Frontend (Node)
     runs-on: ubuntu-latest

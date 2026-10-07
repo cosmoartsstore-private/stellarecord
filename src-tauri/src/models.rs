@@ -18,7 +18,7 @@ pub struct DbTableSummary {
     pub is_view: bool,
 }
 
-/// プレビュー対象テーブルの1カラムに対する UI 向けメタデータ。
+/// プレビュー対象テーブルの1columnに対する UI 向けメタデータ。
 #[derive(Debug, Serialize)]
 pub struct DbColumnMeta {
     pub name: String,

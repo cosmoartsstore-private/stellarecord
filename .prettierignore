@@ -7,3 +7,8 @@ node_modules/
 src-tauri/gen/schemas/
 .claude/
 docs/manual.html
+
+# TS/TSX は操作・式ごとのまとまりを優先し、行長による自動分割を適用しない。
+# 構文・型・操作性に関する検査は TypeScript と ESLint で行う。
+src/**/*.ts
+src/**/*.tsx

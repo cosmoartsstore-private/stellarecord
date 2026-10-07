@@ -1,9 +1,9 @@
-use std::fs::{self, OpenOptions};
-use std::io::{self, Write};
+use std::fs::{ self, OpenOptions };
+use std::io::{ self, Write };
 use std::path::PathBuf;
 
 use chrono::Local;
-use tauri::{AppHandle, Emitter};
+use tauri::{ AppHandle, Emitter };
 use winreg::enums::HKEY_CURRENT_USER;
 use winreg::RegKey;
 
@@ -69,12 +69,9 @@ pub fn command_remove_err<E: std::fmt::Display>(path: &std::path::Path, err: E) 
 
 /// SQL に補間する識別子として安全な ASCII 英数字と `_` のみを許可する。
 ///
-/// `SQLite` のテーブル名・カラム名は値バインドできないため、動的 SQL の入口で使う。
+/// `SQLite` のテーブル名・column名は値バインドできないため、動的 SQL の入口で使う。
 pub fn is_sql_identifier(value: &str) -> bool {
-    !value.is_empty()
-        && value
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || character == '_')
+    !value.is_empty() && value.chars().all(|character| character.is_ascii_alphanumeric() || character == '_')
 }
 
 /// ログ1行の無効 UTF-8 バイトだけを置換し、行末の改行を取り除く。
@@ -84,18 +81,18 @@ pub fn decode_log_line_lossy(bytes: &[u8]) -> String {
     String::from_utf8_lossy(line).into_owned()
 }
 
-/// レジストリからインストール済みの `CosmoArtsStore` アプリのディレクトリを解決する。
+/// registryからインストール済みの `CosmoArtsStore` アプリのdirectoryを解決する。
 ///
-/// インストール先は Windows レジストリ
+/// インストール先は Windows registry
 /// (`HKCU\Software\CosmoArtsStore\<component>`) に格納される。
 /// エコシステム内の複数アプリが互いのインストール先を知らずとも
 /// 相互発見できるようにするため。
 ///
 /// # 引数
-/// * `component_name` - `StellaRecord` や `Polaris` などのレジストリコンポーネントキー。
+/// * `component_name` - `StellaRecord` や `Polaris` などのregistryコンポーネントキー。
 ///
 /// # 戻り値
-/// レジストリエントリが存在し実在するパスを指す場合のインストールディレクトリ。
+/// registryエントリが存在し実在するパスを指す場合のインストールdirectory。
 pub fn get_component_install_dir(component_name: &str) -> Option<PathBuf> {
     let key_path = format!("Software\\CosmoArtsStore\\{component_name}");
     let root = RegKey::predef(HKEY_CURRENT_USER);
@@ -112,57 +109,48 @@ pub fn get_component_install_dir(component_name: &str) -> Option<PathBuf> {
     let path: String = match key.get_value("InstallLocation") {
         Ok(path) => path,
         Err(err) => {
-            eprintln!(
-                "[WARN] レジストリ値を読み取れませんでした [{key_path}\\InstallLocation]: {err}"
-            );
+            eprintln!("[WARN] レジストリ値を読み取れませんでした [{key_path}\\InstallLocation]: {err}");
             return None;
         }
     };
 
     let install_dir = PathBuf::from(path);
     if !install_dir.exists() {
-        eprintln!(
-            "[WARN] インストール先が存在しません [{}]",
-            install_dir.display()
-        );
+        eprintln!("[WARN] インストール先が存在しません [{}]", install_dir.display());
         return None;
     }
 
     Some(install_dir)
 }
 
-/// `StellaRecord` のインストールディレクトリを解決する。
+/// `StellaRecord` のインストールdirectoryを解決する。
 ///
 /// # 戻り値
-/// インストールディレクトリのパス。利用不可の場合は `None`。
+/// インストールdirectoryのパス。利用不可の場合は `None`。
 pub fn get_stellarecord_install_dir() -> Option<PathBuf> {
     get_component_install_dir("StellaRecord")
 }
 
-/// `{InstallDir}/Data/{category}` 配下のカテゴリ別サブディレクトリを解決する。
+/// `{InstallDir}/Data/{category}` 配下のカテゴリ別サブdirectoryを解決する。
 ///
-/// 存在しない場合はディレクトリを作成する。
+/// 存在しない場合はdirectoryを作成する。
 pub fn get_stellarecord_data_dir(category: &str) -> Option<PathBuf> {
     let dir = get_stellarecord_install_dir()?.join("Data").join(category);
     if !dir.exists() {
         if let Err(err) = fs::create_dir_all(&dir) {
             // log_warn は append_log → get_stellarecord_data_dir を経由するため、
             // ここで使うと無限再帰になる。stderr へ直接出力する。
-            eprintln!(
-                "[WARN] Data ディレクトリを作成できませんでした [{}]: {}",
-                dir.display(),
-                err
-            );
+            eprintln!("[WARN] Data ディレクトリを作成できませんでした [{}]: {}", dir.display(), err);
             return None;
         }
     }
     Some(dir)
 }
 
-/// Polaris のインストールディレクトリを解決する。
+/// Polaris のインストールdirectoryを解決する。
 ///
 /// # 戻り値
-/// インストールディレクトリのパス。利用不可の場合は `None`。
+/// インストールdirectoryのパス。利用不可の場合は `None`。
 pub fn get_polaris_install_dir() -> Option<PathBuf> {
     get_component_install_dir("Polaris")
 }
@@ -177,26 +165,20 @@ pub fn get_polaris_install_dir() -> Option<PathBuf> {
 /// ログ行を書き込めたかどうかを表す I/O 結果。
 fn append_log(level: &str, msg: &str) -> io::Result<()> {
     let Some(log_dir) = get_stellarecord_data_dir("logs") else {
-        return Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            "StellaRecord のインストール先が見つかりません",
-        ));
+        return Err(io::Error::new(io::ErrorKind::NotFound, "StellaRecord のインストール先が見つかりません",));
     };
     append_log_to(&log_dir, level, msg)
 }
 
-/// 指定ログディレクトリの月次ファイルに1行追記する。
+/// 指定ログdirectoryの月次ファイルに1行追記する。
 ///
-/// ログディレクトリを引数化することで、レジストリ解決を経由せず一時ディレクトリで
+/// ログdirectoryを引数化することで、registry解決を経由せず一時directoryで
 /// 月次ファイル名生成と追記書き込みを検証できる。
 fn append_log_to(log_dir: &std::path::Path, level: &str, msg: &str) -> io::Result<()> {
     let month = Local::now().format("%Y-%m");
     let log_path = log_dir.join(format!("info-{month}.log"));
 
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_path)?;
+    let mut file = OpenOptions::new().create(true).append(true).open(&log_path)?;
     let now = Local::now().format("%Y-%m-%d %H:%M:%S");
     writeln!(file, "[{now}] [{level}] {msg}")
 }
@@ -231,12 +213,12 @@ pub fn log_err(msg: &str) {
 
 /// Tauri イベントを送出し、配信失敗時は警告をログに記録する。
 ///
-/// エラーは意図的に握りつぶす。配信失敗は通常フロントエンドが既に遷移済みであることを
-/// 意味し、誰も受信していない更新を失うよりバックエンドがクラッシュする方が深刻なため。
+/// エラーは意図的に握りつぶす。配信失敗は通常Frontendが既に遷移済みであることを
+/// 意味し、誰も受信していない更新を失うよりBackendがクラッシュする方が深刻なため。
 ///
 /// # 引数
 /// * `app` - 実行中の Tauri アプリケーションハンドル。
-/// * `event_name` - フロントエンドに送るイベントチャネル名。
+/// * `event_name` - Frontendに送るイベントチャネル名。
 /// * `payload` - シリアライズ可能なイベントペイロード。
 pub fn emit_event_warn<T: serde::Serialize + Clone>(app: &AppHandle, event_name: &str, payload: T) {
     if let Err(err) = app.emit(event_name, payload) {

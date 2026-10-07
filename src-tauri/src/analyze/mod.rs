@@ -4,7 +4,7 @@
 //! 内容を行単位で解析し、正規化データをメイン `SQLite` データベース
 //! (`stellarecord.db`) に書き込む。
 //!
-//! ファイル単位の savepoint を持つトランザクション内で書き込むため、
+//! ファイル単位の savepoint を持つtransaction内で書き込むため、
 //! キャンセルや単一ファイルの失敗で部分データが残ることはない。
 
 mod db;
@@ -13,23 +13,20 @@ mod parser;
 
 pub use db::init_main_db;
 pub use parser::{
-    is_collectible_notification, parse_access_type, parse_location, ParsedLocation,
-    RE_AVATAR_DOWNLOAD_FRIEND, RE_AVATAR_SWITCH, RE_AVATAR_UNPACK, RE_ENTERING, RE_IS_LOCAL,
-    RE_JOINING, RE_LEFT_ROOM, RE_NOTIFICATION, RE_NOTIFICATION_WORLD_ID,
-    RE_NOTIFICATION_WORLD_NAME, RE_OSC_FOUND, RE_PLAYER_JOIN, RE_PLAYER_JOIN_COMPLETE,
-    RE_PLAYER_LEFT, RE_SCREENSHOT, RE_SUBSCRIPTION_STATUS, RE_TIME, RE_USER_AUTH,
+    is_collectible_notification, parse_access_type, parse_location, ParsedLocation, RE_AVATAR_DOWNLOAD_FRIEND, RE_AVATAR_SWITCH, RE_AVATAR_UNPACK, RE_ENTERING, RE_IS_LOCAL, RE_JOINING, RE_LEFT_ROOM, RE_NOTIFICATION,
+    RE_NOTIFICATION_WORLD_ID, RE_NOTIFICATION_WORLD_NAME, RE_OSC_FOUND, RE_PLAYER_JOIN, RE_PLAYER_JOIN_COMPLETE, RE_PLAYER_LEFT, RE_SCREENSHOT, RE_SUBSCRIPTION_STATUS, RE_TIME, RE_USER_AUTH,
 };
 
 use chrono::NaiveDateTime;
-use rusqlite::{params, Connection, Result, Savepoint, Transaction};
-use sha2::{Digest, Sha256};
+use rusqlite::{ params, Connection, Result, Savepoint, Transaction };
+use sha2::{ Digest, Sha256 };
 use std::fs;
-use std::io::{BufRead, BufReader, Read};
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::io::{ BufRead, BufReader, Read };
+use std::path::{ Path, PathBuf };
+use std::sync::atomic::{ AtomicBool, Ordering };
 
 use crate::utils::decode_log_line_lossy;
-use friendship::{FriendStatus, FriendshipTracker, UNKNOWN_FRIEND_STATUS};
+use friendship::{ FriendStatus, FriendshipTracker, UNKNOWN_FRIEND_STATUS };
 
 /// 取り込み結果へ影響するログ解析仕様のバージョン。
 const CURRENT_PARSER_VERSION: i64 = 2;
@@ -79,34 +76,18 @@ fn ensure_not_canceled(cancel_status: &AtomicBool) -> std::result::Result<(), St
     }
 }
 
-/// メインデータベースの外側トランザクションをロールバックする。
-fn rollback_outer_transaction(
-    main_tx: Transaction<'_>,
-    context: &str,
-) -> std::result::Result<(), String> {
-    main_tx.rollback().map_err(|err| {
-        analyze_err(
-            &format!("{context}: メイン DB をロールバックできませんでした"),
-            err,
-        )
-    })?;
+/// メインデータベースの外側transactionをロールバックする。
+fn rollback_outer_transaction(main_tx: Transaction<'_>, context: &str,) -> std::result::Result<(), String> {
+    main_tx.rollback().map_err(|err| { analyze_err(&format!("{context}: メイン DB をロールバックできませんでした"), err,) })?;
     Ok(())
 }
 
 /// メインデータベースのファイル単位 savepoint をロールバックする。
 ///
 /// 個別ファイルの解析失敗時に、そのファイルの変更のみを巻き戻す。
-/// 外側トランザクションは維持されるため、他ファイルの処理を続行できる。
-fn rollback_savepoint(
-    mut main_sp: Savepoint<'_>,
-    context: &str,
-) -> std::result::Result<(), String> {
-    main_sp.rollback().map_err(|err| {
-        analyze_err(
-            &format!("{context}: メイン DB savepoint をロールバックできませんでした"),
-            err,
-        )
-    })?;
+/// 外側transactionは維持されるため、他ファイルの処理を続行できる。
+fn rollback_savepoint(mut main_sp: Savepoint<'_>, context: &str,) -> std::result::Result<(), String> {
+    main_sp.rollback().map_err(|err| { analyze_err(&format!("{context}: メイン DB savepoint をロールバックできませんでした"), err,) })?;
     Ok(())
 }
 
@@ -118,7 +99,7 @@ fn format_progress_fraction(completed: usize, total: usize) -> String {
 /// インポート命名規則に合致する圧縮アーカイブログを一覧取得する。
 ///
 /// # 引数
-/// * `archive_store_dir` - `StellaRecord` が管理する `.tar.zst` ログの格納ディレクトリ。
+/// * `archive_store_dir` - `StellaRecord` が管理する `.tar.zst` ログの格納directory。
 ///
 /// # 戻り値
 /// ソート済みのアーカイブパス。不正なエントリは警告付きでスキップし、
@@ -131,11 +112,7 @@ fn collect_log_files(archive_store_dir: &Path) -> Vec<PathBuf> {
     let entries = match fs::read_dir(archive_store_dir) {
         Ok(entries) => entries,
         Err(err) => {
-            crate::utils::log_warn(&format!(
-                "Data ディレクトリを読み取れませんでした [{}]: {}",
-                archive_store_dir.display(),
-                err
-            ));
+            crate::utils::log_warn(&format!("Data ディレクトリを読み取れませんでした [{}]: {}", archive_store_dir.display(), err));
             return files;
         }
     };
@@ -198,27 +175,15 @@ fn with_log_content_reader<T, F>(log_path: &Path, callback: F) -> Result<T>
 where
     F: FnOnce(&mut dyn Read) -> Result<T>,
 {
-    if log_path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .is_some_and(|value| value.ends_with(".tar.zst"))
-    {
-        let file = fs::File::open(log_path)
-            .map_err(|err| analyze_sqlite_err("圧縮ログを開けませんでした", err))?;
-        let decoder = zstd::stream::Decoder::new(file).map_err(|err| {
-            analyze_sqlite_err("圧縮ログの zstd デコーダーを初期化できませんでした", err)
-        })?;
+    if log_path.file_name().and_then(|value| value.to_str()).is_some_and(|value| value.ends_with(".tar.zst")) {
+        let file = fs::File::open(log_path).map_err(|err| analyze_sqlite_err("圧縮ログを開けませんでした", err))?;
+        let decoder = zstd::stream::Decoder::new(file).map_err(|err| { analyze_sqlite_err("圧縮ログの zstd デコーダーを初期化できませんでした", err) })?;
         let mut archive = tar::Archive::new(decoder);
-        let mut entries = archive.entries().map_err(|err| {
-            analyze_sqlite_err("圧縮ログのエントリ一覧を取得できませんでした", err)
-        })?;
+        let mut entries = archive.entries().map_err(|err| { analyze_sqlite_err("圧縮ログのエントリ一覧を取得できませんでした", err) })?;
         let Some(entry) = entries.next() else {
-            return Err(rusqlite::Error::InvalidParameterName(
-                "圧縮ログに解析対象がありませんでした".to_string(),
-            ));
+            return Err(rusqlite::Error::InvalidParameterName("圧縮ログに解析対象がありませんでした".to_string(),));
         };
-        let mut entry =
-            entry.map_err(|err| analyze_sqlite_err("圧縮ログのエントリを読めませんでした", err))?;
+        let mut entry = entry.map_err(|err| analyze_sqlite_err("圧縮ログのエントリを読めませんでした", err))?;
         return callback(&mut entry);
     }
 
@@ -227,15 +192,10 @@ where
     let mut file = {
         use std::os::windows::fs::OpenOptionsExt;
         use windows::Win32::Storage::FileSystem::FILE_SHARE_READ;
-        fs::OpenOptions::new()
-            .read(true)
-            .share_mode(FILE_SHARE_READ.0)
-            .open(log_path)
-            .map_err(|err| analyze_sqlite_err("ログファイルを開けませんでした", err))?
+        fs::OpenOptions::new().read(true).share_mode(FILE_SHARE_READ.0).open(log_path).map_err(|err| analyze_sqlite_err("ログファイルを開けませんでした", err))?
     };
     #[cfg(not(windows))]
-    let mut file = fs::File::open(log_path)
-        .map_err(|err| analyze_sqlite_err("ログファイルを開けませんでした", err))?;
+    let mut file = fs::File::open(log_path).map_err(|err| analyze_sqlite_err("ログファイルを開けませんでした", err))?;
 
     callback(&mut file)
 }
@@ -251,27 +211,16 @@ fn fingerprint_log_content(log_path: &Path, cancel_status: &AtomicBool) -> Resul
             if cancel_status.load(Ordering::SeqCst) {
                 return Err(analyze_cancel_sqlite_err());
             }
-            let bytes_read = reader
-                .read(&mut buffer)
-                .map_err(|err| analyze_sqlite_err("ログ本文を読み取れませんでした", err))?;
+            let bytes_read = reader.read(&mut buffer).map_err(|err| analyze_sqlite_err("ログ本文を読み取れませんでした", err))?;
             if bytes_read == 0 {
                 break;
             }
             hasher.update(&buffer[..bytes_read]);
-            content_size = content_size.checked_add(bytes_read as u64).ok_or_else(|| {
-                rusqlite::Error::InvalidParameterName(
-                    "ログ本文のサイズが上限を超えました".to_string(),
-                )
-            })?;
+            content_size = content_size.checked_add(bytes_read as u64).ok_or_else(|| { rusqlite::Error::InvalidParameterName("ログ本文のサイズが上限を超えました".to_string(),) })?;
         }
 
-        let content_size = i64::try_from(content_size).map_err(|_| {
-            rusqlite::Error::InvalidParameterName("ログ本文のサイズが上限を超えました".to_string())
-        })?;
-        Ok(LogFingerprint {
-            sha256: hasher.finalize().into(),
-            content_size,
-        })
+        let content_size = i64::try_from(content_size).map_err(|_| { rusqlite::Error::InvalidParameterName("ログ本文のサイズが上限を超えました".to_string()) })?;
+        Ok(LogFingerprint { sha256: hasher.finalize().into(), content_size, })
     })
 }
 
@@ -279,11 +228,7 @@ fn fingerprint_log_content(log_path: &Path, cancel_status: &AtomicBool) -> Resul
 ///
 /// 旧版 DB には指紋行が存在しないため、その場合は `false` として一度だけ安全に
 /// 再構築し、現在内容に対応する指紋を登録する。
-fn imported_content_is_current(
-    conn: &Connection,
-    filename: &str,
-    fingerprint: &LogFingerprint,
-) -> Result<bool> {
+fn imported_content_is_current(conn: &Connection, filename: &str, fingerprint: &LogFingerprint,) -> Result<bool> {
     conn.query_row(
         "SELECT EXISTS(
             SELECT 1
@@ -294,12 +239,7 @@ fn imported_content_is_current(
               AND imported.content_size = ?3
               AND imported.parser_version = ?4
          )",
-        params![
-            filename,
-            &fingerprint.sha256[..],
-            fingerprint.content_size,
-            CURRENT_PARSER_VERSION
-        ],
+        params![filename, &fingerprint.sha256[..], fingerprint.content_size, CURRENT_PARSER_VERSION],
         |row| row.get(0),
     )
 }
@@ -359,20 +299,11 @@ fn delete_imported_session(conn: &Connection, filename: &str) -> Result<()> {
 }
 
 /// 正常に再構築できたログ本文の指紋をセッションへ紐付けて保存する。
-fn record_imported_content(
-    conn: &Connection,
-    filename: &str,
-    fingerprint: &LogFingerprint,
-) -> Result<()> {
+fn record_imported_content(conn: &Connection, filename: &str, fingerprint: &LogFingerprint,) -> Result<()> {
     conn.execute(
         "INSERT INTO imported_logs (log_name, content_sha256, content_size, parser_version)
          VALUES (?1, ?2, ?3, ?4)",
-        params![
-            filename,
-            &fingerprint.sha256[..],
-            fingerprint.content_size,
-            CURRENT_PARSER_VERSION
-        ],
+        params![filename, &fingerprint.sha256[..], fingerprint.content_size, CURRENT_PARSER_VERSION],
     )?;
     Ok(())
 }
@@ -388,13 +319,7 @@ enum ImportOutcome {
 ///
 /// 呼び出し元が渡す接続はファイル単位 savepoint であり、旧セッション削除、
 /// 再解析、指紋登録のいずれかが失敗すれば一式をロールバックする。
-fn import_log_in_savepoint<F>(
-    conn: &Connection,
-    log_path: &Path,
-    filename: &str,
-    cancel_status: &AtomicBool,
-    progress_callback: &mut F,
-) -> Result<ImportOutcome>
+fn import_log_in_savepoint<F>(conn: &Connection, log_path: &Path, filename: &str, cancel_status: &AtomicBool, progress_callback: &mut F,) -> Result<ImportOutcome>
 where
     F: FnMut(String, String),
 {
@@ -410,55 +335,23 @@ where
 }
 
 /// スクリーンショット撮影イベントをメインデータベースに挿入する。
-fn insert_screenshot(
-    tx: &Connection,
-    visit_id: Option<i64>,
-    file_path: &str,
-    resolution_width: Option<i64>,
-    resolution_height: Option<i64>,
-    timestamp: &str,
-    session_id: i64,
-) -> Result<()> {
+fn insert_screenshot(tx: &Connection, visit_id: Option<i64>, file_path: &str, resolution_width: Option<i64>, resolution_height: Option<i64>, timestamp: &str, session_id: i64,) -> Result<()> {
     tx.execute(
         "INSERT INTO screenshots
          (visit_id, file_path, resolution_width, resolution_height, timestamp, session_id)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![
-            visit_id,
-            file_path,
-            resolution_width,
-            resolution_height,
-            timestamp,
-            session_id
-        ],
+        params![visit_id, file_path, resolution_width, resolution_height, timestamp, session_id],
     )?;
     Ok(())
 }
 
 /// OSC/OSCQuery サービスイベントをメインデータベースに挿入する。
-fn insert_osc_event(
-    tx: &Connection,
-    session_id: i64,
-    event_type: &str,
-    service_name: Option<&str>,
-    service_type: Option<&str>,
-    ip_address: Option<&str>,
-    port: Option<i64>,
-    timestamp: &str,
-) -> Result<()> {
+fn insert_osc_event(tx: &Connection, session_id: i64, event_type: &str, service_name: Option<&str>, service_type: Option<&str>, ip_address: Option<&str>, port: Option<i64>, timestamp: &str,) -> Result<()> {
     tx.execute(
         "INSERT INTO osc
          (session_id, event_type, service_name, service_type, ip_address, port, timestamp)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![
-            session_id,
-            event_type,
-            service_name,
-            service_type,
-            ip_address,
-            port,
-            timestamp
-        ],
+        params![session_id, event_type, service_name, service_type, ip_address, port, timestamp],
     )?;
     Ok(())
 }
@@ -466,25 +359,12 @@ fn insert_osc_event(
 /// `VRChat`+ サブスクリプション状態のスナップショットをメインデータベースに挿入する。
 ///
 /// セッションごとにスナップショットは1件のみのため `INSERT OR IGNORE` を使用。
-fn insert_subscription_status(
-    tx: &Connection,
-    session_id: i64,
-    is_active: bool,
-    subscription_id: Option<&str>,
-    description: Option<&str>,
-    checked_at: &str,
-) -> Result<()> {
+fn insert_subscription_status(tx: &Connection, session_id: i64, is_active: bool, subscription_id: Option<&str>, description: Option<&str>, checked_at: &str,) -> Result<()> {
     tx.execute(
         "INSERT OR IGNORE INTO subscription
          (session_id, is_active, subscription_id, description, checked_at)
          VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![
-            session_id,
-            is_active,
-            subscription_id,
-            description,
-            checked_at
-        ],
+        params![session_id, is_active, subscription_id, description, checked_at],
     )?;
     Ok(())
 }
@@ -494,12 +374,7 @@ fn insert_subscription_status(
 /// `Received Notification: <... message: "..." >` のうち、収集対象タイプ
 /// (`is_collectible_notification` 参照) のみ INSERT する。`worldId`/`worldName`
 /// のペイロードがある場合はターゲット情報も併せて保存する。
-fn persist_notification(
-    main_tx: &Connection,
-    session_id: i64,
-    ts_str: &str,
-    notification_text: &str,
-) -> Result<()> {
+fn persist_notification(main_tx: &Connection, session_id: i64, ts_str: &str, notification_text: &str,) -> Result<()> {
     let Some(caps) = RE_NOTIFICATION.captures(notification_text) else {
         return Ok(());
     };
@@ -511,35 +386,18 @@ fn persist_notification(
         return Ok(());
     }
 
-    let sender_name = caps
-        .get(1)
-        .map(|m| m.as_str())
-        .filter(|s| !s.is_empty())
-        .map(String::from);
-    let sender_user_id = caps
-        .get(2)
-        .map(|m| m.as_str())
-        .filter(|s| !s.is_empty())
-        .map(String::from);
+    let sender_name = caps.get(1).map(|m| m.as_str()).filter(|s| !s.is_empty()).map(String::from);
+    let sender_user_id = caps.get(2).map(|m| m.as_str()).filter(|s| !s.is_empty()).map(String::from);
     let notif_id = caps.get(4).map(|m| m.as_str().to_string());
     let Some(created_match) = caps.get(5) else {
         return Ok(());
     };
     let created_at_raw = created_match.as_str().trim();
     let message = caps.get(6).map(|m| m.as_str().to_string());
-    let created_at = NaiveDateTime::parse_from_str(created_at_raw, "%m/%d/%Y %H:%M:%S UTC")
-        .ok()
-        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string());
+    let created_at = NaiveDateTime::parse_from_str(created_at_raw, "%m/%d/%Y %H:%M:%S UTC").ok().map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string());
 
-    let location = RE_NOTIFICATION_WORLD_ID
-        .captures(notification_text)
-        .and_then(|captures| captures.get(1))
-        .map(|m| parse_location(m.as_str()))
-        .unwrap_or_default();
-    let target_world_name = RE_NOTIFICATION_WORLD_NAME
-        .captures(notification_text)
-        .and_then(|captures| captures.get(1))
-        .map(|m| m.as_str().to_string());
+    let location = RE_NOTIFICATION_WORLD_ID.captures(notification_text).and_then(|captures| captures.get(1)).map(|m| parse_location(m.as_str())).unwrap_or_default();
+    let target_world_name = RE_NOTIFICATION_WORLD_NAME.captures(notification_text).and_then(|captures| captures.get(1)).map(|m| m.as_str().to_string());
 
     main_tx.execute(
         "INSERT OR IGNORE INTO notifications
@@ -565,10 +423,10 @@ fn persist_notification(
     Ok(())
 }
 
-/// 管理された `Data` ディレクトリ内のログを差分インポートする。
+/// 管理された `Data` directory内のログを差分インポートする。
 ///
-/// 外側トランザクション内でファイルごとに savepoint を切り、個々のファイル失敗で
-/// バッチ全体が巻き戻ることを防ぐ。キャンセル時は外側トランザクションごと
+/// 外側transaction内でファイルごとに savepoint を切り、個々のファイル失敗で
+/// バッチ全体が巻き戻ることを防ぐ。キャンセル時は外側transactionごと
 /// ロールバックし、部分データが残らないことを保証する。
 ///
 /// # Errors
@@ -576,41 +434,23 @@ fn persist_notification(
 /// 続行・確定ができない場合にエラーを返す。ファイル単位の失敗は、正常に取り込めた
 /// ファイルを確定したうえで `DiffImportSummary` に格納する。
 #[allow(clippy::too_many_lines)]
-pub fn run_diff_import<F>(
-    main_db_path: &Path,
-    archive_store_dir: &Path,
-    cancel_status: &AtomicBool,
-    mut progress_callback: F,
-) -> Result<DiffImportSummary, String>
+pub fn run_diff_import<F>(main_db_path: &Path, archive_store_dir: &Path, cancel_status: &AtomicBool, mut progress_callback: F,) -> Result<DiffImportSummary, String>
 where
     F: FnMut(String, String),
 {
-    let mut main_conn = Connection::open(main_db_path).map_err(|e| {
-        analyze_err(
-            &format!("メイン DB を開けませんでした [{}]", main_db_path.display()),
-            e,
-        )
-    })?;
+    let mut main_conn = Connection::open(main_db_path).map_err(|e| { analyze_err(&format!("メイン DB を開けませんでした [{}]", main_db_path.display()), e,) })?;
 
     init_main_db(&main_conn).map_err(|e| analyze_err("メイン DB を初期化できませんでした", e))?;
 
     let log_files = collect_log_files(archive_store_dir);
     if log_files.is_empty() {
         progress_callback("処理対象ログなし".to_string(), "0/0".to_string());
-        return Ok(DiffImportSummary {
-            total_count: 0,
-            failed_filenames: Vec::new(),
-        });
+        return Ok(DiffImportSummary { total_count: 0, failed_filenames: Vec::new(), });
     }
 
-    progress_callback(
-        format!("{}件のログを処理します", log_files.len()),
-        format!("0/{}", log_files.len()),
-    );
+    progress_callback(format!("{}件のログを処理します", log_files.len()), format!("0/{}", log_files.len()),);
 
-    let mut main_tx = main_conn
-        .transaction()
-        .map_err(|e| analyze_err("メイン DB トランザクションを開始できませんでした", e))?;
+    let mut main_tx = main_conn.transaction().map_err(|e| analyze_err("メイン DB トランザクションを開始できませんでした", e))?;
 
     let total = log_files.len();
     let mut failed_filenames = Vec::new();
@@ -624,26 +464,13 @@ where
             continue;
         };
 
-        progress_callback(
-            format!("処理中: {filename}"),
-            format_progress_fraction(idx, total),
-        );
+        progress_callback(format!("処理中: {filename}"), format_progress_fraction(idx, total),);
 
-        let main_sp = main_tx
-            .savepoint()
-            .map_err(|e| analyze_err("メイン DB savepoint を開始できませんでした", e))?;
+        let main_sp = main_tx.savepoint().map_err(|e| analyze_err("メイン DB savepoint を開始できませんでした", e))?;
 
-        match import_log_in_savepoint(
-            &main_sp,
-            log_path,
-            &filename,
-            cancel_status,
-            &mut progress_callback,
-        ) {
+        match import_log_in_savepoint(&main_sp, log_path, &filename, cancel_status, &mut progress_callback,) {
             Ok(outcome) => {
-                main_sp
-                    .commit()
-                    .map_err(|e| analyze_err("メイン DB savepoint を確定できませんでした", e))?;
+                main_sp.commit().map_err(|e| analyze_err("メイン DB savepoint を確定できませんでした", e))?;
                 let status = match outcome {
                     ImportOutcome::Unchanged => format!("スキップ（内容変更なし）: {filename}"),
                     ImportOutcome::Imported => format!("取り込み完了: {filename}"),
@@ -668,45 +495,25 @@ where
         return Err(err);
     }
 
-    main_tx
-        .commit()
-        .map_err(|e| analyze_err("メイン DB 反映を確定できませんでした", e))?;
+    main_tx.commit().map_err(|e| analyze_err("メイン DB 反映を確定できませんでした", e))?;
 
     if !failed_filenames.is_empty() {
         let failed_count = failed_filenames.len();
-        progress_callback(
-            format!("{failed_count}件の取り込みに失敗（成功分は保存済み）"),
-            format_progress_fraction(total - failed_count, total),
-        );
-        return Ok(DiffImportSummary {
-            total_count: total,
-            failed_filenames,
-        });
+        progress_callback(format!("{failed_count}件の取り込みに失敗（成功分は保存済み）"), format_progress_fraction(total - failed_count, total),);
+        return Ok(DiffImportSummary { total_count: total, failed_filenames, });
     }
 
-    progress_callback(
-        "処理完了".to_string(),
-        format_progress_fraction(total, total),
-    );
-    Ok(DiffImportSummary {
-        total_count: total,
-        failed_filenames,
-    })
+    progress_callback("処理完了".to_string(), format_progress_fraction(total, total),);
+    Ok(DiffImportSummary { total_count: total, failed_filenames, })
 }
 
 /// ログファイル（プレーンテキストまたは `.tar.zst` アーカイブ）を開き、
 /// 行単位パーサーに委譲する。
 ///
 /// `.tar.zst` が推奨アーカイブ形式: Zstandard は高速展開を提供し、tar は
-/// ログを単一ファイルにまとめてディレクトリ管理を簡素化する。
+/// ログを単一ファイルにまとめてdirectory管理を簡素化する。
 /// 非圧縮 `VRChat` ログの手動インポート用にプレーンテキストのフォールバックもある。
-fn parse_and_import<F>(
-    main_conn: &Connection,
-    log_path: &Path,
-    filename: &str,
-    cancel_status: &AtomicBool,
-    progress_callback: &mut F,
-) -> Result<()>
+fn parse_and_import<F>(main_conn: &Connection, log_path: &Path, filename: &str, cancel_status: &AtomicBool, progress_callback: &mut F,) -> Result<()>
 where
     F: FnMut(String, String),
 {
@@ -714,15 +521,7 @@ where
         return Err(analyze_cancel_sqlite_err());
     }
 
-    with_log_content_reader(log_path, |reader| {
-        parse_and_import_reader(
-            main_conn,
-            BufReader::new(reader),
-            filename,
-            cancel_status,
-            progress_callback,
-        )
-    })
+    with_log_content_reader(log_path, |reader| { parse_and_import_reader(main_conn, BufReader::new(reader), filename, cancel_status, progress_callback,) })
 }
 
 /// ログストリーム1件を解析し、正規化データをメインデータベースに書き込む。
@@ -731,13 +530,7 @@ where
 /// 時系列の副作用に依存しており、処理を過度に分割すると
 /// セッション・訪問・プレイヤー・通知の状態更新の整合性検証が困難になる。
 #[allow(clippy::too_many_lines)]
-fn parse_and_import_reader<R, F>(
-    main_tx: &Connection,
-    mut reader: BufReader<R>,
-    filename: &str,
-    cancel_status: &AtomicBool,
-    progress_callback: &mut F,
-) -> Result<()>
+fn parse_and_import_reader<R, F>(main_tx: &Connection, mut reader: BufReader<R>, filename: &str, cancel_status: &AtomicBool, progress_callback: &mut F,) -> Result<()>
 where
     R: std::io::Read,
     F: FnMut(String, String),
@@ -760,11 +553,7 @@ where
          VALUES ('', NULL, NULL, NULL, ?1)",
         params![filename],
     )?;
-    let session_id: i64 = main_tx.query_row(
-        "SELECT id FROM sessions WHERE log_name = ?1",
-        params![filename],
-        |row| row.get(0),
-    )?;
+    let session_id: i64 = main_tx.query_row("SELECT id FROM sessions WHERE log_name = ?1", params![filename], |row| row.get(0),)?;
 
     progress_callback("パース開始".to_string(), String::new());
 
@@ -777,9 +566,7 @@ where
         }
 
         line_buffer.clear();
-        let bytes_read = reader
-            .read_until(b'\n', &mut line_buffer)
-            .map_err(|err| analyze_sqlite_err("ログ行を読み取れませんでした", err))?;
+        let bytes_read = reader.read_until(b'\n', &mut line_buffer).map_err(|err| analyze_sqlite_err("ログ行を読み取れませんでした", err))?;
         if bytes_read == 0 {
             break;
         }
@@ -801,9 +588,7 @@ where
             buf.push_str(&line);
             if line.trim_end().ends_with("\">") {
                 let merged = pending_notification.take().unwrap_or_default();
-                let ts_str_for_notif = current_ts
-                    .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
-                    .unwrap_or_default();
+                let ts_str_for_notif = current_ts.map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()).unwrap_or_default();
                 persist_notification(main_tx, session_id, &ts_str_for_notif, &merged)?;
             }
             continue;
@@ -823,14 +608,10 @@ where
                 }
                 end_time = Some(formatted);
             } else {
-                crate::utils::log_warn(&format!(
-                    "タイムスタンプのパースをスキップしました [{filename}]: {ts_str}"
-                ));
+                crate::utils::log_warn(&format!("タイムスタンプのパースをスキップしました [{filename}]: {ts_str}"));
             }
         }
-        let ts_str = current_ts
-            .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
-            .unwrap_or_default();
+        let ts_str = current_ts.map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()).unwrap_or_default();
 
         // --- 旧形式アバター取得ログによるフレンド状態の推定 ---
         // `Friend` 値だけではユーザーを識別できないため、同一訪問内でアバター名、
@@ -838,21 +619,14 @@ where
         if current_visit_id.is_some() {
             if let Some(caps) = RE_AVATAR_SWITCH.captures(&line) {
                 if let (Some(display_match), Some(avatar_match)) = (caps.get(1), caps.get(2)) {
-                    friendship_tracker
-                        .on_avatar_switch(display_match.as_str(), avatar_match.as_str());
+                    friendship_tracker.on_avatar_switch(display_match.as_str(), avatar_match.as_str());
                 }
             } else if line.contains("[AssetBundleDownloadManager] Download for avatar (") {
-                let status = RE_AVATAR_DOWNLOAD_FRIEND
-                    .captures(&line)
-                    .and_then(|caps| caps.get(1))
-                    .and_then(|value| FriendStatus::from_log_value(value.as_str()));
+                let status = RE_AVATAR_DOWNLOAD_FRIEND.captures(&line).and_then(|caps| caps.get(1)).and_then(|value| FriendStatus::from_log_value(value.as_str()));
                 friendship_tracker.on_avatar_download(status, line_count);
             } else if let Some(caps) = RE_AVATAR_UNPACK.captures(&line) {
                 if let Some(payload) = caps.get(1) {
-                    if let (Some(visit_id), Some((user_id, friend_status))) = (
-                        current_visit_id,
-                        friendship_tracker.on_avatar_unpack(payload.as_str(), line_count),
-                    ) {
+                    if let (Some(visit_id), Some((user_id, friend_status))) = (current_visit_id, friendship_tracker.on_avatar_unpack(payload.as_str(), line_count),) {
                         main_tx.execute(
                             "UPDATE with_users
                              SET friend_status = ?1
@@ -879,14 +653,8 @@ where
         if let Some(caps) = RE_ENTERING.captures(&line) {
             friendship_tracker.reset_visit();
             if let Some(visit_id) = current_visit_id {
-                main_tx.execute(
-                    "UPDATE visits SET leave_time = ?1 WHERE id = ?2 AND leave_time IS NULL",
-                    params![ts_str, visit_id],
-                )?;
-                main_tx.execute(
-                    "UPDATE with_users SET leave_time = ?1 WHERE visit_id = ?2 AND leave_time IS NULL",
-                    params![ts_str, visit_id],
-                )?;
+                main_tx.execute("UPDATE visits SET leave_time = ?1 WHERE id = ?2 AND leave_time IS NULL", params![ts_str, visit_id],)?;
+                main_tx.execute("UPDATE with_users SET leave_time = ?1 WHERE visit_id = ?2 AND leave_time IS NULL", params![ts_str, visit_id],)?;
             }
             if let Some(room_match) = caps.get(1) {
                 pending_room_name = Some(room_match.as_str().to_string());
@@ -907,14 +675,7 @@ where
                     "INSERT INTO visits
                      (session_id, world_name, instance_id, instance_type, region, join_time)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                    params![
-                        session_id,
-                        room_name,
-                        instance_id,
-                        location.access_type,
-                        location.region,
-                        ts_str
-                    ],
+                    params![session_id, room_name, instance_id, location.access_type, location.region, ts_str],
                 )?;
                 friendship_tracker.reset_visit();
                 current_visit_id = Some(main_tx.last_insert_rowid());
@@ -925,14 +686,8 @@ where
 
         if RE_LEFT_ROOM.is_match(&line) {
             if let Some(visit_id) = current_visit_id {
-                main_tx.execute(
-                    "UPDATE visits SET leave_time = ?1 WHERE id = ?2 AND leave_time IS NULL",
-                    params![ts_str, visit_id],
-                )?;
-                main_tx.execute(
-                    "UPDATE with_users SET leave_time = ?1 WHERE visit_id = ?2 AND leave_time IS NULL",
-                    params![ts_str, visit_id],
-                )?;
+                main_tx.execute("UPDATE visits SET leave_time = ?1 WHERE id = ?2 AND leave_time IS NULL", params![ts_str, visit_id],)?;
+                main_tx.execute("UPDATE with_users SET leave_time = ?1 WHERE visit_id = ?2 AND leave_time IS NULL", params![ts_str, visit_id],)?;
                 current_visit_id = None;
                 pending_room_name = None;
             }
@@ -990,8 +745,7 @@ where
             let display_name = display_match.as_str();
             let locality = locality_match.as_str();
             if locality == "local" {
-                if my_display_name.is_none() || my_display_name.as_deref() == Some("[LocalPlayer]")
-                {
+                if my_display_name.is_none() || my_display_name.as_deref() == Some("[LocalPlayer]") {
                     my_display_name = Some(display_name.to_string());
                 }
                 if let Some(visit_id) = current_visit_id {
@@ -1011,15 +765,7 @@ where
             if let Some(path_match) = caps.get(1) {
                 let width = caps.get(2).and_then(|m| m.as_str().parse::<i64>().ok());
                 let height = caps.get(3).and_then(|m| m.as_str().parse::<i64>().ok());
-                insert_screenshot(
-                    main_tx,
-                    current_visit_id,
-                    path_match.as_str(),
-                    width,
-                    height,
-                    &ts_str,
-                    session_id,
-                )?;
+                insert_screenshot(main_tx, current_visit_id, path_match.as_str(), width, height, &ts_str, session_id,)?;
             }
             continue;
         }
@@ -1029,16 +775,7 @@ where
             let service_name = caps.get(1).map(|m| m.as_str());
             let ip_address = caps.get(2).map(|m| m.as_str());
             let port = caps.get(3).and_then(|m| m.as_str().parse::<i64>().ok());
-            insert_osc_event(
-                main_tx,
-                session_id,
-                "found",
-                service_name,
-                None,
-                ip_address,
-                port,
-                &ts_str,
-            )?;
+            insert_osc_event(main_tx, session_id, "found", service_name, None, ip_address, port, &ts_str,)?;
             continue;
         }
 
@@ -1061,50 +798,28 @@ where
             let active = caps.get(2).map(|m| m.as_str()).unwrap_or_default();
             let desc = caps.get(3).map(|m| m.as_str()).unwrap_or_default();
             let is_active = active.eq_ignore_ascii_case("true");
-            let sub_id_opt = if subscription_id.is_empty() || subscription_id == "None" {
-                None
-            } else {
-                Some(subscription_id)
-            };
+            let sub_id_opt = if subscription_id.is_empty() || subscription_id == "None" { None } else { Some(subscription_id) };
             let desc_opt = if desc.is_empty() { None } else { Some(desc) };
-            insert_subscription_status(
-                main_tx, session_id, is_active, sub_id_opt, desc_opt, &ts_str,
-            )?;
+            insert_subscription_status(main_tx, session_id, is_active, sub_id_opt, desc_opt, &ts_str,)?;
         }
     }
     if invalid_utf8_line_count > 0 {
-        crate::utils::log_warn(&format!(
-            "無効な UTF-8 を含むログ行を置換して取り込みました [{filename}]: {invalid_utf8_line_count} 行"
-        ));
+        crate::utils::log_warn(&format!("無効な UTF-8 を含むログ行を置換して取り込みました [{filename}]: {invalid_utf8_line_count} 行"));
     }
 
     progress_callback("コミット中".to_string(), String::new());
 
     if let Some(visit_id) = current_visit_id {
-        let last_ts = current_ts
-            .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
-            .unwrap_or_default();
-        main_tx.execute(
-            "UPDATE visits SET leave_time = ?1 WHERE id = ?2 AND leave_time IS NULL",
-            params![last_ts, visit_id],
-        )?;
-        main_tx.execute(
-            "UPDATE with_users SET leave_time = ?1 WHERE visit_id = ?2 AND leave_time IS NULL",
-            params![last_ts, visit_id],
-        )?;
+        let last_ts = current_ts.map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()).unwrap_or_default();
+        main_tx.execute("UPDATE visits SET leave_time = ?1 WHERE id = ?2 AND leave_time IS NULL", params![last_ts, visit_id],)?;
+        main_tx.execute("UPDATE with_users SET leave_time = ?1 WHERE visit_id = ?2 AND leave_time IS NULL", params![last_ts, visit_id],)?;
     }
 
     main_tx.execute(
         "UPDATE sessions
          SET start_time = ?1, end_time = ?2, account_id = ?3, account_name = ?4
          WHERE log_name = ?5",
-        params![
-            start_time.unwrap_or_default(),
-            end_time,
-            my_user_id,
-            my_display_name,
-            filename
-        ],
+        params![start_time.unwrap_or_default(), end_time, my_user_id, my_display_name, filename],
     )?;
 
     if let Some(user_id) = my_user_id {
@@ -1132,21 +847,11 @@ where
 /// # Errors
 /// DB セットアップ失敗、バッチ全体のロールバック必要、またはコミット前の
 /// キャンセル要求時にエラーを返す。
-pub fn run_enhanced_import_batch<F>(
-    main_db_path: &Path,
-    target_paths: &[PathBuf],
-    cancel_status: &AtomicBool,
-    mut progress_callback: F,
-) -> Result<(), String>
+pub fn run_enhanced_import_batch<F>(main_db_path: &Path, target_paths: &[PathBuf], cancel_status: &AtomicBool, mut progress_callback: F,) -> Result<(), String>
 where
     F: FnMut(String, String),
 {
-    let mut main_conn = Connection::open(main_db_path).map_err(|e| {
-        analyze_err(
-            &format!("メイン DB を開けませんでした [{}]", main_db_path.display()),
-            e,
-        )
-    })?;
+    let mut main_conn = Connection::open(main_db_path).map_err(|e| { analyze_err(&format!("メイン DB を開けませんでした [{}]", main_db_path.display()), e,) })?;
 
     init_main_db(&main_conn).map_err(|e| analyze_err("メイン DB を初期化できませんでした", e))?;
 
@@ -1155,9 +860,7 @@ where
         return Ok(());
     }
 
-    let mut main_tx = main_conn
-        .transaction()
-        .map_err(|e| analyze_err("メイン DB トランザクションを開始できませんでした", e))?;
+    let mut main_tx = main_conn.transaction().map_err(|e| analyze_err("メイン DB トランザクションを開始できませんでした", e))?;
 
     let total = target_paths.len();
     for (index, target_path) in target_paths.iter().enumerate() {
@@ -1166,29 +869,15 @@ where
             return Err(err);
         }
 
-        let filename = source_name_for_archive(target_path)
-            .ok_or_else(|| "対象ファイル名を解決できませんでした".to_string())?;
+        let filename = source_name_for_archive(target_path).ok_or_else(|| "対象ファイル名を解決できませんでした".to_string())?;
 
-        progress_callback(
-            format!("処理中: {filename}"),
-            format_progress_fraction(index + 1, total),
-        );
+        progress_callback(format!("処理中: {filename}"), format_progress_fraction(index + 1, total),);
 
-        let main_sp = main_tx
-            .savepoint()
-            .map_err(|e| analyze_err("メイン DB savepoint を開始できませんでした", e))?;
+        let main_sp = main_tx.savepoint().map_err(|e| analyze_err("メイン DB savepoint を開始できませんでした", e))?;
 
-        match import_log_in_savepoint(
-            &main_sp,
-            target_path,
-            &filename,
-            cancel_status,
-            &mut progress_callback,
-        ) {
+        match import_log_in_savepoint(&main_sp, target_path, &filename, cancel_status, &mut progress_callback,) {
             Ok(outcome) => {
-                main_sp
-                    .commit()
-                    .map_err(|e| analyze_err("メイン DB savepoint を確定できませんでした", e))?;
+                main_sp.commit().map_err(|e| analyze_err("メイン DB savepoint を確定できませんでした", e))?;
                 let status = match outcome {
                     ImportOutcome::Unchanged => format!("スキップ（内容変更なし）: {filename}"),
                     ImportOutcome::Imported => format!("取り込み完了: {filename}"),
@@ -1213,9 +902,7 @@ where
         return Err(err);
     }
 
-    main_tx
-        .commit()
-        .map_err(|e| analyze_err("メイン DB 反映を確定できませんでした", e))?;
+    main_tx.commit().map_err(|e| analyze_err("メイン DB 反映を確定できませんでした", e))?;
 
     progress_callback("完了".to_string(), format!("{total}/{total}"));
     Ok(())

@@ -1,9 +1,9 @@
-//! フロントエンド向け管理設定の CRUD とレジストリカタログアクセス。
+//! Frontend向け管理設定の CRUD とregistryカタログアクセス。
 
-use crate::config::{self, RegistryCatalog};
+use crate::config::{ self, RegistryCatalog };
 use crate::platform;
 
-use super::{ManagementSettings, ONE_MB_BYTES, STELLA_RECORD_RUN_VALUE};
+use super::{ ManagementSettings, ONE_MB_BYTES, STELLA_RECORD_RUN_VALUE };
 
 const MAX_ARCHIVE_LIMIT_MB: u64 = 10_485_760;
 
@@ -24,55 +24,36 @@ pub struct StartupImportSettings {
 pub fn get_startup_import_settings() -> Result<StartupImportSettings, String> {
     let stella = config::load_stellarecord_setting();
     let preference = config::load_startup_import_preference();
-    let log_archive_path = stella
-        .get_effective_archive_dir()
-        .ok_or_else(|| "ログ保存先を取得できませんでした。".to_string())?;
-    let database_path = stella
-        .get_effective_db_path()
-        .ok_or_else(|| "DB保存先を取得できませんでした。".to_string())?;
+    let log_archive_path = stella.get_effective_archive_dir().ok_or_else(|| "ログ保存先を取得できませんでした。".to_string())?;
+    let database_path = stella.get_effective_db_path().ok_or_else(|| "DB保存先を取得できませんでした。".to_string())?;
 
-    Ok(StartupImportSettings {
-        enabled: preference.enabled,
-        preference_set: preference.preference_set,
-        log_archive_path: log_archive_path.display().to_string(),
-        database_path: database_path.display().to_string(),
-    })
+    Ok(StartupImportSettings { enabled: preference.enabled, preference_set: preference.preference_set, log_archive_path: log_archive_path.display().to_string(), database_path: database_path.display().to_string(), })
 }
 
 /// 起動時ログ取り込みについてユーザーが選択した許可状態を保存する。
 ///
 /// # Errors
-/// レジストリへ保存できない場合にエラーを返す。
+/// registryへ保存できない場合にエラーを返す。
 #[tauri::command]
 pub fn save_startup_import_preference(enabled: bool) -> Result<(), String> {
     config::save_startup_import_preference(enabled)
 }
 
-/// フロントエンド用の管理設定ダイアログ状態を返す。
+/// Frontend用の管理設定ダイアログ状態を返す。
 ///
 /// ローカル `StellaRecord` 設定（スタートアップ設定）と Polaris 設定
 /// （アーカイブ容量）の値を1つのペイロードにマージし、UI が1回の呼び出しで
 /// 設定ダイアログの両セクションを表示できるようにする。
 #[tauri::command]
 pub fn get_management_settings() -> ManagementSettings {
-    build_management_settings(
-        &config::load_stellarecord_setting(),
-        &config::load_polaris_setting(),
-    )
+    build_management_settings(&config::load_stellarecord_setting(), &config::load_polaris_setting(),)
 }
 
 /// `StellaRecord` と Polaris の設定を UI 向けペイロードへ統合する。
 ///
-/// 設定値を引数で受け取ることで、レジストリ参照を経由せず統合・MB 丸めロジックを検証できる。
-fn build_management_settings(
-    stella: &config::StellaRecordSetting,
-    polaris: &config::PolarisSetting,
-) -> ManagementSettings {
-    ManagementSettings {
-        startup_enabled: stella.enable_startup,
-        startup_preference_set: stella.startup_preference_set,
-        archive_limit_mb: bytes_to_archive_limit_mb(polaris.capacity_threshold_bytes),
-    }
+/// 設定値を引数で受け取ることで、registry参照を経由せず統合・MB 丸めロジックを検証できる。
+fn build_management_settings(stella: &config::StellaRecordSetting, polaris: &config::PolarisSetting,) -> ManagementSettings {
+    ManagementSettings { startup_enabled: stella.enable_startup, startup_preference_set: stella.startup_preference_set, archive_limit_mb: bytes_to_archive_limit_mb(polaris.capacity_threshold_bytes), }
 }
 
 /// バイト数を表示用のメガバイト整数へ四捨五入する（最低 1 MB）。
@@ -87,8 +68,7 @@ fn archive_limit_mb_to_bytes(mb: u64) -> Result<u64, String> {
     if !(1..=MAX_ARCHIVE_LIMIT_MB).contains(&mb) {
         return Err("警告ラインは 1MB～10,485,760MB (10TB) の整数で指定してください".to_string());
     }
-    mb.checked_mul(ONE_MB_BYTES)
-        .ok_or_else(|| "警告ラインをバイト数へ変換できませんでした".to_string())
+    mb.checked_mul(ONE_MB_BYTES).ok_or_else(|| "警告ラインをバイト数へ変換できませんでした".to_string())
 }
 
 /// 3か所の設定を順に保存し、途中失敗時は開始前の値へ復元する。
@@ -106,9 +86,7 @@ where
     SetStartup: FnMut(bool) -> Result<(), String>,
     SavePolaris: FnMut(&config::PolarisSetting) -> Result<(), String>,
 {
-    let result = save_polaris(next_polaris)
-        .and_then(|()| set_startup(next_stella.enable_startup))
-        .and_then(|()| save_stella(next_stella));
+    let result = save_polaris(next_polaris).and_then(|()| set_startup(next_stella.enable_startup)).and_then(|()| save_stella(next_stella));
 
     if let Err(err) = result {
         let mut rollback_errors = Vec::new();
@@ -125,10 +103,7 @@ where
         if rollback_errors.is_empty() {
             return Err(err);
         }
-        return Err(format!(
-            "{err}。設定の復元にも失敗しました: {}",
-            rollback_errors.join(" / ")
-        ));
+        return Err(format!("{err}。設定の復元にも失敗しました: {}", rollback_errors.join(" / ")));
     }
 
     Ok(())
@@ -139,10 +114,7 @@ where
 /// # Errors
 /// 設定ファイルまたはスタートアップ登録を更新できない場合にエラーを返す。
 #[tauri::command]
-pub fn save_management_settings(
-    startup_enabled: bool,
-    archive_limit_mb: u64,
-) -> Result<(), String> {
+pub fn save_management_settings(startup_enabled: bool, archive_limit_mb: u64,) -> Result<(), String> {
     let capacity_threshold_bytes = archive_limit_mb_to_bytes(archive_limit_mb)?;
 
     let original_stella = config::load_stellarecord_setting();
@@ -154,18 +126,10 @@ pub fn save_management_settings(
     let mut next_polaris = original_polaris.clone();
     next_polaris.capacity_threshold_bytes = capacity_threshold_bytes;
 
-    persist_management_settings(
-        &original_stella,
-        &next_stella,
-        &original_polaris,
-        &next_polaris,
-        config::save_stellarecord_setting,
-        |enabled| platform::set_startup_enabled(STELLA_RECORD_RUN_VALUE, enabled),
-        config::save_polaris_setting,
-    )
+    persist_management_settings(&original_stella, &next_stella, &original_polaris, &next_polaris, config::save_stellarecord_setting, |enabled| platform::set_startup_enabled(STELLA_RECORD_RUN_VALUE, enabled), config::save_polaris_setting,)
 }
 
-/// 外部アプリランチャーグリッドを構成するレジストリカタログを返す。
+/// 外部アプリランチャーグリッドを構成するregistryカタログを返す。
 ///
 /// ユーザーが登録したアプリ（名前、パス、アイコン）を一覧にし、
 /// `StellaRecord` サイドバーからのクイック起動を提供する。

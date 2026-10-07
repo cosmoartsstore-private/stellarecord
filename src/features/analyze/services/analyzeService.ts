@@ -21,5 +21,4 @@ export const onAnalyzeFinished = (handler: () => void) => listen('analyze-finish
 export const getDeletableSourceLogs = () => invoke<DeletableLogInfo[]>('get_deletable_source_logs');
 
 /** 指定されたソースログファイルを削除し、削除件数を返す */
-export const deleteSourceLogs = (fileNames: string[]) =>
-  invoke<number>('delete_source_logs', { fileNames });
+export const deleteSourceLogs = (fileNames: string[]) => invoke<number>('delete_source_logs', { fileNames });

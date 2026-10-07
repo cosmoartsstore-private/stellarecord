@@ -1,10 +1,10 @@
-//! メインデータベースの `SQLite` スキーマ定義と初期化。
+//! メインデータベースの `SQLite` schema定義と初期化。
 //!
 //! メインデータベースは WAL ジャーナルモードと外部キーによる参照整合性を使用する。
 //! ここにある DDL を正とし、追加テーブルと追加列は既存データを保持したまま
 //! 初期化時に適用する。
 
-use rusqlite::{Connection, Result};
+use rusqlite::{ Connection, Result };
 
 /// メイン `StellaRecord` データベースの DDL。
 ///
@@ -130,7 +130,7 @@ CREATE TABLE IF NOT EXISTS apps (
 /// よく使われる集計を公開する事前定義ビュー。
 ///
 /// `visit_summary` はワールド訪問ごとの滞在時間とプレイヤー数を算出し、
-/// フロントエンドでの再計算を不要にする。
+/// Frontendでの再計算を不要にする。
 /// `with_users_detail` / `screenshots_detail` は関連テーブルを結合した詳細ビュー。
 const MAIN_VIEWS: &str = "
 CREATE VIEW IF NOT EXISTS visit_summary AS
@@ -180,7 +180,7 @@ FROM screenshots s
 LEFT JOIN visits v ON v.id = s.visit_id;
 ";
 
-/// 指定テーブルにカラムが存在するか確認する。
+/// 指定テーブルにcolumnが存在するか確認する。
 fn table_has_column(conn: &Connection, table: &str, column: &str) -> Result<bool> {
     let mut statement = conn.prepare(&format!("PRAGMA table_info({table})"))?;
     let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
@@ -192,7 +192,7 @@ fn table_has_column(conn: &Connection, table: &str, column: &str) -> Result<bool
     Ok(false)
 }
 
-/// 旧 `screenshots` スキーマへセッション所有列を追加し、確定できる行だけ補完する。
+/// 旧 `screenshots` schemaへセッション所有列を追加し、確定できる行だけ補完する。
 ///
 /// `visit_id` がある行は親訪問からセッションを一意に特定できる。ワールド外撮影として
 /// `visit_id` が `NULL` の旧行は所有元を推定せず、そのまま保持する。
@@ -253,10 +253,10 @@ fn migrate_import_parser_version(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// メイン `StellaRecord` スキーマと必要なビューを初期化する。
+/// メイン `StellaRecord` schemaと必要なビューを初期化する。
 ///
 /// # Errors
-/// `SQLite` プラグマ、スキーマ、加算的移行、またはビューの適用に失敗した場合に
+/// `SQLite` プラグマ、schema、加算的移行、またはビューの適用に失敗した場合に
 /// エラーを返す。
 pub fn init_main_db(conn: &Connection) -> Result<()> {
     conn.execute_batch("PRAGMA journal_mode = WAL;")?;

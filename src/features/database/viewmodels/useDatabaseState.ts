@@ -4,7 +4,7 @@ import { emptyTableData } from '../models/types';
 import { loadDbTableData, loadDbTables } from '../services/databaseService';
 import { addErrorToast, type AddToast } from '../../../shared/lib/errors';
 
-/** ソート状態（カラム名と方向） */
+/** ソート状態（column名と方向） */
 export interface SortState {
   column: string;
   dir: 'asc' | 'desc';
@@ -25,7 +25,7 @@ export function useDatabaseState(addToast: AddToast) {
   const [sortState, setSortState] = useState<SortState | null>(null);
   const requestGenerationRef = useRef(0);
   const committedTableRef = useRef('');
-  // バックエンド側 (src-tauri/src/commands/database.rs の PAGE_SIZE) と一致させる必要がある
+  // Backend側 (src-tauri/src/commands/database.rs の PAGE_SIZE) と一致させる必要がある
   const pageSize = 500;
 
   /** 同じ要求世代に属するテーブルデータだけをプレビュー状態へ反映する */
@@ -76,7 +76,7 @@ export function useDatabaseState(addToast: AddToast) {
     [currentTable, loadTableData, sortState],
   );
 
-  /** カラムのソートを切り替える（昇順→降順→解除） */
+  /** columnのソートを切り替える（昇順→降順→解除） */
   const toggleSort = useCallback(
     async (columnName: string) => {
       let next: SortState | null;

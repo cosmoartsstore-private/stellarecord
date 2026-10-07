@@ -1,10 +1,6 @@
 import { useState } from 'react';
 import { StellaIcon, stellaIconNames } from '../../../shared/components/Icons';
-import {
-  closeDialog,
-  closeDialogOnBackdrop,
-  useModalDialog,
-} from '../../../shared/hooks/useModalDialog';
+import { closeDialog, closeDialogOnBackdrop, useModalDialog } from '../../../shared/hooks/useModalDialog';
 import { formatFileSize } from '../../../shared/lib/byteFormat';
 import type { DeletableLogInfo } from '../models/types';
 import shared from '../../../shared/styles/shared.module.css';
@@ -43,28 +39,15 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
     setSelected(isAllSelected ? new Set() : new Set(logs.map((l) => l.file_name)));
   };
 
-  const totalSize = logs
-    .filter((l) => selected.has(l.file_name))
-    .reduce((sum, l) => sum + l.size_bytes, 0);
+  const totalSize = logs.filter((l) => selected.has(l.file_name)).reduce((sum, l) => sum + l.size_bytes, 0);
 
   return (
-    <dialog
-      ref={dialogRef}
-      className={shared.modalOverlay}
-      aria-labelledby="polaris-cleanup-title"
-      aria-describedby="polaris-cleanup-description polaris-cleanup-notice"
-      onClose={onClose}
-      onMouseDown={closeDialogOnBackdrop}
-    >
+    <dialog ref={dialogRef} className={shared.modalOverlay} aria-labelledby="polaris-cleanup-title" aria-describedby="polaris-cleanup-description polaris-cleanup-notice" onClose={onClose} onMouseDown={closeDialogOnBackdrop}>
       <div className={`${shared.modalContent} ${styles.content}`}>
         <div className={styles.header}>
-          <div className={styles.warningIcon}>
-            <StellaIcon name={stellaIconNames.alert} />
-          </div>
+          <div className={styles.warningIcon}><StellaIcon name={stellaIconNames.alert} /></div>
           <div>
-            <h3 id="polaris-cleanup-title" className={styles.title} tabIndex={-1} autoFocus>
-              元ログ削除
-            </h3>
+            <h3 id="polaris-cleanup-title" className={styles.title} tabIndex={-1} autoFocus>元ログ削除</h3>
             <p id="polaris-cleanup-description" className={styles.subtitle}>
               Polaris側に存在する元ログを削除します
               <br />
@@ -91,19 +74,11 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
           {logs.map((log) => {
             const isSelected = selected.has(log.file_name);
             return (
-              <button
-                key={log.file_name}
-                type="button"
-                aria-pressed={isSelected}
-                className={`${styles.fileRow} ${isSelected ? styles.fileRowSelected : ''}`}
-                onClick={() => {
+              <button key={log.file_name} type="button" aria-pressed={isSelected} className={`${styles.fileRow} ${isSelected ? styles.fileRowSelected : ''}`} onClick={() => {
                   toggle(log.file_name);
-                }}
-              >
+                }}>
                 <span className={`${styles.checkbox} ${isSelected ? styles.checkboxChecked : ''}`}>
-                  <svg aria-hidden="true" viewBox="0 0 12 10" className={styles.checkIcon}>
-                    <polyline points="1.5 5 4.5 8 10.5 2" />
-                  </svg>
+                  <svg aria-hidden="true" viewBox="0 0 12 10" className={styles.checkIcon}><polyline points="1.5 5 4.5 8 10.5 2" /></svg>
                 </span>
                 <span className={styles.fileName}>{log.file_name}</span>
                 <span className={styles.fileSize}>{formatFileSize(log.size_bytes)}</span>
@@ -113,17 +88,10 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
         </div>
 
         <div className={shared.modalActions}>
-          <button type="button" className={shared.btn} onClick={closeDialog}>
-            キャンセル
-          </button>
-          <button
-            type="button"
-            className={`${shared.btn} ${shared.danger} ${shared.wipe}`}
-            disabled={selected.size === 0}
-            onClick={() => {
+          <button type="button" className={shared.btn} onClick={closeDialog}>キャンセル</button>
+          <button type="button" className={`${shared.btn} ${shared.danger} ${shared.wipe}`} disabled={selected.size === 0} onClick={() => {
               onConfirm(Array.from(selected));
-            }}
-          >
+            }}>
             {String(selected.size)} 件を削除
           </button>
         </div>

@@ -20,26 +20,16 @@ export function CreditButton() {
 
   return (
     <>
-      <button
-        type="button"
-        className={styles.trigger}
-        onClick={() => {
+      <button type="button" className={styles.trigger} onClick={() => {
           setIsOpen(true);
-        }}
-        aria-label="クレジット"
-      >
-        <StellaIcon
-          name={stellaIconNames.info}
-          style={{ width: '18px', height: '18px', fill: 'currentColor' }}
-        />
+        }} aria-label="クレジット">
+        <StellaIcon name={stellaIconNames.info} style={{ width: '18px', height: '18px', fill: 'currentColor' }} />
       </button>
 
       {isOpen && (
-        <CreditModal
-          onClose={() => {
+        <CreditModal onClose={() => {
             setIsOpen(false);
-          }}
-        />
+          }} />
       )}
     </>
   );
@@ -60,26 +50,10 @@ function CreditModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <dialog
-      ref={dialogRef}
-      className={shared.modalOverlay}
-      aria-labelledby="credit-title"
-      onClose={onClose}
-      onMouseDown={closeDialogOnBackdrop}
-    >
+    <dialog ref={dialogRef} className={shared.modalOverlay} aria-labelledby="credit-title" onClose={onClose} onMouseDown={closeDialogOnBackdrop}>
       <div className={`${shared.modalContent} ${styles.modal}`}>
-        <h3 id="credit-title" className={styles.visuallyHidden}>
-          クレジット
-        </h3>
-        <button
-          type="button"
-          className={styles.closeButton}
-          onClick={closeDialog}
-          aria-label="クレジットを閉じる"
-          autoFocus
-        >
-          <StellaIcon name={stellaIconNames.close} />
-        </button>
+        <h3 id="credit-title" className={styles.visuallyHidden}>クレジット</h3>
+        <button type="button" className={styles.closeButton} onClick={closeDialog} aria-label="クレジットを閉じる" autoFocus><StellaIcon name={stellaIconNames.close} /></button>
         <div className={styles.banner}>
           <div className={styles.bannerGlow} />
           <img src={logoDarkSrc} alt="STELLA RECORD" className={styles.bannerLogo} />
@@ -99,20 +73,10 @@ function CreditModal({ onClose }: { onClose: () => void }) {
 
           <div className={styles.links}>
             {LINKS.map((link) => (
-              <button
-                key={link.label}
-                type="button"
-                className={styles.linkItem}
-                onClick={() => {
+              <button key={link.label} type="button" className={styles.linkItem} onClick={() => {
                   handleLink(link.url);
-                }}
-              >
-                <span className={styles.linkIcon}>
-                  <StellaIcon
-                    name={link.icon}
-                    style={{ width: '14px', height: '14px', fill: 'currentColor' }}
-                  />
-                </span>
+                }}>
+                <span className={styles.linkIcon}><StellaIcon name={link.icon} style={{ width: '14px', height: '14px', fill: 'currentColor' }} /></span>
                 <span className={styles.linkLabel}>{link.label}</span>
                 <span className={styles.linkArrow}>&#8250;</span>
               </button>

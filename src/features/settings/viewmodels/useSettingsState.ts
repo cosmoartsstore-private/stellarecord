@@ -1,17 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ManagementSettings } from '../models/types';
-import {
-  loadManagementSettings as loadManagementSettingsCommand,
-  saveManagementSettings as saveManagementSettingsCommand,
-} from '../services/settingsService';
+import { loadManagementSettings as loadManagementSettingsCommand, saveManagementSettings as saveManagementSettingsCommand } from '../services/settingsService';
 import { UserFacingError } from '../../../shared/lib/errors';
 
-/** バックエンド設定読み込み前に使用する安全なデフォルト値 */
-const defaultManagementSettings: ManagementSettings = {
-  startup_enabled: false,
-  startup_preference_set: false,
-  archive_limit_mb: 300,
-};
+/** Backend設定読み込み前に使用する安全なデフォルト値 */
+const defaultManagementSettings: ManagementSettings = { startup_enabled: false, startup_preference_set: false, archive_limit_mb: 300 };
 
 const maxArchiveLimitMb = 10_485_760;
 
@@ -56,11 +49,7 @@ export function useSettingsState() {
   const saveManagementSettings = useCallback(
     async (startupEnabled: boolean, archiveLimitMb: number) => {
       await saveManagementSettingsCommand(startupEnabled, archiveLimitMb);
-      const settings: ManagementSettings = {
-        startup_enabled: startupEnabled,
-        startup_preference_set: true,
-        archive_limit_mb: archiveLimitMb,
-      };
+      const settings: ManagementSettings = { startup_enabled: startupEnabled, startup_preference_set: true, archive_limit_mb: archiveLimitMb };
       persistedSettingsRef.current = settings;
       isDraftSynchronizedRef.current = false;
       setManagementSettings(settings);
@@ -114,11 +103,5 @@ export function useSettingsState() {
     await saveManagementSettings(isStartupEnabledDraft, parsed);
   }, [archiveLimitDraft, isStartupEnabledDraft, saveManagementSettings]);
 
-  return {
-    archiveLimitDraft,
-    isStartupEnabledDraft,
-    setArchiveLimitDraft,
-    toggleStartup,
-    saveArchiveLimit,
-  };
+  return { archiveLimitDraft, isStartupEnabledDraft, setArchiveLimitDraft, toggleStartup, saveArchiveLimit };
 }

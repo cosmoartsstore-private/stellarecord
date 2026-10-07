@@ -21,14 +21,7 @@ interface ArchiveSelectorModalProps {
  * .tar.zst アーカイブの取り込み対象を選択するモーダル。
  * Shift範囲選択 / Ctrl個別トグル / ドラッグ選択に対応する。
  */
-export function ArchiveSelectorModal({
-  archiveFiles,
-  selectedFiles,
-  onClose,
-  onSelectAll,
-  onFileAction,
-  onConfirm,
-}: ArchiveSelectorModalProps) {
+export function ArchiveSelectorModal({ archiveFiles, selectedFiles, onClose, onSelectAll, onFileAction, onConfirm }: ArchiveSelectorModalProps) {
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const dialogRef = useModalDialog();
 
@@ -58,73 +51,42 @@ export function ArchiveSelectorModal({
   };
 
   return (
-    <dialog
-      ref={dialogRef}
-      className={`${styles.root} ${shared.modalOverlay} ${shared.fullscreen}`}
-      aria-labelledby="archive-selector-title"
-      aria-describedby="archive-selector-description"
-      onClose={onClose}
-    >
+    <dialog ref={dialogRef} className={`${styles.root} ${shared.modalOverlay} ${shared.fullscreen}`} aria-labelledby="archive-selector-title" aria-describedby="archive-selector-description" onClose={onClose}>
       <div className={`${styles.content} ${shared.modalContent}`}>
         <div className={styles.header}>
           <div>
-            <h3 id="archive-selector-title" tabIndex={-1} autoFocus>
-              復元
-            </h3>
+            <h3 id="archive-selector-title" tabIndex={-1} autoFocus>復元</h3>
             <p id="archive-selector-description">取り込むログを選択してください</p>
           </div>
           <div className={styles.meta}>
             <span className={styles.count} aria-live="polite">
               {selectedFiles.size} / {archiveFiles.length} 件選択中
             </span>
-            <button
-              type="button"
-              className={shared.btn}
-              style={{ fontSize: '0.8rem', padding: '0.4rem 1rem' }}
-              onClick={onSelectAll}
-            >
+            <button type="button" className={shared.btn} style={{ fontSize: '0.8rem', padding: '0.4rem 1rem' }} onClick={onSelectAll}>
               {selectedFiles.size === archiveFiles.length ? 'すべて解除' : 'すべて選択'}
             </button>
           </div>
         </div>
         <div className={styles.list}>
           {archiveFiles.length === 0 ? (
-            <div className={styles.emptyState}>
-              バックアップフォルダ内にアーカイブファイルが見つかりません
-            </div>
+            <div className={styles.emptyState}>バックアップフォルダ内にアーカイブファイルが見つかりません</div>
           ) : (
             archiveFiles.map((file, index) => (
-              <button
-                key={file.name}
-                ref={(element) => {
+              <button key={file.name} ref={(element) => {
                   itemRefs.current[index] = element;
-                }}
-                type="button"
-                aria-pressed={selectedFiles.has(file.name)}
-                className={`${styles.item} ${selectedFiles.has(file.name) ? styles.itemSelected : ''}`}
-                onMouseDown={(event) => {
+                }} type="button" aria-pressed={selectedFiles.has(file.name)} className={`${styles.item} ${selectedFiles.has(file.name) ? styles.itemSelected : ''}`} onMouseDown={(event) => {
                   onFileAction(event, file.name, 'down');
-                }}
-                onMouseEnter={(event) => {
+                }} onMouseEnter={(event) => {
                   onFileAction(event, file.name, 'enter');
-                }}
-                onClick={(event) => {
+                }} onClick={(event) => {
                   if (event.detail === 0) onFileAction(event, file.name, 'keyboard');
-                }}
-                onKeyDown={(event) => {
+                }} onKeyDown={(event) => {
                   handleItemKeyDown(event, index);
-                }}
-              >
-                <span
-                  className={`${styles.checkbox} ${selectedFiles.has(file.name) ? styles.checkboxChecked : ''}`}
-                >
-                  <svg aria-hidden="true" viewBox="0 0 12 10" className={styles.checkIcon}>
-                    <polyline points="1.5 5 4.5 8 10.5 2" />
-                  </svg>
+                }}>
+                <span className={`${styles.checkbox} ${selectedFiles.has(file.name) ? styles.checkboxChecked : ''}`}>
+                  <svg aria-hidden="true" viewBox="0 0 12 10" className={styles.checkIcon}><polyline points="1.5 5 4.5 8 10.5 2" /></svg>
                 </span>
-                <span className={styles.icon}>
-                  <StellaIcon name={stellaIconNames.folder} />
-                </span>
+                <span className={styles.icon}><StellaIcon name={stellaIconNames.folder} /></span>
                 <span className={styles.metaBlock}>
                   <span className={styles.name}>{file.name}</span>
                   <span className={styles.size}>{formatFileSize(file.size_bytes)}</span>
@@ -134,17 +96,8 @@ export function ArchiveSelectorModal({
           )}
         </div>
         <div className={shared.modalActions}>
-          <button type="button" className={shared.btn} onClick={closeDialog}>
-            キャンセル
-          </button>
-          <button
-            type="button"
-            className={`${shared.btn} ${shared.primary}`}
-            disabled={selectedFiles.size === 0}
-            onClick={onConfirm}
-          >
-            取り込み開始
-          </button>
+          <button type="button" className={shared.btn} onClick={closeDialog}>キャンセル</button>
+          <button type="button" className={`${shared.btn} ${shared.primary}`} disabled={selectedFiles.size === 0} onClick={onConfirm}>取り込み開始</button>
         </div>
       </div>
     </dialog>

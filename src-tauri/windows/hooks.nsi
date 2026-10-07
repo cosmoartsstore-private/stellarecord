@@ -1,5 +1,5 @@
-; Running-app handling is delegated to CheckIfAppIsRunning in installer.nsi.
-; Do not force-kill the application from installer hooks.
+; 起動中アプリの処理は installer.nsi の CheckIfAppIsRunning に委ねる。
+; installer hook からアプリを強制終了しない。
 !macro NSIS_HOOK_PREINSTALL
 !macroend
 

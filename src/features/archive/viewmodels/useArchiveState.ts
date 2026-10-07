@@ -2,25 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { flushSync } from 'react-dom';
 import type { ArchiveFileItem, LogViewerChunk, LogViewerData } from '../models/types';
-import {
-  launchEnhancedImport,
-  launchStartupArchiveImport,
-  loadArchiveFiles,
-  pickLogFiles,
-  startExternalLogViewerStream,
-  startLogViewerStream,
-} from '../services/archiveService';
+import { launchEnhancedImport, launchStartupArchiveImport, loadArchiveFiles, pickLogFiles, startExternalLogViewerStream, startLogViewerStream } from '../services/archiveService';
 
 /** 受信チャンクを蓄積データにマージする（純粋関数） */
 function appendChunk(data: LogViewerData, chunk: LogViewerChunk): LogViewerData {
-  return {
-    ...data,
-    timestamps: data.timestamps.concat(chunk.timestamps),
-    levels: data.levels.concat(chunk.levels),
-    categories: data.categories.concat(chunk.categories),
-    raw_lines: data.raw_lines.concat(chunk.raw_lines),
-    highlights: data.highlights.concat(chunk.highlights),
-  };
+  return { ...data, timestamps: data.timestamps.concat(chunk.timestamps), levels: data.levels.concat(chunk.levels), categories: data.categories.concat(chunk.categories), raw_lines: data.raw_lines.concat(chunk.raw_lines), highlights: data.highlights.concat(chunk.highlights) };
 }
 
 /** 新規ストリーム用の空のLogViewerDataを生成する */
@@ -188,7 +174,7 @@ export function useArchiveState() {
     [stopStream, flushChunks],
   );
 
-  /** バックエンドからアーカイブファイル一覧を取得して状態に格納する */
+  /** Backendからアーカイブファイル一覧を取得して状態に格納する */
   const loadArchiveSelection = useCallback(async () => {
     const files = await loadArchiveFiles();
     setArchiveFiles(files);
@@ -232,10 +218,7 @@ export function useArchiveState() {
   }, []);
 
   /** 指定ファイルのログビューアを開く */
-  const openSelectedLogViewer = useCallback(
-    (selectedFileKey: string) => openStreamForFile(selectedFileKey),
-    [openStreamForFile],
-  );
+  const openSelectedLogViewer = useCallback((selectedFileKey: string) => openStreamForFile(selectedFileKey), [openStreamForFile]);
 
   /** ストリームを破棄してログビューアを閉じる */
   const closeLogViewer = useCallback(() => {

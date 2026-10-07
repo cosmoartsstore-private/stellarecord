@@ -130,10 +130,5 @@ export function useArchiveSelection(archiveFiles: string[]) {
     setSelectedFiles(new Set(archiveFiles));
   }, [archiveFiles, clearSelection, selectedFiles.size]);
 
-  return {
-    selectedFiles,
-    clearSelection,
-    handleFileAction,
-    handleSelectAll,
-  };
+  return { selectedFiles, clearSelection, handleFileAction, handleSelectAll };
 }

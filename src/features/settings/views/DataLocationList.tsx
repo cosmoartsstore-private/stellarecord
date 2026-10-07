@@ -7,11 +7,7 @@ interface DataLocationListProps {
 }
 
 /** ログアーカイブとDBの実効保存先を同じ表記で表示する。 */
-export function DataLocationList({
-  logArchivePath,
-  databasePath,
-  isLoading = false,
-}: DataLocationListProps) {
+export function DataLocationList({ logArchivePath, databasePath, isLoading = false }: DataLocationListProps) {
   const displayPath = (path: string) => {
     if (isLoading) return '読み込み中…';
     return path.length > 0 ? path : '保存先を取得できません';

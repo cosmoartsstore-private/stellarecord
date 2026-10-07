@@ -42,7 +42,7 @@ function normalizeErrorDetail(error: unknown): string {
   }
 }
 
-/** フロントエンドで捕捉した詳細エラーを既存の Rust ログへ送る。 */
+/** Frontendで捕捉した詳細エラーを既存の Rust ログへ送る。 */
 export function reportClientError(context: string, error: unknown): void {
   const detail = normalizeErrorDetail(error).replaceAll(/\s+/g, ' ').trim();
   const message = `${context}: ${detail}`.slice(0, maxClientErrorLogLength);
@@ -50,12 +50,7 @@ export function reportClientError(context: string, error: unknown): void {
 }
 
 /** 詳細を内部ログに残し、ユーザーには安定した短い文言だけを表示する。 */
-export function addErrorToast(
-  addToast: AddToast,
-  context: string,
-  userMessage: string,
-  error: unknown,
-): void {
+export function addErrorToast(addToast: AddToast, context: string, userMessage: string, error: unknown): void {
   if (error instanceof UserFacingError) {
     addToast(error.message);
     return;

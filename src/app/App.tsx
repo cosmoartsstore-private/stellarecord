@@ -15,12 +15,7 @@ import { PolarisCleanupModal } from '../features/analyze/views/PolarisCleanupMod
 import { useAnalyzeState } from '../features/analyze/viewmodels/useAnalyzeState';
 import { useDatabaseState } from '../features/database/viewmodels/useDatabaseState';
 import { DatabaseSection } from '../features/database/views/DatabaseSection';
-import {
-  launchExternalApp,
-  openFolder,
-  registerApp,
-  unregisterApp,
-} from '../features/registry/services/registryService';
+import { launchExternalApp, openFolder, registerApp, unregisterApp } from '../features/registry/services/registryService';
 import type { AppCard, LauncherViewMode } from '../features/registry/models/types';
 import { useRegistryState } from '../features/registry/viewmodels/useRegistryState';
 import { RegistrySection } from '../features/registry/views/RegistrySection';
@@ -52,81 +47,15 @@ function App() {
 
   const { toasts, addToast } = useToasts();
   const { registryApps, isReloading, reloadRegistry, refreshRegistry } = useRegistryState();
-  const {
-    archiveLimitDraft,
-    isStartupEnabledDraft,
-    setArchiveLimitDraft,
-    toggleStartup,
-    saveArchiveLimit,
-  } = useSettingsState();
-  const {
-    startupImportSettings,
-    startupImportSettingsError,
-    isStartupImportSettingsLoading,
-    isStartupImportPreferenceSaving,
-    saveStartupImportPreference,
-  } = useStartupImportSettings();
-  const {
-    analyzeRunning: isAnalyzeRunning,
-    analyzeProgress,
-    analyzeStatus,
-    storageStatus,
-    pollStorage,
-    setAnalyzeRunning,
-    handleCancelSync,
-  } = useAnalyzeState(addToast);
-  const {
-    dbTables,
-    currentTable,
-    tableData,
-    isDbLoading,
-    currentPage,
-    totalPages,
-    pageSize,
-    loadTableData,
-    goToPage,
-    sortState,
-    toggleSort,
-    loadDatabaseCatalog,
-  } = useDatabaseState(addToast);
-  const {
-    archiveFiles,
-    logViewerData,
-    isLogViewerLoading,
-    isLogViewerLoaded,
-    externalFiles,
-    openEnhancedSync,
-    openLogViewerSelection,
-    executeEnhancedSync,
-    openSelectedLogViewer,
-    closeLogViewer,
-    runStartupImport,
-    selectExternalLogFiles,
-    clearExternalLogFiles,
-  } = useArchiveState();
+  const { archiveLimitDraft, isStartupEnabledDraft, setArchiveLimitDraft, toggleStartup, saveArchiveLimit } = useSettingsState();
+  const { startupImportSettings, startupImportSettingsError, isStartupImportSettingsLoading, isStartupImportPreferenceSaving, saveStartupImportPreference } = useStartupImportSettings();
+  const { analyzeRunning: isAnalyzeRunning, analyzeProgress, analyzeStatus, storageStatus, pollStorage, setAnalyzeRunning, handleCancelSync } = useAnalyzeState(addToast);
+  const { dbTables, currentTable, tableData, isDbLoading, currentPage, totalPages, pageSize, loadTableData, goToPage, sortState, toggleSort, loadDatabaseCatalog } = useDatabaseState(addToast);
+  const { archiveFiles, logViewerData, isLogViewerLoading, isLogViewerLoaded, externalFiles, openEnhancedSync, openLogViewerSelection, executeEnhancedSync, openSelectedLogViewer, closeLogViewer, runStartupImport, selectExternalLogFiles, clearExternalLogFiles } = useArchiveState();
 
-  const {
-    selectedFiles: batchSelectedFiles,
-    clearSelection: clearBatchSelection,
-    handleFileAction: handleBatchFileAction,
-    handleSelectAll: handleBatchSelectAll,
-  } = useArchiveSelection(archiveFiles.map((f) => f.name));
+  const { selectedFiles: batchSelectedFiles, clearSelection: clearBatchSelection, handleFileAction: handleBatchFileAction, handleSelectAll: handleBatchSelectAll } = useArchiveSelection(archiveFiles.map((f) => f.name));
 
-  const modals = useAppModals({
-    addToast,
-    archiveFiles,
-    openEnhancedSync,
-    executeEnhancedSync,
-    openLogViewerSelection,
-    openSelectedLogViewer,
-    closeLogViewer,
-    setAnalyzeRunning,
-    batchSelectedFiles,
-    clearBatchSelection,
-    selectExternalLogFiles,
-    clearExternalLogFiles,
-    externalFiles,
-  });
+  const modals = useAppModals({ addToast, archiveFiles, openEnhancedSync, executeEnhancedSync, openLogViewerSelection, openSelectedLogViewer, closeLogViewer, setAnalyzeRunning, batchSelectedFiles, clearBatchSelection, selectExternalLogFiles, clearExternalLogFiles, externalFiles, });
 
   /** タブ選択時にセクションを切り替える（DB選択時はカタログを自動取得） */
   const handleNavSelect = async (section: SectionId) => {
@@ -152,12 +81,7 @@ function App() {
       const dir = app.path.substring(0, app.path.lastIndexOf('\\'));
       await openFolder(dir);
     } catch (error) {
-      addErrorToast(
-        addToast,
-        '登録済みアプリのフォルダを開く',
-        'フォルダを開けませんでした',
-        error,
-      );
+      addErrorToast(addToast, '登録済みアプリのフォルダを開く', 'フォルダを開けませんでした', error);
     }
   };
 
@@ -180,12 +104,7 @@ function App() {
       addToast(`${app.name} の登録を解除しました`);
       await refreshRegistry();
     } catch (error) {
-      addErrorToast(
-        addToast,
-        'サードパーティアプリ登録解除',
-        `${app.name} の登録解除に失敗しました`,
-        error,
-      );
+      addErrorToast(addToast, 'サードパーティアプリ登録解除', `${app.name} の登録解除に失敗しました`, error);
     }
   };
 
@@ -226,12 +145,7 @@ function App() {
       await saveStartupImportPreference(enabled);
       return true;
     } catch (error) {
-      addErrorToast(
-        addToast,
-        '起動時ログ取り込み設定保存',
-        'ログの読み取り設定を保存できませんでした',
-        error,
-      );
+      addErrorToast(addToast, '起動時ログ取り込み設定保存', 'ログの読み取り設定を保存できませんでした', error);
       return false;
     }
   };
@@ -287,98 +201,53 @@ function App() {
   useEffect(() => {
     if (!startupImportSettingsError || startupImportSettingsErrorShownRef.current) return;
     startupImportSettingsErrorShownRef.current = true;
-    addErrorToast(
-      addToast,
-      'ログ保存先の取得',
-      'ログとDBの保存先を取得できませんでした',
-      startupImportSettingsError,
-    );
+    addErrorToast(addToast, 'ログ保存先の取得', 'ログとDBの保存先を取得できませんでした', startupImportSettingsError);
   }, [addToast, startupImportSettingsError]);
 
-  const navItems: { section: SectionId; label: string }[] = [
-    { section: 'registry', label: 'ランチャー' },
-    { section: 'analyze', label: '解析' },
-    { section: 'database', label: 'DB' },
-  ];
+  const navItems: { section: SectionId; label: string }[] = [{ section: 'registry', label: 'ランチャー' }, { section: 'analyze', label: '解析' }, { section: 'database', label: 'DB' }];
 
-  const navIcons = {
-    registry: stellaIconNames.rocket,
-    analyze: stellaIconNames.chartBar,
-    database: stellaIconNames.tableGrid,
-  } as const;
+  const navIcons = { registry: stellaIconNames.rocket, analyze: stellaIconNames.chartBar, database: stellaIconNames.tableGrid } as const;
 
   /** アクティブセクションに対応するコンポーネントを描画する */
   const renderSection = () => {
     switch (activeSection) {
       case 'registry':
         return (
-          <RegistrySection
-            registryApps={registryApps}
-            launcherViewMode={launcherViewMode}
-            isReloading={isReloading}
-            onSetLauncherViewMode={setLauncherViewMode}
-            onLaunchApp={(app) => {
+          <RegistrySection registryApps={registryApps} launcherViewMode={launcherViewMode} isReloading={isReloading} onSetLauncherViewMode={setLauncherViewMode} onLaunchApp={(app) => {
               void handleLaunch(app);
-            }}
-            onOpenFolder={(app) => {
+            }} onOpenFolder={(app) => {
               void handleOpenFolder(app);
-            }}
-            onUnregisterApp={(app) => {
+            }} onUnregisterApp={(app) => {
               void handleUnregisterApp(app);
-            }}
-            onRegisterApp={() => {
+            }} onRegisterApp={() => {
               setIsRegisterModalOpen(true);
-            }}
-            onReload={() => {
+            }} onReload={() => {
               void reloadRegistry();
-            }}
-          />
+            }} />
         );
       case 'analyze':
         return (
-          <AnalyzeSection
-            storageStatus={storageStatus}
-            isAnalyzeRunning={isAnalyzeRunning}
-            analyzeProgress={analyzeProgress}
-            analyzeStatus={analyzeStatus}
-            onRefreshStorage={() => {
+          <AnalyzeSection storageStatus={storageStatus} isAnalyzeRunning={isAnalyzeRunning} analyzeProgress={analyzeProgress} analyzeStatus={analyzeStatus} onRefreshStorage={() => {
               void pollStorage();
-            }}
-            onOpenEnhancedSync={() => {
+            }} onOpenEnhancedSync={() => {
               void modals.handleOpenEnhancedSync();
-            }}
-            onOpenLogViewer={() => {
+            }} onOpenLogViewer={() => {
               void modals.handleOpenLogViewer();
-            }}
-            onCancelSync={() => {
+            }} onCancelSync={() => {
               void handleCancelSync();
-            }}
-            onOpenCleanup={() => {
+            }} onOpenCleanup={() => {
               void modals.handleOpenCleanup();
-            }}
-          />
+            }} />
         );
       case 'database':
         return (
-          <DatabaseSection
-            dbTables={dbTables}
-            currentTable={currentTable}
-            tableData={tableData}
-            isDbLoading={isDbLoading}
-            currentPage={currentPage}
-            totalPages={totalPages}
-            pageSize={pageSize}
-            sortState={sortState}
-            onSelectTable={(tableName) => {
+          <DatabaseSection dbTables={dbTables} currentTable={currentTable} tableData={tableData} isDbLoading={isDbLoading} currentPage={currentPage} totalPages={totalPages} pageSize={pageSize} sortState={sortState} onSelectTable={(tableName) => {
               void loadTableData(tableName);
-            }}
-            onGoToPage={(page) => {
+            }} onGoToPage={(page) => {
               void goToPage(page);
-            }}
-            onToggleSort={(columnName) => {
+            }} onToggleSort={(columnName) => {
               void toggleSort(columnName);
-            }}
-          />
+            }} />
         );
     }
   };
@@ -387,10 +256,7 @@ function App() {
     <div className={`stella-record-root ${styles.mainWrapper} ${styles.root} ${themeMode}-theme`}>
       <nav className={styles.topNavigation} aria-label="メインナビゲーション">
         <div className={styles.navBrand}>
-          <img
-            src={themeMode === 'light' ? logoLightSrc : logoDarkSrc}
-            alt="STELLA RECORD"
-            className={
+          <img src={themeMode === 'light' ? logoLightSrc : logoDarkSrc} alt="STELLA RECORD" className={
               styles[
                 themeMode === 'midnight'
                   ? 'navLogoMidnight'
@@ -398,129 +264,73 @@ function App() {
                     ? 'navLogoDark'
                     : 'navLogoLight'
               ]
-            }
-          />
+            } />
         </div>
 
         <div className={styles.pillNav}>
           {navItems.map(({ section, label }) => (
-            <button
-              key={section}
-              type="button"
-              className={`${styles.pillBtn} ${activeSection === section ? styles.pillBtnActive : ''}`}
-              aria-current={activeSection === section ? 'page' : undefined}
-              onClick={() => {
+            <button key={section} type="button" className={`${styles.pillBtn} ${activeSection === section ? styles.pillBtnActive : ''}`} aria-current={activeSection === section ? 'page' : undefined} onClick={() => {
                 void handleNavSelect(section);
-              }}
-            >
+              }}>
               <StellaIcon name={navIcons[section]} />
               {label}
             </button>
           ))}
         </div>
 
-        {/* prettier-ignore */}
         <button type="button" className={styles.navSettingsButton} onClick={() => { setIsSettingsModalOpen(true); }}><StellaIcon name={stellaIconNames.settings} />設定</button>
       </nav>
 
       <main className={styles.contentArea}>{renderSection()}</main>
 
       {modals.isArchiveSelectorVisible && (
-        <ArchiveSelectorModal
-          archiveFiles={archiveFiles}
-          selectedFiles={batchSelectedFiles}
-          onClose={modals.closeArchiveSelector}
-          onSelectAll={handleBatchSelectAll}
-          onFileAction={handleBatchFileAction}
-          onConfirm={() => {
+        <ArchiveSelectorModal archiveFiles={archiveFiles} selectedFiles={batchSelectedFiles} onClose={modals.closeArchiveSelector} onSelectAll={handleBatchSelectAll} onFileAction={handleBatchFileAction} onConfirm={() => {
             void modals.handleConfirmImport();
-          }}
-        />
+          }} />
       )}
 
       {modals.isLogViewerModalVisible && logViewerData && (
-        <LogViewerModal
-          logViewerData={logViewerData}
-          archiveFiles={archiveFiles}
-          externalFiles={externalFiles}
-          isLoading={isLogViewerLoading}
-          isLoaded={isLogViewerLoaded}
-          onNavigateToFile={modals.handleViewerNavigateToFile}
-          onPickExternalFiles={() => {
+        <LogViewerModal logViewerData={logViewerData} archiveFiles={archiveFiles} externalFiles={externalFiles} isLoading={isLogViewerLoading} isLoaded={isLogViewerLoaded} onNavigateToFile={modals.handleViewerNavigateToFile} onPickExternalFiles={() => {
             void modals.handleSelectExternalFiles();
-          }}
-          onClearExternalFiles={() => {
+          }} onClearExternalFiles={() => {
             void modals.handleClearExternalFiles();
-          }}
-          onClose={modals.closeLogViewerModal}
-        />
+          }} onClose={modals.closeLogViewerModal} />
       )}
 
       {modals.isCleanupModalOpen && (
-        <PolarisCleanupModal
-          logs={modals.deletableLogs}
-          onClose={modals.closeCleanupModal}
-          onConfirm={(fileNames) => {
+        <PolarisCleanupModal logs={modals.deletableLogs} onClose={modals.closeCleanupModal} onConfirm={(fileNames) => {
             void modals.handleConfirmCleanup(fileNames);
-          }}
-        />
+          }} />
       )}
 
       {isRegisterModalOpen && (
-        <RegisterAppModal
-          onClose={() => {
+        <RegisterAppModal onClose={() => {
             setIsRegisterModalOpen(false);
-          }}
-          onConfirm={(path, name, description) => {
+          }} onConfirm={(path, name, description) => {
             void handleRegisterApp(path, name, description);
-          }}
-        />
+          }} />
       )}
 
       {isSettingsModalOpen && (
-        <SettingsModal
-          onClose={() => {
+        <SettingsModal onClose={() => {
             setIsSettingsModalOpen(false);
-          }}
-        >
-          <SettingsControls
-            themeMode={themeMode}
-            archiveLimitDraft={archiveLimitDraft}
-            isStartupEnabledDraft={isStartupEnabledDraft}
-            isStartupImportEnabled={startupImportSettings?.enabled ?? false}
-            isStartupImportLoading={
-              isStartupImportSettingsLoading || isStartupImportPreferenceSaving
-            }
-            logArchivePath={startupImportSettings?.log_archive_path ?? ''}
-            databasePath={startupImportSettings?.database_path ?? ''}
-            isDataLocationLoading={isStartupImportSettingsLoading}
-            onThemeModeChange={handleThemeChange}
-            onArchiveLimitDraftChange={setArchiveLimitDraft}
-            onSaveArchiveLimit={() => {
+          }}>
+          <SettingsControls themeMode={themeMode} archiveLimitDraft={archiveLimitDraft} isStartupEnabledDraft={isStartupEnabledDraft} isStartupImportEnabled={startupImportSettings?.enabled ?? false} isStartupImportLoading={ isStartupImportSettingsLoading || isStartupImportPreferenceSaving } logArchivePath={startupImportSettings?.log_archive_path ?? ''} databasePath={startupImportSettings?.database_path ?? ''} isDataLocationLoading={isStartupImportSettingsLoading} onThemeModeChange={handleThemeChange} onArchiveLimitDraftChange={setArchiveLimitDraft} onSaveArchiveLimit={() => {
               void handleSaveArchiveLimit();
-            }}
-            onToggleStartup={() => {
+            }} onToggleStartup={() => {
               void handleToggleStartup();
-            }}
-            onToggleStartupImport={() => {
+            }} onToggleStartupImport={() => {
               void handleToggleStartupImport();
-            }}
-          />
+            }} />
         </SettingsModal>
       )}
 
       {startupImportSettings && !startupImportSettings.preference_set && (
-        <StartupImportConsentDialog
-          logArchivePath={startupImportSettings.log_archive_path}
-          databasePath={startupImportSettings.database_path}
-          isSaving={isStartupImportPreferenceSaving}
-          onAllow={() => {
+        <StartupImportConsentDialog logArchivePath={startupImportSettings.log_archive_path} databasePath={startupImportSettings.database_path} isSaving={isStartupImportPreferenceSaving} onAllow={() => {
             void handleStartupImportConsent(true);
-          }}
-          onDecline={() => {
+          }} onDecline={() => {
             void handleStartupImportConsent(false);
-          }}
-        />
+          }} />
       )}
 
       <CreditButton />
