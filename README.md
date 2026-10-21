@@ -1,288 +1,153 @@
 # StellaRecord
 
-[![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6)](https://www.microsoft.com/windows)
-[![Tauri](https://img.shields.io/badge/Tauri-2.10-24C8DB)](https://tauri.app/)
-[![React](https://img.shields.io/badge/React-19-61DAFB)](https://react.dev/)
-[![Rust](https://img.shields.io/badge/Rust-2021-DEA584)](https://www.rust-lang.org/)
-[![License](https://img.shields.io/badge/license-Proprietary-lightgrey)](#license)
+StellaRecord は、Polaris が保存した VRChat ログを `.tar.zst` と SQLite に保存し、ログ本文と解析済みデータを閲覧する Windows 向けデスクトップアプリケーションです。
 
-VRChat のゲームログを圧縮アーカイブと SQLite に正規化して保管・閲覧する Windows デスクトップアプリケーション。
-
----
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Architecture](#architecture)
-- [Requirements](#requirements)
-- [Installation](#installation)
-- [Build from Source](#build-from-source)
-- [Project Structure](#project-structure)
-- [Data and Privacy](#data-and-privacy)
-- [Security](#security)
-- [Documentation](#documentation)
-- [Acknowledgements](#acknowledgements)
-- [License](#license)
-
----
-
-## Overview
-
-StellaRecord は VRChat が出力するゲームログ (`output_log_*.txt`) を恒久保管し、構造化データに変換して閲覧するための Windows デスクトップアプリケーションである。
-
-VRChat のログファイルは古いものから順に削除されるため、過去の訪問履歴・同席ユーザー・通知などの情報を後から参照できなくなる。本アプリは生ログを `tar + zstd` で圧縮保管しつつ、行単位パーサで内容を SQLite に正規化することで、過去のログを検索可能なデータとして長期保存する。
-
-WebView2 (Edge) + Rust の Tauri v2 アーキテクチャで実装され、外部サーバとの通信は行わない。アンインストール時は再生成できない圧縮済みログアーカイブだけを保護対象として残す。
-
----
+通常の処理で外部 API、認証、テレメトリ送信は行いません。利用者が登録した実行ファイル、フォルダ、クレジットのリンクを明示操作で開きます。
 
 ## Features
 
-- 生ログの `.tar.zst` 圧縮アーカイブ化（zstd 圧縮レベル 3）
-- 行単位パーサによる VRChat ログの SQLite 構造化保管（10 テーブル + 3 ビュー、検出パターン 11 項目）
-- 圧縮アーカイブを展開せずストリーム閲覧する仮想スクロール対応のログビューア
-- カテゴリ／ログレベルフィルタおよび DB キーワードハイライト
-- アーカイブ容量警告ラインの設定とストレージメーター
-- 登録 EXE のランチャー機能（Windows VersionInfo からの表示名抽出と高解像度アイコン取得）
-- DB プレビュー（テーブル／ビューのページネーション・ソート閲覧）
-- Light / Dark / Midnight の 3 テーマ切替
-- Windows 起動時の自動起動オプション
-- 取り込み処理のキャンセル機能（savepoint による部分ロールバック）
-
----
-
-## Tech Stack
-
-### Frontend
-
-| Layer          | Technology              | Version |
-| -------------- | ----------------------- | ------- |
-| Language       | TypeScript              | 5.9     |
-| UI Framework   | React                   | 19.2    |
-| Build Tool     | Vite                    | 7.3     |
-| Virtual Scroll | @tanstack/react-virtual | 3.13    |
-| Styling        | CSS Modules             | -       |
-| Tauri SDK      | @tauri-apps/api         | 2.10    |
-
-### Backend
-
-| Layer                 | Technology                | Version      |
-| --------------------- | ------------------------- | ------------ |
-| Language              | Rust                      | Edition 2021 |
-| Application Framework | Tauri                     | 2.10         |
-| Database              | rusqlite (bundled SQLite) | 0.38         |
-| Compression           | zstd                      | 0.13         |
-| Archive Format        | tar                       | 0.4          |
-| Win32 API             | windows-rs                | 0.58         |
-| Registry I/O          | winreg                    | 0.52         |
-| Image Processing      | image (PNG only)          | 0.25         |
-
-### Distribution
-
-| Layer        | Technology               |
-| ------------ | ------------------------ |
-| Installer    | NSIS (via Tauri Bundler) |
-| Install mode | currentUser              |
-| Code Signing | （未実装）               |
-
-技術選定の詳細と意思決定記録は [docs/tech-stack.md](docs/tech-stack.md) を参照。
-
----
+- **Archive import** — Polaris の `Data/archive` にあるログを、1ログ1ファイルの `.tar.zst` へ zstd レベル3で圧縮します。起動時取込は初回確認で許可した場合だけ実行し、設定から変更できます。
+- **Log analysis** — 認証、ワールド訪問、同席ユーザー、通知、撮影、OSC、VRChat+ を10テーブルと3ビューへ保存します。本文の SHA-256・長さと解析版で取込済み判定を行います。
+- **Friend status** — 旧形式のアバター取得ログを同一訪問のユーザーへ一意に対応できた場合だけ、フレンド状態を保存します。判定不能・矛盾・対応する情報がない場合は不明として扱います。
+- **Log viewer** — 管理アーカイブと利用者が選んだログをストリームで読み、仮想スクロール、カテゴリ、ログレベル、DB由来のキーワード強調で閲覧します。
+- **Storage and cleanup** — 容量警告ラインを設定し、圧縮保存した本文と一致する Polaris の元ログだけを、選択・確認後に削除できます。
+- **Launcher** — 登録した EXE の表示名・アイコンを取得し、起動、フォルダ表示、登録解除を行います。
+- **Database preview** — テーブル・ビューを読取り専用で500行ずつ表示し、列で並べ替えます。
+- **Settings** — Light / Dark / Midnight、Windowsログイン時の自動起動、起動時取込の許可、容量警告ラインを保存します。
+- **Cancellation** — 取込へ停止を要求できます。要求受理と停止完了は別で、解析の取消しは今回の DB 更新をロールバックします。
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                  Windows 10 / 11 (x64)                      │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │              StellaRecord.exe (Tauri v2)            │    │
-│  │                                                     │    │
-│  │   WebView2 (Chromium)             Rust Backend      │    │
-│  │   ─────────────────────────       ───────────────   │    │
-│  │   React 19 + TypeScript      ◀──▶ Tauri 2.10        │    │
-│  │   Vite 7                  IPC     rusqlite 0.38     │    │
-│  │   @tanstack/react-virtual         tar + zstd        │    │
-│  │   CSS Modules                     windows-rs 0.58   │    │
-│  │                                                     │    │
-│  └────────────────────────┬────────────────────────────┘    │
-│                           │                                 │
-│       ┌───────────────────┴────────────────────┐            │
-│       ▼                                        ▼            │
-│   ┌──────────────────────┐       ┌──────────────────────┐   │
-│   │ SQLite (WAL mode)    │       │ Compressed Archives  │   │
-│   │ Data/db/             │       │ Data/archive/        │   │
-│   │   stellarecord.db    │       │   *.tar.zst          │   │
-│   └──────────────────────┘       └──────────────────────┘   │
-│                                                             │
-│   Windows Registry: HKCU\Software\CosmoArtsStore\...        │
-└─────────────────────────────────────────────────────────────┘
+```text
+Polaris/Data/archive/output_log_*.txt
+└─ StellaRecord.exe                  Tauri v2
+   ├─ WebView2                       React / TypeScript
+   │  └─ features                    views / viewmodels / services / models
+   ├─ Rust                           IPC、圧縮、解析、Windows連携
+   └─ Data
+      ├─ archive/*.tar.zst            圧縮ログ
+      ├─ db/stellarecord.db           解析結果・登録アプリ
+      ├─ logs/info-YYYY-MM.log        運用ログ
+      └─ EBWebView                    WebViewのローカルデータ
 ```
 
-詳細なモジュール構成・データフロー・並行性モデルは [docs/spec.md](docs/spec.md) を参照。
+画面は `src/app/App.tsx`、IPC登録と起動は `src-tauri/src/lib.rs`、schemaは `src-tauri/src/analyze/db.rs` を正本とします。module責務、状態所有、IPC/eventとworkerの流れは [Architecture](docs/architecture.md) を参照してください。
 
----
+## Tech Stack
+
+| Layer        | Technology                                            |
+| ------------ | ----------------------------------------------------- |
+| Frontend     | React `19.2.4`、TypeScript `5.9.3`、Vite `7.3.6`      |
+| UI           | CSS Modules、`@tanstack/react-virtual 3.13.24`        |
+| Runtime      | Tauri `2.10.3`、Rust edition 2021、toolchain `1.93.0` |
+| Database     | `rusqlite 0.38.0`、bundled SQLite、WAL                |
+| Archive      | `tar 0.4.45`、`zstd 0.13.3`、`sha2`                   |
+| Windows      | `windows 0.58.0`、`winreg 0.52.0`                     |
+| Distribution | Tauri CLI、NSIS、current-user install                 |
+
+版番号は現在の lockfile の解決値です。宣言値、ビルド設定、採用理由は [Tech Stack](docs/tech-stack.md) を参照してください。
 
 ## Requirements
 
 ### Runtime
 
-- Windows 10 (1809 以降) または Windows 11 (x64)
-- Microsoft Edge WebView2 Runtime（Windows 10 1809 以降は OS 標準同梱）
-- Polaris（任意。元ログの自動同期と同期済み元ログの削除機能を使用する場合のみ必要）
-- 約 50 MB のディスク空き容量（ログアーカイブストアは別途）
+- Windows 10 / 11、x64
+- Microsoft Edge WebView2 Runtime。未導入の場合はインストーラーが導入処理を行います。
+- Polaris のインストール情報とログコピー。起動時の同期と元ログの削除に使用します。
+- アーカイブと DB を保存できる空き容量と書込み権限
 
-### Build
+### Development
 
-- [Node.js](https://nodejs.org/) 20.19 以上、または 22.12 以上（Vite 7 の要求バージョン）
-- [Rust](https://rustup.rs/) 1.93.0 toolchain（edition 2021）
-- Windows SDK（`windows` crate のビルドに必要）
-
----
+- Node.js と npm。Viteの要求は `^20.19.0 || >=22.12.0` ですが、jsdomとRust native probeを含む検証には別の版・実行条件があります。[開発前提](docs/tech-stack.md#toolchain-and-runtime-requirements)を参照してください。
+- `rust-toolchain.toml` に記載する Rust `1.93.0`、rustfmt、clippy
+- `x86_64-pc-windows-msvc` target をビルドできる MSVC 開発環境
 
 ## Installation
 
-### From Installer
+NSIS インストーラーを実行します。既定の配置は `%LOCALAPPDATA%\CosmoArtsStore\StellaRecord` です。current-user install とし、Program Files と Windows directory 配下は選択できません。
 
-1. [Releases](https://github.com/cosmoartsstore-private/stellarecord/releases) ページから最新の `StellaRecord_Setup.exe` をダウンロード
-2. インストーラを実行
-3. 既定のインストール先は `%LOCALAPPDATA%\CosmoArtsStore\StellaRecord`
+更新はインストーラーを再実行します。`/UPDATE` は通常データ削除を通りませんが、`DbPath` はインストール先の既定DBへ再設定されます。外部DBのfile保持と参照先設定の保持は別です。通常終了時に取込の自動取消し・完了待ちを行う独自処理はありません。
 
-管理者権限は不要。Program Files / Windows ディレクトリ配下へのインストールはインストーラが拒否する。
+通常のアンインストールではアプリ本体、インストール先の `Data/db`・`Data/logs`・`Data/EBWebView`、bundle data、関連registry登録を削除し、`Data/archive` を残します。外部の `ArchivePath` / `DbPath` を探索して削除しませんが、保存先を記録したStellaRecord registryは削除します。登録app情報と設定を残す場合は事前に保全してください。[保存寿命](docs/database.md#deletion-and-retention)と[導入・更新・削除](docs/tech-stack.md#installation-lifecycle)に詳細があります。
 
-### Uninstallation
+## Build and Test
 
-Windows の「アプリと機能」から `StellaRecord` をアンインストールする。アプリ本体と DB は削除されるが、`Data/archive/` ディレクトリは保護対象として残される。完全に削除する場合は手動で `Data/archive/` ディレクトリを削除する。
+コマンドは repository root で実行します。
 
----
+```powershell
+# lockfileどおりに依存関係を導入
+npm ci --ignore-scripts
 
-## Build from Source
-
-```bash
-# 依存関係のインストール
-npm install
-
-# 開発ビルド（Vite dev server + Tauri dev）
+# 開発起動
 npm run tauri dev
 
-# 本番ビルド（NSIS インストーラを生成）
+# Frontend本番ビルド
+npm run build
+
+# NSISインストーラー生成
 npm run tauri build
+
+# Frontend・Rustの検証
+npm run test:coverage
+npm run test:rust
+npm run verify
 ```
 
-ビルド成果物は `src-tauri/target/release/bundle/nsis/` に出力される。
+既定のインストーラー出力先は `target/release/bundle/nsis/` です。`npm run verify` は Prettier、Stylelint、ESLint、Frontend coverage、Frontend build、clippy、Rust test を順に実行します。rustfmt の確認は `npm run fmt:check` で別途実行します。
 
-### Lint and Format
-
-```bash
-npm run lint                              # ESLint (typescript-eslint strict)
-npm run format:check                      # Prettier check
-npm run stylelint                         # Stylelint
-npm run build                             # TypeScript + Vite production build
-cargo clippy --workspace --all-targets -- -D warnings
-npm run verify                            # カバレッジを含むローカル品質ゲート（インストーラ生成を除く）
-```
-
----
-
-## Project Structure
-
-```
-.
-├── src/                        React frontend (TypeScript)
-│   ├── app/                    アプリケーションルート、ルーティング、モーダル統括
-│   ├── features/               機能モジュール
-│   │   ├── analyze/            解析セクション
-│   │   ├── archive/            アーカイブ取り込み・ログビューア
-│   │   ├── database/           DB プレビュー
-│   │   ├── registry/           ランチャー
-│   │   └── settings/           設定
-│   └── shared/                 共通コンポーネント・ユーティリティ
-├── src-tauri/                  Rust backend
-│   ├── src/
-│   │   ├── lib.rs              Tauri 起動と IPC ハンドラ登録
-│   │   ├── commands/           Tauri IPC コマンドハンドラ
-│   │   ├── analyze/            ログ解析パイプライン
-│   │   ├── config.rs           Windows レジストリ I/O
-│   │   ├── platform.rs         Win32 API 連携
-│   │   └── utils.rs            ロガー・エラー整形
-│   ├── capabilities/           Tauri capability 定義
-│   └── windows/                NSIS インストーラスクリプト
-├── docs/                       技術ドキュメント
-└── package.json
-```
-
-各 feature は `views/` `viewmodels/` `services/` `models/` に分割した MVVM に近い構成を採用している。feature 間の相互参照は ESLint の `no-restricted-imports` で禁止されている。
-
----
+CIはRustをWindows、FrontendをUbuntuで検証する定義です。Rust formatは参考check、配布buildは対象外で、Rust native probeに必要なnpm依存準備は現jobに含まれません。実gateと前提の差は [Verification Commands and CI](docs/tech-stack.md#verification-commands-and-ci)を参照してください。成功件数やcoverage値、静的文書の照合日を全機能の確認完了とは扱いません。
 
 ## Data and Privacy
 
-本アプリはローカル完結で動作する。以下のデータをローカル保存する。
+| Data             | Location                                                                | Purpose                                      |
+| ---------------- | ----------------------------------------------------------------------- | -------------------------------------------- |
+| Source logs      | Polaris の `<install>\Data\archive`                                     | 圧縮・解析元。自動同期では削除しない         |
+| Archives         | StellaRecord の `<install>\Data\archive\*.tar.zst`                      | ログ本文の保管                               |
+| SQLite           | `<install>\Data\db\stellarecord.db`                                     | 解析情報と `apps`                            |
+| Application logs | `<install>\Data\logs\info-YYYY-MM.log`                                  | 障害調査用の WARN / ERROR                    |
+| Registry         | `HKCU\Software\CosmoArtsStore\StellaRecord`、`Polaris`、Windows Run key | 保存先、自動起動、起動時取込、容量警告ライン |
+| Theme            | localStorage `stella-record-theme`                                      | Light / Dark / Midnight                      |
+| WebView data     | `<install>\Data\EBWebView`                                              | WebView2のローカルデータ                     |
 
-| Data                             | Location                                                                | Purpose                              |
-| -------------------------------- | ----------------------------------------------------------------------- | ------------------------------------ |
-| 圧縮ログアーカイブ (`*.tar.zst`) | `%LOCALAPPDATA%\CosmoArtsStore\StellaRecord\Data\archive\`              | VRChat 生ログの恒久保管              |
-| SQLite データベース              | `%LOCALAPPDATA%\CosmoArtsStore\StellaRecord\Data\db\stellarecord.db`    | 解析済みログデータと登録アプリ情報   |
-| アプリ運用ログ                   | `%LOCALAPPDATA%\CosmoArtsStore\StellaRecord\Data\logs\info-YYYY-MM.log` | 障害調査用ログ（月次ローテーション） |
-| ユーザー設定                     | Windows Registry `HKCU\Software\CosmoArtsStore\StellaRecord`            | アプリ設定（容量上限、自動起動等）   |
-| UI テーマ                        | LocalStorage `stella-record-theme`                                      | テーマ選択（Light/Dark/Midnight）    |
+archive と DB の明示保存先は registry の `ArchivePath` / `DbPath` を優先し、未指定時は `InstallLocation` 配下を使います。現在の exe の位置から保存先を推測しません。元ログはPolarisが保存した入力、archiveは本文の保存物、解析行は再生成できるデータ、`apps`は利用者が付与した情報です。元ログ削除は明示確認したPolaris側fileだけを変更し、登録解除はEXE本体を削除しません。[Storage and Ownership](docs/database.md#storage-and-ownership)に詳細があります。
 
-**外部通信**: 本アプリは外部サーバとの通信を行わない。テレメトリ送信、クラッシュレポート送信、自動アップデートチェックは未実装。
+専用の全データバックアップ・復元 UI はありません。手動移行ではアプリを終了し、実効保存先の archive と DB directory をコピーします。registry と localStorage はこのコピーに含まれません。通常アンインストール後に残るアーカイブから解析 DB を再構築できますが、ランチャー登録はログから再生成できません。
 
-**データの可搬性**: `Data/` ディレクトリ全体をコピーすることで別 PC への移行が可能。SQLite データベースは `sqlite3` CLI など標準ツールで直接読み出すことができる。
+ログビューアの本文読取りが途中で失敗した場合は、取得済みの行と完了イベントを返して停止します。画面上の完了だけではログ末尾まで読めたことを保証しません。取消し・部分失敗・元ログ削除の条件は [Specification](docs/spec.md) を参照してください。
 
----
+## Project Structure
 
-## Security
-
-### Application
-
-- **Tauri Capabilities**: 許可しているのは `core:default`, `shell:default`, `shell:allow-open` のみ。ファイルシステム操作は Rust 側で実装し、フロントエンドには直接公開していない。
-- **Content Security Policy**: `default-src 'self'; script-src 'self'; img-src 'self' asset: https: data:; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:* ipc:;`
-- **SQL Injection 対策**: 動的テーブル名・カラム名は ASCII 英数字と `_` のみを許可するバリデーションを通過した値のみ SQL に補間。すべての値は `params!` でバインドする。
-- **多重起動防止**: Windows カーネル名前付き Mutex (`Local\StellaRecord_SingleInstance`) で単一インスタンスを保証。
-- **クラッシュ抑制**: Rust リントで `unwrap_used`, `expect_used`, `panic` を `deny` に設定。コンパイル時にクラッシュ経路を排除している。
-
-### Installation
-
-- **管理者権限不要**: `installMode: currentUser` で `%LOCALAPPDATA%` 配下にインストール。
-- **インストール先制限**: NSIS インストーラスクリプトが Program Files / `%WINDIR%` 配下への配置を拒否する。
-- **コード署名**: 現バージョンでは未実装。SmartScreen 警告が表示される可能性がある。
-
-### Known Risks
-
-- 本アプリは現在コード署名されていない。Windows SmartScreen による起動時警告が表示される。
-- 取り込み処理中に外部から DB ファイルを直接編集した場合の動作は保証されない。
-
-脆弱性報告は GitHub Issues ではなく CosmoArtsStore へ直接連絡すること。
-
----
+```text
+.
+├─ src/
+│  ├─ app/                    画面ルート・初回確認・modal統括
+│  ├─ features/               analyze / archive / database / registry / settings
+│  └─ shared/                 共通UI・hook・型・書式
+├─ src-tauri/
+│  ├─ src/lib.rs              Tauri起動・IPC登録
+│  ├─ src/commands/           IPC・filesystem・設定・ランチャー
+│  ├─ src/analyze/            parser・friendship・schema・取込
+│  └─ windows/                NSIS template・hook
+├─ Cargo.toml / Cargo.lock   Rust workspaceと依存
+├─ package.json              Frontend・Tauri・検証command
+├─ docs/                     機能・構造・保存・開発配布・操作体験サンプル
+└─ AGENT.md                  project-specific routing
+```
 
 ## Documentation
 
-| Document                                 | Description                                                              |
-| ---------------------------------------- | ------------------------------------------------------------------------ |
-| [docs/spec.md](docs/spec.md)             | 機能仕様書（アーキテクチャ、モジュール、IPC リファレンス、データフロー） |
-| [docs/database.md](docs/database.md)     | データベース定義書（ER 図、スキーマ、インデックス）                      |
-| [docs/tech-stack.md](docs/tech-stack.md) | 技術スタック詳細と意思決定記録（ADR）                                    |
-| [docs/manual.html](docs/manual.html)     | ダウンロード前に操作感を確認できる体験用 HTML                            |
+| Document | Audience and scope |
+| --- | --- |
+| [Specification](docs/spec.md) | 利用者・仕様担当。操作条件、判断、成功/取消し/失敗後の結果 |
+| [Architecture](docs/architecture.md) | 保守担当。entry、module責務、状態所有、IPC/event、workerと終了 |
+| [Database Schema](docs/database.md) | データ担当・保全する人。全schema、archive/設定の保存先・transaction・保持/削除 |
+| [Tech Stack](docs/tech-stack.md) | 開発・配布担当。依存、採用理由、command、CI、導入/更新/削除 |
+| [Operation Preview](docs/manual.html) | 利用検討者。固定データによる限定体験。実ファイル・registry・DBへ接続しない |
 
----
-
-## Acknowledgements
-
-本アプリは以下の OSS を利用している。各ライセンス条項は配布物に同梱される NOTICE ファイルを参照。
-
-主要な依存関係：[Tauri](https://tauri.app/), [React](https://react.dev/), [Vite](https://vitejs.dev/), [TanStack Virtual](https://tanstack.com/virtual), [rusqlite](https://github.com/rusqlite/rusqlite), [zstd](https://github.com/gyscos/zstd-rs), [tar-rs](https://github.com/alexcrichton/tar-rs), [windows-rs](https://github.com/microsoft/windows-rs)
-
-SVG アイコン：[Material Design Icons (Pictogrammers)](https://pictogrammers.com/library/mdi/) — Apache License 2.0
-
----
+利用開始はREADME→必要なspec→操作補助資料、保守参加はREADME→architecture→対象spec→database→tech-stackの順に読みます。backup/削除は[保存寿命](docs/database.md#deletion-and-retention)へ直接進めます。
 
 ## License
 
 Proprietary — Copyright (c) CosmoArtsStore. All rights reserved.
 
-本ソフトウェアの再配布・改変・リバースエンジニアリングは許可されていない。
+主要な OSS は Tauri、React、Vite、TanStack Virtual、rusqlite、tar、zstd、windows-rs です。依存関係の権利情報は各 package の LICENSE を参照してください。SVG アイコンは Material Design Icons（Pictogrammers、Apache License 2.0）を使用します。

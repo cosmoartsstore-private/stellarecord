@@ -81,7 +81,7 @@
   transition: background 0.2s;
 }
 
-.tableItem:hover {
+.tableItem:hover:not(.tableItemActive) {
   background: var(--accent-soft);
 }
 

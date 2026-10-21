@@ -287,29 +287,43 @@
 }
 
 .legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   padding: 0.3rem 0.7rem;
-  border: 1px solid var(--terminal-border);
+  border: 1px solid var(--border);
   border-radius: 999px;
   font: inherit;
   font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.03em;
   background: transparent;
+  color: var(--text-main);
   cursor: pointer;
-  transition:
-    opacity 0.15s,
-    box-shadow 0.15s,
-    border-color 0.15s;
+  transition: background 0.15s;
 }
 
-.legendItem:hover {
-  opacity: 0.75;
+/* 暗いログ本文の分類色を文字へ流用せず、小さな印と各テーマの本文色で識別する。 */
+.legendItem::before {
+  content: '';
+  width: 0.45rem;
+  height: 0.45rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--legend-color);
+}
+
+.legendItem:hover:not(.legendItemActive) {
+  background: var(--bg-card-soft);
 }
 
 .legendItemActive {
-  border-color: currentcolor;
-  box-shadow: 0 0 0 1px currentcolor;
-  opacity: 1;
+  background: var(--accent-soft);
+}
+
+.legendItem:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ── ログリスト ─────────────────────────────────── */
@@ -408,30 +422,36 @@
 
 /* ── カテゴリ色 ──────────────────────────── */
 
-.line.categoryWorld,
-.legendWorld {
+.line.categoryWorld {
   color: var(--terminal-world);
 }
-.line.categoryNotification,
-.legendNotification {
+.legendWorld {
+  --legend-color: var(--terminal-world);
+}
+.line.categoryNotification {
   color: var(--terminal-notification);
 }
+.legendNotification {
+  --legend-color: var(--terminal-notification);
+}
 .line.categoryPlayerJoin,
-.line.categoryPlayerReady,
-.legendPlayerJoin {
+.line.categoryPlayerReady {
   color: var(--terminal-player-join);
+}
+.legendPlayerJoin {
+  --legend-color: var(--terminal-player-join);
 }
 .line.categoryPlayerLeft {
   color: var(--terminal-player-left);
 }
 .legendWarning {
-  color: var(--terminal-warning);
+  --legend-color: var(--terminal-warning);
 }
 .legendError {
-  color: var(--terminal-error);
+  --legend-color: var(--terminal-error);
 }
 .legendDebug {
-  color: var(--terminal-debug);
+  --legend-color: var(--terminal-debug);
 }
 .line.categoryDebugSystem {
   color: var(--terminal-debug-system);

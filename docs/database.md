@@ -1,36 +1,55 @@
-# Database Schema
+# Database Schema and Data Storage
 
-> StellaRecord のメインデータベース (`Data/db/stellarecord.db`) のスキーマリファレンス。
-> スキーマ定義の一次情報は `src-tauri/src/analyze/db.rs` の `MAIN_SCHEMA` / `MAIN_VIEWS` 定数。
+SQLiteのschemaと、ログ本文・設定・運用データの保存契約を記述する。
+
+## Document Control
+
+| Field | Content |
+| --- | --- |
+| Application | StellaRecord |
+| Scope | 保存先、形式、識別、transaction、初期化、削除、保全。操作条件はspec、実行主体はarchitectureを参照する |
+| Audience | データを変更・参照する開発者、backupや削除範囲を確認する人 |
+| Authority | `src-tauri/src/analyze/db.rs`（MAIN_SCHEMA / MAIN_VIEWS）、`analyze/mod.rs`、`commands/archive.rs`、`config.rs`、`utils.rs`（同じsrc配下）、`src-tauri/windows/installer.nsi` |
+| Related documents | [README](../README.md)、[Specification](spec.md)、[Architecture](architecture.md)、[Tech Stack](tech-stack.md)、[Operation Preview](manual.html) |
+| Source review date | 2026-10-22（sourceとの静的照合日。実行試験日ではない） |
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Conventions](#conventions)
-- [ER Diagram](#er-diagram)
-- [Tables](#tables)
-  - [sessions](#sessions)
-  - [imported_logs](#imported_logs)
-  - [visits](#visits)
-  - [find_users](#find_users)
-  - [with_users](#with_users)
-  - [notifications](#notifications)
-  - [screenshots](#screenshots)
-  - [osc](#osc)
-  - [subscription](#subscription)
-  - [apps](#apps)
-- [Views](#views)
-  - [visit_summary](#visit_summary)
-  - [with_users_detail](#with_users_detail)
-  - [screenshots_detail](#screenshots_detail)
-- [Indexes](#indexes)
-- [Initialization and PRAGMA](#initialization-and-pragma)
+- [Storage and Ownership](#storage-and-ownership)
+- [Records and Keys](#records-and-keys)
+- [Relationships](#relationships)
+- [Tables and Views](#tables-and-views)
+- [Indexes and Query Semantics](#indexes-and-query-semantics)
+- [Write Transactions and Invariants](#write-transactions-and-invariants)
+- [Initialization and Compatibility](#initialization-and-compatibility)
+- [Deletion and Retention](#deletion-and-retention)
 - [Backup and Restore](#backup-and-restore)
-- [Performance Notes](#performance-notes)
+- [References](#references)
 
----
+## Storage and Ownership
 
-## Overview
+| Resource | Owner | Location and Format | Identity | Write unit | Retention and deletion |
+| --- | --- | --- | --- | --- | --- |
+| Polaris元ログ | Polarisが保存、Stellaが読取り・明示削除 | PolarisのInstallLocation/Data/archive/output_log_*.txt | filenameと本文bytes | file単位 | 同期では保持。一致した元ログの明示削除だけが削除する |
+| 圧縮archive | Stella archive command | 実効archive directoryのoutput_log_*.txt.tar.zst | 外名と先頭entry名/本文 | 1ログ1entry、一時fileから配置/置換 | 自動世代削除なし。通常uninstallで保持 |
+| SQLite / WAL / SHM | 解析とapps登録が書込み、preview等が読取り | 実効DB path、SQLite 3 | log_name/本文指紋、tableのkey | 解析outer transaction/file savepoint、appsは独立write | 解析部分のみarchiveから再生成可能。既定DB directoryは通常uninstallで削除 |
+| Stella registry | installer/config/settings | HKCU/Software/CosmoArtsStore/StellaRecord | 下記value名 | value単位、管理設定は順次write | 通常uninstallでkey削除。archiveが残っても保存先情報は残らない |
+| Polaris共有設定 | PolarisとStella settings | HKCU/Software/CosmoArtsStore/Polaris | ArchivePath、CapacityThresholdBytes | value単位 | Stellaの通常uninstallはこのkeyを削除しない |
+| Windows Run | settings/platform、installer | HKCUのRun keyのStellaRecord | value名 | quoted実行pathの登録/削除 | サインイン時起動。通常uninstallで削除 |
+| テーマ | Frontend theme model | localStorage stella-record-theme | light/dark/midnight | 変更ごと | WebView profile内。DB/archive copyの対象外 |
+| 運用ログ | utils logger | InstallLocation/Data/logs/info-YYYY-MM.log | 月次filename | WARN/ERRORをappend | 自動世代削除なし。既定logsは通常uninstall対象。本文/設定のbackupではない |
+| WebView data | WebView2 runtime | InstallLocation/Data/EBWebView | profile | runtime管理 | 固定profileとbundle data pathsを通常uninstallで削除 |
+| 一時状態 | React hook/view、Rust worker | メモリ、archive生成中の一時file | 世代/session、running/cancel | worker/画面の寿命 | job継続checkpointなし。bakはarchive置換用の短期退避 |
+
+### Location Resolution
+
+Stellaのarchiveは非空ArchivePath、DBは非空DbPathを優先し、未指定時はStellaのInstallLocation/Data/archiveとInstallLocation/Data/db/stellarecord.dbを使う。正本は`src-tauri/src/config.rs`のget_effective_archive_dir/get_effective_db_path。現在のexeの位置から推測しない。overrideもInstallLocationもなければ保存先を解決できず、対応する操作が失敗する。
+
+Polaris入力はPolarisのInstallLocation/Data/archiveを組み立て、Polaris ArchivePathをfallbackにしない。get_db_pathは親directoryを作成し得る。previewが読取り専用画面であることは、SQLite read-only flagやfilesystem無変更を意味しない。
+
+WebViewはInstallLocationを取得できる場合に上記profileを指定する。取得できない場合、app側で同じ固定pathを指定する処理はない。
+
+### Overview
 
 | Property          | Value                                           |
 | ----------------- | ----------------------------------------------- |
@@ -44,11 +63,11 @@
 
 データベースは VRChat ログから抽出した正規化データ、取り込み済み本文の識別情報、ランチャー機能で使用する `apps` テーブルで構成される。
 
----
+## Records and Keys
 
-## Conventions
+### Conventions
 
-### Naming
+#### Naming
 
 | Element     | Convention                                                                      | Example                     |
 | ----------- | ------------------------------------------------------------------------------- | --------------------------- |
@@ -60,7 +79,7 @@
 | Boolean     | `BOOLEAN`（SQLite 内部は INTEGER 0/1）                                          | `is_self`, `is_active`      |
 | Enum        | `TEXT CHECK(col IN (...))`                                                      | `instance_type`             |
 
-### Type Mapping
+#### Type Mapping
 
 SQLite はストレージクラスのみを持ち、宣言型は親和性ヒントとして機能する。本プロジェクトでは以下の対応で運用する。
 
@@ -72,23 +91,45 @@ SQLite はストレージクラスのみを持ち、宣言型は親和性ヒン�
 | `BOOLEAN`     | INTEGER       | `bool`                                       |
 | `BLOB`        | BLOB          | `Vec<u8>`                                    |
 
-### Idempotency
+#### Idempotency
 
 再取り込みやエラー時の冪等性を保証するため、各テーブルで以下の戦略を採用する。
 
 | Table           | Idempotency Mechanism                                                          |
 | --------------- | ------------------------------------------------------------------------------ |
 | `sessions`      | `log_name UNIQUE`。本文更新時はファイル単位 savepoint 内で関連データごと再構築 |
-| `imported_logs` | 展開後本文の SHA-256 とバイト長が一致する場合だけ再取り込みを省略              |
+| `imported_logs` | 展開後本文の SHA-256・バイト長・解析版が一致する場合だけ再取り込みを省略       |
 | `notifications` | `notif_id UNIQUE` + `INSERT OR IGNORE`                                         |
 | `with_users`    | `UNIQUE(visit_id, vrchat_id)` + `INSERT OR IGNORE`                             |
 | `find_users`    | `vrchat_id PRIMARY KEY` + `ON CONFLICT DO UPDATE`（表示名最新化）              |
 | `subscription`  | `session_id UNIQUE` + `INSERT OR IGNORE`                                       |
 | `apps`          | `path UNIQUE`                                                                  |
 
----
+### Windows Registry
 
-## ER Diagram
+| Key                                                  | Value Name                   | Type      | Description                          |
+| ---------------------------------------------------- | ---------------------------- | --------- | ------------------------------------ |
+| `HKCU\Software\CosmoArtsStore\StellaRecord`          | `InstallLocation`            | REG_SZ    | NSIS が書き込むインストール先        |
+| 同上                                                 | `ArchivePath`                | REG_SZ    | アーカイブストア（空ならデフォルト） |
+| 同上                                                 | `DbPath`                     | REG_SZ    | DB ファイル（空ならデフォルト）      |
+| 同上                                                 | `EnableStartup`              | REG_DWORD | 自動起動 ON/OFF                      |
+| 同上                                                 | `StartupPreferenceSet`       | REG_DWORD | Windows自動起動を選択済みか          |
+| 同上                                                 | `StartupImportEnabled`       | REG_DWORD | 起動時取込の許可                     |
+| 同上                                                 | `StartupImportPreferenceSet` | REG_DWORD | 起動時取込の許可を選択済みか         |
+| `HKCU\Software\CosmoArtsStore\Polaris`               | `CapacityThresholdBytes`     | REG_QWORD | アーカイブ警告ライン                 |
+| `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` | `StellaRecord`               | REG_SZ    | 自動起動コマンド                     |
+
+### LocalStorage
+
+| Key                   | Value                             | Description |
+| --------------------- | --------------------------------- | ----------- |
+| `stella-record-theme` | `"light" \| "dark" \| "midnight"` | UI テーマ   |
+
+テーマ以外のactive section、list/card、選択、filter、zoom、進捗はメモリのみ。Windows Runの実在値、EnableStartup、起動時取込の許可は別の値である。取込許可の既定はenabled=false、preference_set=false。
+
+## Relationships
+
+### ER Diagram
 
 ```mermaid
 erDiagram
@@ -115,6 +156,7 @@ erDiagram
         TEXT    log_name PK,FK
         BLOB    content_sha256
         INTEGER content_size
+        INTEGER parser_version
     }
 
     visits {
@@ -138,6 +180,7 @@ erDiagram
         INTEGER  visit_id FK
         TEXT     vrchat_id FK
         BOOLEAN  is_self
+        INTEGER  friend_status
         DATETIME join_time
         DATETIME leave_time
     }
@@ -201,11 +244,13 @@ erDiagram
 
 `apps` テーブルは VRChat ログとは独立しており、ランチャー機能で登録された外部 EXE のメタデータを保管する。
 
----
+find_usersは複数sessionに共有する最新表示名、appsはログと独立した利用者登録である。session再構築で両者を一括削除しない。row IDは再解析で変わり得るため、外部consumerは恒久的なログ識別子として扱わない。
 
-## Tables
+## Tables and Views
 
-### sessions
+### Tables
+
+#### sessions
 
 ログファイル単位のセッション情報。1 ログファイル = 1 セッション。
 
@@ -225,15 +270,16 @@ erDiagram
 
 ---
 
-### imported_logs
+#### imported_logs
 
-取り込み済みログの展開後本文を識別する内部テーブル。同名アーカイブが置き換わった場合でも、本文が変化したときだけセッションと関連データを再構築する。
+取り込み済みログの展開後本文を識別する内部テーブル。同名アーカイブが置き換わった場合でも、本文または解析版が変化したときにセッションと関連データを再構築する。現在の `CURRENT_PARSER_VERSION` は2で、DDLの既定値1は旧取込行の識別に使用する。
 
-| Column           | Type    | Nullable | Default | Description                      |
-| ---------------- | ------- | -------- | ------- | -------------------------------- |
-| `log_name`       | TEXT    | NO       | -       | 対応する `sessions.log_name`     |
-| `content_sha256` | BLOB    | NO       | -       | 展開後本文の SHA-256（32バイト） |
-| `content_size`   | INTEGER | NO       | -       | 展開後本文のバイト長             |
+| Column           | Type    | Nullable                 | Default | Description                      |
+| ---------------- | ------- | ------------------------ | ------- | -------------------------------- |
+| `log_name`       | TEXT    | YES（DDLにNOT NULLなし） | -       | 対応する `sessions.log_name`     |
+| `content_sha256` | BLOB    | NO                       | -       | 展開後本文の SHA-256（32バイト） |
+| `content_size`   | INTEGER | NO                       | -       | 展開後本文のバイト長             |
+| `parser_version` | INTEGER | NO                       | 1       | 解析版（現在は2）                |
 
 **Constraints**
 
@@ -241,10 +287,11 @@ erDiagram
 - `FOREIGN KEY (log_name) REFERENCES sessions(log_name) ON DELETE CASCADE`
 - `CHECK (length(content_sha256) = 32)`
 - `CHECK (content_size >= 0)`
+- `CHECK (parser_version >= 1)`
 
 ---
 
-### visits
+#### visits
 
 ワールドインスタンスへの 1 回の訪問。`Joining` 行で INSERT、`OnLeftRoom` または次の `Entering Room` で `leave_time` を UPDATE する。
 
@@ -286,14 +333,14 @@ VRChat ログの生ラベルをそのまま格納する（ログ忠実保存方�
 
 ---
 
-### find_users
+#### find_users
 
 これまでに観測した VRChat ユーザーのカタログ。
 
-| Column         | Type | Nullable | Default | Description           |
-| -------------- | ---- | -------- | ------- | --------------------- |
-| `vrchat_id`    | TEXT | NO       | -       | VRChat ID (`usr_xxx`) |
-| `account_name` | TEXT | NO       | -       | 最新観測の表示名      |
+| Column         | Type | Nullable                 | Default | Description           |
+| -------------- | ---- | ------------------------ | ------- | --------------------- |
+| `vrchat_id`    | TEXT | YES（DDLにNOT NULLなし） | -       | VRChat ID (`usr_xxx`) |
+| `account_name` | TEXT | NO                       | -       | 最新観測の表示名      |
 
 **Constraints**
 
@@ -305,18 +352,19 @@ VRChat ログの生ラベルをそのまま格納する（ログ忠実保存方�
 
 ---
 
-### with_users
+#### with_users
 
 訪問単位の同席ユーザー記録。
 
-| Column       | Type     | Nullable | Default       | Description                         |
-| ------------ | -------- | -------- | ------------- | ----------------------------------- |
-| `id`         | INTEGER  | NO       | AUTOINCREMENT | プライマリキー                      |
-| `visit_id`   | INTEGER  | NO       | -             | 訪問 (`visits.id`)                  |
-| `vrchat_id`  | TEXT     | NO       | -             | プレイヤー (`find_users.vrchat_id`) |
-| `is_self`    | BOOLEAN  | NO       | 0             | 自分自身か                          |
-| `join_time`  | DATETIME | NO       | -             | 観測開始時刻                        |
-| `leave_time` | DATETIME | YES      | NULL          | 観測終了時刻                        |
+| Column          | Type     | Nullable | Default       | Description                         |
+| --------------- | -------- | -------- | ------------- | ----------------------------------- |
+| `id`            | INTEGER  | NO       | AUTOINCREMENT | プライマリキー                      |
+| `visit_id`      | INTEGER  | NO       | -             | 訪問 (`visits.id`)                  |
+| `vrchat_id`     | TEXT     | NO       | -             | プレイヤー (`find_users.vrchat_id`) |
+| `is_self`       | BOOLEAN  | NO       | 0             | 自分自身か                          |
+| `friend_status` | INTEGER  | NO       | 2             | 0=非フレンド、1=フレンド、2=不明    |
+| `join_time`     | DATETIME | NO       | -             | 観測開始時刻                        |
+| `leave_time`    | DATETIME | YES      | NULL          | 観測終了時刻                        |
 
 **Constraints**
 
@@ -324,6 +372,9 @@ VRChat ログの生ラベルをそのまま格納する（ログ忠実保存方�
 - `FOREIGN KEY (visit_id) REFERENCES visits(id)`
 - `FOREIGN KEY (vrchat_id) REFERENCES find_users(vrchat_id)`
 - `UNIQUE (visit_id, vrchat_id)` — 同訪問内の重複防止
+- `CHECK (friend_status IN (0,1,2))`
+
+フレンド状態は訪問単位のログ証拠から保存する。判定条件は [Specification](spec.md#friend-status) を参照する。
 
 **Indexes**
 
@@ -332,7 +383,7 @@ VRChat ログの生ラベルをそのまま格納する（ログ忠実保存方�
 
 ---
 
-### notifications
+#### notifications
 
 VRChat の通知履歴。`is_collectible_notification()` でフィルタされた 5 種類のみを格納する。
 
@@ -367,7 +418,7 @@ VRChat の通知履歴。`is_collectible_notification()` でフィルタされ�
 
 ---
 
-### screenshots
+#### screenshots
 
 VRChat Camera による撮影イベント。
 
@@ -397,7 +448,7 @@ VRChat Camera による撮影イベント。
 
 ---
 
-### osc
+#### osc
 
 OSC サービス検出イベント。`Found new OSC Service: <name> at <ip>:<port>` 行から抽出する。
 
@@ -425,7 +476,7 @@ OSC サービス検出イベント。`Found new OSC Service: <name> at <ip>:<por
 
 ---
 
-### subscription
+#### subscription
 
 VRChat+ サブスクリプション状態。セッション開始時に 1 回出力される `Get VRChat Subscription Details!` 行から抽出する。
 
@@ -446,7 +497,7 @@ VRChat+ サブスクリプション状態。セッション開始時に 1 回出
 
 ---
 
-### apps
+#### apps
 
 ランチャーに登録された外部 EXE のメタデータ。VRChat ログとは独立した管理データ。
 
@@ -466,9 +517,9 @@ VRChat+ サブスクリプション状態。セッション開始時に 1 回出
 
 ---
 
-## Views
+### Views
 
-### visit_summary
+#### visit_summary
 
 各訪問の滞在秒数と他プレイヤー数を付与した派生ビュー。
 
@@ -482,10 +533,8 @@ SELECT
     v.region,
     v.join_time,
     v.leave_time,
-    CAST(
-      (julianday(COALESCE(v.leave_time, datetime('now'))) - julianday(v.join_time)) * 86400
-      AS INTEGER
-    ) AS duration_sec,
+    unixepoch(COALESCE(v.leave_time, datetime('now', 'localtime'))) - unixepoch(v.join_time)
+      AS duration_sec,
     (SELECT COUNT(*)
      FROM with_users wu
      WHERE wu.visit_id = v.id AND wu.is_self = 0) AS other_player_count
@@ -502,12 +551,12 @@ ORDER BY v.join_time DESC;
 | `region`             | TEXT     | リージョン                                           |
 | `join_time`          | DATETIME | 入室時刻                                             |
 | `leave_time`         | DATETIME | 退室時刻                                             |
-| `duration_sec`       | INTEGER  | 滞在秒数 (`leave_time` が NULL の場合は現在時刻まで) |
+| `duration_sec`       | INTEGER  | 滞在秒数 (`leave_time` が NULL の場合は現在のlocaltimeまで) |
 | `other_player_count` | INTEGER  | 自分を除いた同席プレイヤー数                         |
 
 ---
 
-### with_users_detail
+#### with_users_detail
 
 `with_users` に `find_users` と `visits` を結合した詳細ビュー。
 
@@ -520,6 +569,7 @@ SELECT
     wu.vrchat_id,
     fu.account_name AS user_name,
     wu.is_self,
+    wu.friend_status,
     wu.join_time,
     wu.leave_time
 FROM with_users wu
@@ -527,20 +577,21 @@ JOIN find_users fu ON fu.vrchat_id = wu.vrchat_id
 JOIN visits v ON v.id = wu.visit_id;
 ```
 
-| Column       | Type     | Description          |
-| ------------ | -------- | -------------------- |
-| `id`         | INTEGER  | `with_users.id`      |
-| `visit_id`   | INTEGER  | 訪問 ID              |
-| `world_name` | TEXT     | ワールド名           |
-| `vrchat_id`  | TEXT     | プレイヤー VRChat ID |
-| `user_name`  | TEXT     | プレイヤー表示名     |
-| `is_self`    | BOOLEAN  | 自分自身か           |
-| `join_time`  | DATETIME | 観測開始時刻         |
-| `leave_time` | DATETIME | 観測終了時刻         |
+| Column          | Type     | Description            |
+| --------------- | -------- | ---------------------- |
+| `id`            | INTEGER  | `with_users.id`        |
+| `visit_id`      | INTEGER  | 訪問 ID                |
+| `world_name`    | TEXT     | ワールド名             |
+| `vrchat_id`     | TEXT     | プレイヤー VRChat ID   |
+| `user_name`     | TEXT     | プレイヤー表示名       |
+| `is_self`       | BOOLEAN  | 自分自身か             |
+| `friend_status` | INTEGER  | 訪問時点のフレンド状態 |
+| `join_time`     | DATETIME | 観測開始時刻           |
+| `leave_time`    | DATETIME | 観測終了時刻           |
 
 ---
 
-### screenshots_detail
+#### screenshots_detail
 
 `screenshots` に `visits` を LEFT JOIN した詳細ビュー（ワールド外撮影に対応するため LEFT JOIN）。
 
@@ -568,9 +619,9 @@ LEFT JOIN visits v ON v.id = s.visit_id;
 | `resolution_height` | INTEGER  | 解像度高さ                         |
 | `timestamp`         | DATETIME | 撮影時刻                           |
 
----
+## Indexes and Query Semantics
 
-## Indexes
+### Indexes
 
 UNIQUE 制約による自動生成インデックスを除く、明示的に作成されるインデックス一覧。
 
@@ -588,47 +639,98 @@ UNIQUE 制約による自動生成インデックスを除く、明示的に作�
 | `idx_osc_session_id`         | `osc`           | `session_id`  | セッション JOIN                    |
 | `idx_osc_timestamp`          | `osc`           | `timestamp`   | 時系列ソート                       |
 
----
+### Read Performance
 
-## Initialization and PRAGMA
+previewは表示metadata登録の9テーブル/3ビューを対象とし、内部imported_logsは一覧に含めない。LIMIT 500 OFFSETでページ取得し、指定sortまたはtableごとのdefault_sortを使う。NULLはNULL、BLOBは`<BLOB>`文字列として返す。
 
-`src-tauri/src/analyze/db.rs::init_main_db` がアプリ起動時と取り込み開始時に必ず実行される。現在の DDL を正とし、`CREATE TABLE IF NOT EXISTS` による追加テーブルと加算的な列移行を、既存データを保持したまま適用する。`screenshots.session_id` がない旧 DB では `PRAGMA table_info(screenshots)` で列を確認して追加し、`visit_id` がある行だけ親訪問の `session_id` を補完する。この処理とインデックス作成は冪等である。
+viewは非実体化で照会時にJOIN/集計する。visit_summaryのleave_time=NULLの滞在秒は照会時localtimeに依存する。with_users_detailの表示名は履歴snapshotではない。screenshots_detailはvisitなしの写真をLEFT JOINで残し、session_idを出力しない。
 
-```rust
-pub fn init_main_db(conn: &Connection) -> Result<()> {
-    conn.execute_batch("PRAGMA journal_mode = WAL;")?;
-    conn.execute_batch("PRAGMA foreign_keys = ON;")?;
-    conn.execute_batch(MAIN_SCHEMA)?;
-    migrate_screenshot_session_ownership(conn)?;
-    conn.execute_batch(MAIN_VIEWS)?;
-    Ok(())
-}
-```
+取得コストは行数/OFFSET/sortによる。WALは未確定writerと確定済みreaderを分離するが、別writer/schema初期化/外部toolとの競合やすべてのSQLITE_BUSYを防ぐ保証はない。
 
-### Active PRAGMAs
+## Write Transactions and Invariants
+
+### Import Identity
+
+archive外名から.tar.zstを除いたlog_nameと、展開した先頭entry本文のSHA-256（32 bytes）/本文長/CURRENT_PARSER_VERSION=2で判定する。tar時刻や圧縮bytes自体ではない。同名別内容は併存せず置換する。
+
+file savepoint開始後に指紋を計算する。一致ならskip、不一致なら旧session所有のscreenshots/with_users/visits/notifications/osc/subscription/imported_logs/sessionを削除し、解析・指紋登録を行う。file失敗時はsavepointをrollbackし旧確定データを戻す。共有find_users/appsは巻き添え削除しない。
+
+### Import Commit Boundaries
+
+run_diff_import/run_enhanced_import_batchはDB接続とinit_main_dbの後にouter transactionを開始する。schema初期化/互換処理と先行archive同期はouter transactionの外にある。
+
+| Mode and result | Database result | Other retained effects |
+| --- | --- | --- |
+| 手動batch全成功 | 全選択処理後に取消しを最終確認してouter commit | 既存archiveを変更しない |
+| 手動batchの通常file失敗 | 当該savepointとouter transactionをrollback | 起動時同期等の既存archiveは保持 |
+| 差分の通常file失敗 | 当該savepointのみrollback、後続処理後に成功分commit | archive更新は巻き戻さない |
+| 両方式の取消し | 今回のouter transaction全体をrollback | schema初期化、先行archive、元ログ削除は含めない |
+| outer/commit失敗 | 成功と扱わず、未確定更新はrollback対象 | 別資源まで戻す契約ではない |
+
+fileごとの完了進捗はouter commit前に送る。表示と永続化確定は同義ではない。appsは別接続/別writeであり、取込running flagが全writerを直列化するわけではない。
+
+### Archive Replacement
+
+新規または厳密な追記だけを同期対象とする。同サイズ別内容・縮小・非prefixは旧archive保持。tar.finish→zstd.finish→sync_all後に一時fileを配置する。置換では旧targetを.bakへ退避し、配置失敗時に復元を試みる。復元失敗/成功後bak削除失敗はwarnを残す。
+
+bakは全データbackupではない。複数archive同期の単一transaction/一括rollbackや同期中cancel確認はなく、途中失敗の先行成功fileは残る。
+
+### Settings Writes
+
+管理設定はPolaris設定→Run→Stella設定の順に保存する。途中失敗時はStella→Run→Polarisの順に開始前値の復元を試み、復元失敗もerrorに含める。全registry書込みはatomicではない。
+
+取込許可はStartupImportEnabled→StartupImportPreferenceSetの順に保存し、独自transaction/rollbackはない。tableの競合処理は[Idempotency](#idempotency)を参照する。
+
+## Initialization and Compatibility
+
+### Initialization and PRAGMA
+
+`src-tauri/src/analyze/db.rs::init_main_db` は `open_initialized_main_db` を使うcommandと両取込方式の開始時に current DDL と加算的互換処理を適用する。WALと外部キーを有効にし、`MAIN_SCHEMA` の適用後に次を実行する。
+
+1. 旧 `screenshots` に `session_id` を追加し、`visit_id` のある行だけ親訪問から補完する。`idx_screenshots_session_id` も作成する。
+2. 旧 `with_users` に `friend_status` を既定値2で追加する。
+3. 旧 `imported_logs` に `parser_version` を既定値1で追加する。
+4. `friend_status` がない旧 `with_users_detail` を作り直し、`MAIN_VIEWS` を適用する。
+
+これらは現行実装が保持する互換処理であり、任意の旧schemaを受け入れる保証ではない。
+
+#### Active PRAGMAs
 
 | PRAGMA         | Value | Reason                                                                |
 | -------------- | ----- | --------------------------------------------------------------------- |
 | `journal_mode` | `WAL` | 取り込み中（書き込み）と読み取り（ビューア・DB プレビュー）の並行動作 |
 | `foreign_keys` | `ON`  | REFERENCES 制約の実行時チェック (デフォルト OFF)                      |
 
+初期化全体は単一transactionではなく、view refreshはsavepointを使う。旧world外撮影の所有元は推定せずsession_id=NULLを保持する。ここに記すのは現sourceに存在する互換処理であり、任意の旧schema対応やmigration追加の方針ではない。
+
+## Deletion and Retention
+
+| Operation | Original input | Derived data | User-added data | Settings | Partial failure and recovery |
+| --- | --- | --- | --- | --- | --- |
+| 起動時同期/解析 | Polaris元ログ保持 | archiveをfile単位生成/置換、解析は上記方式 | apps保持 | 保持 | 同期の先行成功は残る。解析とは別に再試行 |
+| 手動「復元」 | 原本/archive保持 | 選択archiveから解析DB再構築 | apps保持 | 保持 | 全選択成功時commit、取消し/通常file失敗は今回全rollback |
+| 元ログ削除 | Polaris元ログの選択対象を削除 | archive/DB保持 | apps保持 | 保持 | entry名/size/本文bytesを直前に再確認し逐次削除。既削除分undoなし |
+| 登録解除 | EXE/対象appデータ保持 | 解析行保持 | 該当apps行のみ削除 | 保持 | 復元APIなし。再登録する |
+| /UPDATE | 原本/外部archive保持 | 通常Data削除をskip | DB fileの通常削除なし | Run/Stella keyの通常削除skip。ただしInstallLocation/DbPath再write | DbPathはINSTDIR/Data/db/stellarecord.dbへ再設定。外部DBが残っても参照先は変わり得る |
+| 通常uninstall・固定Data | Polaris元ログ/Data/archive保持 | INSTDIR/Data/db/logs/EBWebView、bundle data paths削除 | 固定DB内appsも削除 | Stella/Run/installer登録削除、Polaris共有key保持 | 必須削除失敗で中断。先行成功をrollbackしない |
+| 通常uninstall・外部override | 外部ArchivePath保持 | 外部DbPathを探索削除しない | 外部DB内apps保持 | override情報を含むStella key削除 | fileと保存先設定の保持を区別。実効pathを保全時に記録 |
+| 手動backup/restore | 停止後archive copy | 停止後DB directory copy | appsはDBに含む | registry/localStorageは別 | 稼働中3file順次copyをsnapshotと扱わない |
+
+installer再実行UIで既存app削除を選ぶ経路と/UPDATEは異なる。[Installation Lifecycle](tech-stack.md#installation-lifecycle)を参照する。通常uninstallでは残るarchiveを保護し、Data/install directoryは空の場合だけ削除する。
+
+### Storage
+
+DB容量はログ内容/訪問/通知/撮影件数による。固定の1session容量は定義しない。容量警告は自動削除/保存拒否上限ではない。自動VACUUM、DB cleanup/reset、全backup/restore UIはない。
+
 ## Backup and Restore
 
 ### Backup
 
-`Data/db/` ディレクトリ全体をコピーすることでバックアップが可能。WAL モードのため、コピー時は以下の 3 ファイルを同時にコピーする必要がある。
-
-| File                  | Description            |
-| --------------------- | ---------------------- |
-| `stellarecord.db`     | メイン DB ファイル     |
-| `stellarecord.db-wal` | Write-Ahead Log        |
-| `stellarecord.db-shm` | 共有メモリインデックス |
-
-アプリ終了時に WAL は自動 checkpoint されるため、終了後であれば `stellarecord.db` のみのコピーでも一貫性が保たれる。
+専用の全データバックアップ API はない。手動コピーでは StellaRecord と同じ DB を開く他のプロセスを終了し、実効 DB directory を残存する `stellarecord.db-wal` / `stellarecord.db-shm` を含めて保全する。稼働中に3ファイルを順次コピーする方法は、一貫した snapshot を保証しない。稼働中の保全が必要な場合は SQLite backup API 等を扱う外部ツールで snapshot を取得する。
 
 ### Restore
 
-別 PC への移行時は `Data/` ディレクトリ全体（`archive/` `db/` `logs/`）をコピーする。レジストリ設定はコピーされないため、容量上限などは再設定が必要。
+停止中に archive と DB を実効保存先へコピーする。既定は `Data/archive/` と `Data/db/` だが registry の明示保存先が優先される。registry設定、localStorageのテーマ、WebViewデータは DB backup に含まれない。解析データは保全したアーカイブから再構築できるが、`apps` のランチャー登録はログから再生成できない。
 
 ### External Tools
 
@@ -638,22 +740,10 @@ DB ファイルは標準的な SQLite 3 形式のため、以下のツールで�
 - [DB Browser for SQLite](https://sqlitebrowser.org/)
 - VSCode の SQLite 拡張機能
 
----
+原本が失われた場合、archiveは本文の唯一の保存物になり得る。解析部分を再生成できてもapps/registry/themeはログから再生成できない。
 
-## Performance Notes
+## References
 
-### Write Performance
-
-- 取り込み処理は外側トランザクション内で全アーカイブをまとめて commit する。途中の `analyze-progress` イベントは未 commit 状態で送出される。
-- ファイル単位の savepoint で部分失敗を許容する設計のため、savepoint 開始/commit のオーバーヘッドが発生するが、典型的な 100 ファイル程度では実測 1 秒未満。
-
-### Read Performance
-
-- DB プレビューは `LIMIT 500 OFFSET ?` で 1 ページずつ取得する。OFFSET が大きくなるとスキャンコストが増えるが、UI 上のページ数は通常数百ページ以下のため問題にならない。
-- ビュー (`visit_summary`, `with_users_detail`) は実体化されておらず、毎回サブクエリ／JOIN が走る。レコード数が増えると遅くなる場合は `INDEXED VIEW` 相当のキャッシュテーブルを検討する。
-
-### Storage
-
-- DB ファイルサイズは 1 セッション約 10〜100 KB（訪問数・通知数による）。
-- 1000 セッション保管時の DB サイズはおおよそ 50〜200 MB の範囲。
-- VACUUM は自動実行しない (`auto_vacuum = NONE`)。長期運用で削除が発生した場合のみ手動 VACUUM を検討する。
+- [Specification](spec.md): 操作条件と成功/取消し/部分失敗後の再実行。
+- [Architecture](architecture.md): 接続とworkerの所有、IPC、排他と終了。
+- [Tech Stack](tech-stack.md): 開発command、CI、導入・更新・削除。

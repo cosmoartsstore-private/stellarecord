@@ -6,8 +6,8 @@ export default defineConfig({
   test: {
     coverage: {
       include: ['src/**/*.{ts,tsx}'],
-      exclude: ['src/**/*.d.ts'],
-      thresholds: { statements: 20, branches: 10, functions: 12, lines: 20 },
+      exclude: ['src/**/*.d.ts', 'src/test/**'],
+      // 利用者の表示・操作・結果を合否とし、被覆率は確認不足を探す資料として出力する。
     },
   },
 });

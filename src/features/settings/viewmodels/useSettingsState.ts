@@ -24,11 +24,18 @@ function parseArchiveLimit(draft: string): number | null {
 export function useSettingsState() {
   const [managementSettings, setManagementSettings] =
     useState<ManagementSettings>(defaultManagementSettings);
-  const [archiveLimitDraft, setArchiveLimitDraft] = useState(String(defaultArchiveLimitMb));
+  const [archiveLimitDraft, setArchiveLimitDraftState] = useState(String(defaultArchiveLimitMb));
   const [isStartupEnabledDraft, setIsStartupEnabledDraft] = useState(false);
   const persistedSettingsRef = useRef<ManagementSettings | null>(null);
   const settingsLoadPromiseRef = useRef<Promise<ManagementSettings> | null>(null);
   const isDraftSynchronizedRef = useRef(false);
+  const archiveDraftEditGenerationRef = useRef(0);
+  const archiveDraftSyncGenerationRef = useRef(0);
+
+  const setArchiveLimitDraft = useCallback((draft: string) => {
+    archiveDraftEditGenerationRef.current += 1;
+    setArchiveLimitDraftState(draft);
+  }, []);
 
   /** 初回取得を呼び出し元間で共有し、永続設定を一度だけ読み込む */
   const requestSettings = useCallback(() => {
@@ -36,6 +43,7 @@ export function useSettingsState() {
       .then((settings) => {
         persistedSettingsRef.current = settings;
         isDraftSynchronizedRef.current = false;
+        archiveDraftSyncGenerationRef.current = 0;
         setManagementSettings(settings);
         return settings;
       })
@@ -48,11 +56,12 @@ export function useSettingsState() {
 
   /** 自動起動とアーカイブ上限を一括保存し、成功時にローカル状態を更新する */
   const saveManagementSettings = useCallback(
-    async (startupEnabled: boolean, archiveLimitMb: number) => {
+    async (startupEnabled: boolean, archiveLimitMb: number, draftGeneration: number) => {
       await saveManagementSettingsCommand(startupEnabled, archiveLimitMb);
       const settings: ManagementSettings = { startup_enabled: startupEnabled, startup_preference_set: true, archive_limit_mb: archiveLimitMb };
       persistedSettingsRef.current = settings;
       isDraftSynchronizedRef.current = false;
+      archiveDraftSyncGenerationRef.current = draftGeneration;
       setManagementSettings(settings);
     },
     [],
@@ -73,7 +82,10 @@ export function useSettingsState() {
 
   // 永続化設定の変更時に下書きフィールドを同期（初回読み込みおよび保存後）
   useEffect(() => {
-    setArchiveLimitDraft(String(managementSettings.archive_limit_mb));
+    // 読込開始後・保存要求後の入力を、古い永続値の応答で上書きしない。
+    if (archiveDraftEditGenerationRef.current === archiveDraftSyncGenerationRef.current) {
+      setArchiveLimitDraftState(String(managementSettings.archive_limit_mb));
+    }
     setIsStartupEnabledDraft(managementSettings.startup_enabled);
     isDraftSynchronizedRef.current = persistedSettingsRef.current === managementSettings;
   }, [managementSettings]);
@@ -82,13 +94,14 @@ export function useSettingsState() {
   const toggleStartup = useCallback(async () => {
     const shouldEnable = !isStartupEnabledDraft;
     const canUseArchiveLimitDraft = isDraftSynchronizedRef.current;
+    const draftGeneration = archiveDraftEditGenerationRef.current;
     setIsStartupEnabledDraft(shouldEnable);
     try {
       const persistedSettings = persistedSettingsRef.current ?? (await requestSettings());
       const limitMb =
         (canUseArchiveLimitDraft ? parseArchiveLimit(archiveLimitDraft) : null) ??
         persistedSettings.archive_limit_mb;
-      await saveManagementSettings(shouldEnable, limitMb);
+      await saveManagementSettings(shouldEnable, limitMb, draftGeneration);
     } catch (error) {
       setIsStartupEnabledDraft(!shouldEnable);
       throw error;
@@ -101,8 +114,11 @@ export function useSettingsState() {
     if (parsed === null) {
       throw new UserFacingError('警告ラインは 1MB～10,485,760MB (10TB) の整数で指定してください');
     }
-    await saveManagementSettings(isStartupEnabledDraft, parsed);
-  }, [archiveLimitDraft, isStartupEnabledDraft, saveManagementSettings]);
+    const canUseStartupDraft = isDraftSynchronizedRef.current;
+    const draftGeneration = archiveDraftEditGenerationRef.current;
+    const persistedSettings = persistedSettingsRef.current ?? (await requestSettings());
+    await saveManagementSettings(canUseStartupDraft ? isStartupEnabledDraft : persistedSettings.startup_enabled, parsed, draftGeneration);
+  }, [archiveLimitDraft, isStartupEnabledDraft, requestSettings, saveManagementSettings]);
 
   return { archiveLimitDraft, isStartupEnabledDraft, setArchiveLimitDraft, toggleStartup, saveArchiveLimit };
 }

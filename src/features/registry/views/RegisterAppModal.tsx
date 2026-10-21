@@ -19,17 +19,21 @@ export function RegisterAppModal({ onClose, onConfirm }: RegisterAppModalProps) 
   // 直前に自動補完で入れた名前。ユーザーが手動編集した場合は ref と現値が乖離するため、
   // 次の exe 選択時に上書きしてよいかどうかを判定できる。
   const lastSuggestedNameRef = useRef('');
+  const fileSelectionGenerationRef = useRef(0);
+  const nameEditGenerationRef = useRef(0);
 
   /** exe ファイルを選択し、名前未入力なら表示名を自動補完するハンドラ。 */
   const handlePickFile = async () => {
+    const selectionGeneration = ++fileSelectionGenerationRef.current;
+    const nameEditGeneration = nameEditGenerationRef.current;
     try {
       const selected = await pickExeFile();
-      if (!selected) return;
+      if (!selected || selectionGeneration !== fileSelectionGenerationRef.current) return;
       setPath(selected);
 
       // 既存の値が空、または前回の補完値そのままの場合のみ自動補完で上書きする。
       const hasUserEdited = name.length > 0 && name !== lastSuggestedNameRef.current;
-      if (hasUserEdited) return;
+      if (hasUserEdited || nameEditGeneration !== nameEditGenerationRef.current) return;
 
       let suggested = '';
       try {
@@ -38,6 +42,8 @@ export function RegisterAppModal({ onClose, onConfirm }: RegisterAppModalProps) 
         const fileName = selected.split(/[\\/]/).pop() ?? '';
         suggested = fileName.replace(/\.exe$/i, '');
       }
+      // 表示名の取得中に行ったEXEの再選択と手入力を優先する。
+      if (selectionGeneration !== fileSelectionGenerationRef.current || nameEditGeneration !== nameEditGenerationRef.current) return;
       setName(suggested);
       lastSuggestedNameRef.current = suggested;
     } catch {
@@ -67,6 +73,7 @@ export function RegisterAppModal({ onClose, onConfirm }: RegisterAppModalProps) 
           <label className={styles.formField}>
             <span>アプリ名</span>
             <input type="text" className={styles.formInput} value={name} onChange={(e) => {
+                nameEditGenerationRef.current += 1;
                 setName(e.target.value);
               }} placeholder="表示名を入力" />
           </label>

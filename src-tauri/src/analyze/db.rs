@@ -132,8 +132,10 @@ CREATE TABLE IF NOT EXISTS apps (
 /// `visit_summary` はワールド訪問ごとの滞在時間とプレイヤー数を算出し、
 /// Frontendでの再計算を不要にする。
 /// `with_users_detail` / `screenshots_detail` は関連テーブルを結合した詳細ビュー。
+// 滞在秒数の派生viewは現行の計算式で再生成し、保存済みの訪問行は保持する。
 const MAIN_VIEWS: &str = "
-CREATE VIEW IF NOT EXISTS visit_summary AS
+DROP VIEW IF EXISTS visit_summary;
+CREATE VIEW visit_summary AS
 SELECT
     v.id               AS visit_id,
     v.world_name,
@@ -142,7 +144,7 @@ SELECT
     v.region,
     v.join_time,
     v.leave_time,
-    CAST((julianday(COALESCE(v.leave_time, datetime('now'))) - julianday(v.join_time)) * 86400 AS INTEGER)
+    unixepoch(COALESCE(v.leave_time, datetime('now', 'localtime'))) - unixepoch(v.join_time)
                        AS duration_sec,
     (SELECT COUNT(*) FROM with_users wu
      WHERE wu.visit_id = v.id AND wu.is_self = 0)
@@ -268,291 +270,17 @@ pub fn init_main_db(conn: &Connection) -> Result<()> {
     if !table_has_column(conn, "with_users_detail", "friend_status")? {
         conn.execute_batch("DROP VIEW IF EXISTS with_users_detail;")?;
     }
-    conn.execute_batch(MAIN_VIEWS)?;
+    // viewの削除と再作成の途中を別接続へ公開せず、既存transaction内でも初期化できる。
+    conn.execute_batch("SAVEPOINT refresh_main_views;")?;
+    if let Err(error) = conn.execute_batch(MAIN_VIEWS) {
+        if let Err(rollback_error) = conn.execute_batch("ROLLBACK TO refresh_main_views; RELEASE refresh_main_views;") {
+            return Err(rusqlite::Error::InvalidParameterName(format!("viewを初期化できませんでした: {error}; viewの復元にも失敗しました: {rollback_error}")));
+        }
+        return Err(error);
+    }
+    conn.execute_batch("RELEASE refresh_main_views;")?;
     Ok(())
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn init_main_db_creates_all_tables() {
-        let conn = Connection::open_in_memory().unwrap();
-        init_main_db(&conn).unwrap();
-
-        let expected_tables = [
-            "sessions",
-            "imported_logs",
-            "visits",
-            "find_users",
-            "with_users",
-            "notifications",
-            "screenshots",
-            "osc",
-            "subscription",
-            "apps",
-        ];
-        for table in expected_tables {
-            let exists: bool = conn
-                .query_row(
-                    "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1)",
-                    [table],
-                    |row| row.get(0),
-                )
-                .unwrap();
-            assert!(exists, "table '{table}' should exist");
-        }
-    }
-
-    #[test]
-    fn init_main_db_creates_views() {
-        let conn = Connection::open_in_memory().unwrap();
-        init_main_db(&conn).unwrap();
-
-        let expected_views = ["visit_summary", "with_users_detail", "screenshots_detail"];
-        for view in expected_views {
-            let exists: bool = conn
-                .query_row(
-                    "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='view' AND name=?1)",
-                    [view],
-                    |row| row.get(0),
-                )
-                .unwrap();
-            assert!(exists, "view '{view}' should exist");
-        }
-    }
-
-    #[test]
-    fn init_main_db_idempotent() {
-        let conn = Connection::open_in_memory().unwrap();
-        init_main_db(&conn).unwrap();
-        init_main_db(&conn).unwrap();
-
-        let table_count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(table_count, 10);
-    }
-
-    #[test]
-    fn init_main_db_enables_wal() {
-        let conn = Connection::open_in_memory().unwrap();
-        init_main_db(&conn).unwrap();
-
-        let mode: String = conn
-            .query_row("PRAGMA journal_mode", [], |row| row.get(0))
-            .unwrap();
-        assert!(mode == "wal" || mode == "memory");
-    }
-
-    #[test]
-    fn init_main_db_enables_foreign_keys() {
-        let conn = Connection::open_in_memory().unwrap();
-        init_main_db(&conn).unwrap();
-
-        let fk: i64 = conn
-            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
-            .unwrap();
-        assert_eq!(fk, 1);
-    }
-
-    #[test]
-    fn apps_table_has_unique_path() {
-        let conn = Connection::open_in_memory().unwrap();
-        init_main_db(&conn).unwrap();
-
-        conn.execute(
-            "INSERT INTO apps (name, path) VALUES ('App1', '/path/to/app')",
-            [],
-        )
-        .unwrap();
-
-        let result = conn.execute(
-            "INSERT INTO apps (name, path) VALUES ('App2', '/path/to/app')",
-            [],
-        );
-        assert!(result.is_err(), "duplicate path should be rejected");
-    }
-
-    #[test]
-    fn instance_type_check_constraint() {
-        let conn = Connection::open_in_memory().unwrap();
-        init_main_db(&conn).unwrap();
-
-        conn.execute(
-            "INSERT INTO sessions (log_name, start_time) VALUES ('test', '2025-01-01')",
-            [],
-        )
-        .unwrap();
-
-        conn.execute(
-            "INSERT INTO visits (session_id, world_name, instance_id, instance_type, join_time) VALUES (1, 'World', '123', 'private', '2025-01-01')",
-            [],
-        )
-        .unwrap();
-
-        let result = conn.execute(
-            "INSERT INTO visits (session_id, world_name, instance_id, instance_type, join_time) VALUES (1, 'World', '456', 'invalid_type', '2025-01-01')",
-            [],
-        );
-        assert!(result.is_err(), "invalid instance_type should be rejected");
-    }
-
-    #[test]
-    fn init_main_db_adds_import_tracking_to_existing_database() {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE sessions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                log_name TEXT UNIQUE NOT NULL,
-                account_id TEXT,
-                account_name TEXT,
-                start_time DATETIME,
-                end_time DATETIME
-             );
-             INSERT INTO sessions (log_name, start_time) VALUES ('legacy.txt', '2025-01-01');",
-        )
-        .unwrap();
-
-        init_main_db(&conn).unwrap();
-
-        let session_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get(0))
-            .unwrap();
-        let tracking_exists: bool = conn
-            .query_row(
-                "SELECT EXISTS(
-                    SELECT 1 FROM sqlite_master
-                    WHERE type = 'table' AND name = 'imported_logs'
-                 )",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(session_count, 1);
-        assert!(tracking_exists);
-    }
-
-    #[test]
-    fn init_main_db_migrates_screenshot_session_ownership_idempotently() {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "PRAGMA foreign_keys = ON;
-             CREATE TABLE sessions (
-                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                 log_name TEXT UNIQUE NOT NULL,
-                 account_id TEXT,
-                 account_name TEXT,
-                 start_time DATETIME,
-                 end_time DATETIME
-             );
-             CREATE TABLE visits (
-                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                 session_id INTEGER NOT NULL REFERENCES sessions(id),
-                 world_name TEXT NOT NULL,
-                 instance_id TEXT NOT NULL,
-                 instance_type TEXT,
-                 region TEXT,
-                 join_time DATETIME NOT NULL,
-                 leave_time DATETIME
-             );
-             CREATE TABLE screenshots (
-                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                 visit_id INTEGER REFERENCES visits(id),
-                 file_path TEXT NOT NULL,
-                 resolution_width INTEGER,
-                 resolution_height INTEGER,
-                 timestamp DATETIME NOT NULL
-             );
-             INSERT INTO sessions (log_name, start_time)
-             VALUES ('legacy.txt', '2025-01-01');
-             INSERT INTO visits
-                 (session_id, world_name, instance_id, instance_type, join_time)
-             VALUES (1, 'Legacy World', 'legacy', 'public', '2025-01-01');
-             INSERT INTO screenshots
-                 (visit_id, file_path, resolution_width, resolution_height, timestamp)
-             VALUES
-                 (1, 'C:\\with-visit.png', 1920, 1080, '2025-01-01 00:01:00'),
-                 (NULL, 'C:\\without-visit.png', 1920, 1080, '2025-01-01 00:02:00');",
-        )
-        .unwrap();
-
-        init_main_db(&conn).unwrap();
-        init_main_db(&conn).unwrap();
-
-        let session_id_column_count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*)
-                 FROM pragma_table_info('screenshots')
-                 WHERE name = 'session_id'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        let with_visit_owner: Option<i64> = conn
-            .query_row(
-                "SELECT session_id FROM screenshots WHERE visit_id = 1",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        let without_visit_owner: Option<i64> = conn
-            .query_row(
-                "SELECT session_id FROM screenshots WHERE visit_id IS NULL",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        let screenshot_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM screenshots", [], |row| row.get(0))
-            .unwrap();
-        let session_index_exists: bool = conn
-            .query_row(
-                "SELECT EXISTS(
-                    SELECT 1 FROM sqlite_master
-                    WHERE type = 'index'
-                      AND name = 'idx_screenshots_session_id'
-                 )",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-
-        assert_eq!(session_id_column_count, 1);
-        assert_eq!(with_visit_owner, Some(1));
-        assert_eq!(without_visit_owner, None);
-        assert_eq!(screenshot_count, 2);
-        assert!(session_index_exists);
-    }
-
-    #[test]
-    fn imported_log_tracking_is_removed_with_session() {
-        let conn = Connection::open_in_memory().unwrap();
-        init_main_db(&conn).unwrap();
-        conn.execute(
-            "INSERT INTO sessions (log_name, start_time) VALUES ('tracked.txt', '2025-01-01')",
-            [],
-        )
-        .unwrap();
-        conn.execute(
-            "INSERT INTO imported_logs (log_name, content_sha256, content_size)
-             VALUES ('tracked.txt', ?1, 3)",
-            [&[0_u8; 32][..]],
-        )
-        .unwrap();
-
-        conn.execute("DELETE FROM sessions WHERE log_name = 'tracked.txt'", [])
-            .unwrap();
-
-        let tracking_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM imported_logs", [], |row| row.get(0))
-            .unwrap();
-        assert_eq!(tracking_count, 0);
-    }
-}
+include!("db_tests.rs");

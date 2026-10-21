@@ -1,536 +1,305 @@
-# Tech Stack and Architecture Decisions
+# Tech Stack and Development
 
-> StellaRecord で採用した技術の詳細リファレンスと、主要な技術選定の意思決定記録 (ADR: Architecture Decision Record)。
+依存の宣言/解決値、採用理由、開発command、CIと配布の契約を記述する。module/flowの正本はarchitecture、保存寿命はdatabaseに分ける。
+
+## Document Control
+
+| Field | Content |
+| --- | --- |
+| Application | StellaRecord |
+| Scope | 依存/採用理由/toolchain/build/検証定義/packaging/導入・更新・削除。機能条件/module/schemaの詳細は対象外 |
+| Audience | 開発環境、依存、検証、配布を管理する人 |
+| Authority | package.json/package-lock.json、Cargo.toml/Cargo.lock、src-tauri/Cargo.toml、rust-toolchain.toml、src-tauri/tauri.conf.json/windows、.github/workflows/ci.yml、Vite/lint/format設定 |
+| Related documents | [README](../README.md)、[Specification](spec.md)、[Architecture](architecture.md)、[Database Schema](database.md)、[Operation Preview](manual.html) |
+| Source review date | 2026-10-22（sourceとの静的照合日。実行試験日ではない） |
 
 ## Table of Contents
 
-- [Tech Stack Reference](#tech-stack-reference)
-  - [Frontend](#frontend)
-  - [Backend](#backend)
-  - [Build and Distribution](#build-and-distribution)
-  - [Quality and Tooling](#quality-and-tooling)
-  - [Testing and CI](#testing-and-ci)
-- [Architecture Decision Records](#architecture-decision-records)
-  - [ADR-001 Application Framework: Tauri v2](#adr-001-application-framework-tauri-v2)
-  - [ADR-002 State Management: React Hooks](#adr-002-state-management-react-hooks)
-  - [ADR-003 Virtual Scrolling: @tanstack/react-virtual](#adr-003-virtual-scrolling-tanstackreact-virtual)
-  - [ADR-004 Styling: CSS Modules](#adr-004-styling-css-modules)
-  - [ADR-005 Database: SQLite via rusqlite (bundled)](#adr-005-database-sqlite-via-rusqlite-bundled)
-  - [ADR-006 Compression: tar + zstd](#adr-006-compression-tar--zstd)
-  - [ADR-007 Log Parser: Hand-written Regex State Machine](#adr-007-log-parser-hand-written-regex-state-machine)
-  - [ADR-008 Rust Lints: Deny panic-equivalent paths](#adr-008-rust-lints-deny-panic-equivalent-paths)
-  - [ADR-009 Module Boundaries: Forbid feature-to-feature imports](#adr-009-module-boundaries-forbid-feature-to-feature-imports)
-  - [ADR-010 Installer: NSIS via Tauri Bundler](#adr-010-installer-nsis-via-tauri-bundler)
+- [Stack Reference](#stack-reference)
+- [Runtime Decisions](#runtime-decisions)
+- [Build and Packaging Contract](#build-and-packaging-contract)
+- [Verification Commands and CI](#verification-commands-and-ci)
+- [Installation Lifecycle](#installation-lifecycle)
+- [Current Distribution Constraints](#current-distribution-constraints)
+- [References](#references)
 
----
+## Stack Reference
 
-## Tech Stack Reference
+Declared versionはmanifest、Resolved versionはlockfile。導入済み環境の観測値ではない。Rustで同名推移依存が複数ある場合は直接依存の系列を示し、全推移依存はlockfileを正本とする。
 
-### Frontend
+### Frontend Runtime
 
-| Layer              | Technology                                                          | Version | License          |
-| ------------------ | ------------------------------------------------------------------- | ------- | ---------------- |
-| Language           | [TypeScript](https://www.typescriptlang.org/)                       | 5.9     | Apache-2.0       |
-| UI Framework       | [React](https://react.dev/)                                         | 19.2    | MIT              |
-| Build Tool         | [Vite](https://vitejs.dev/)                                         | 7.3     | MIT              |
-| Vite React Plugin  | [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react) | 5.1     | MIT              |
-| Virtual Scroll     | [@tanstack/react-virtual](https://tanstack.com/virtual)             | 3.13    | MIT              |
-| Tauri SDK          | [@tauri-apps/api](https://tauri.app/)                               | 2.10    | Apache-2.0 / MIT |
-| Tauri Shell Plugin | [@tauri-apps/plugin-shell](https://tauri.app/plugin/shell/)         | 2.3.5   | Apache-2.0 / MIT |
-| Font (UI)          | [@fontsource-variable/m-plus-1](https://fontsource.org/)            | 5.2     | OFL              |
-| Font (Mono)        | [@fontsource/jetbrains-mono](https://fontsource.org/)               | 5.2     | OFL              |
-| Styling            | CSS Modules (built-in to Vite)                                      | -       | -                |
+| Layer | Dependency | Declared version | Resolved version | Authority | Purpose |
+| --- | --- | --- | --- | --- | --- |
+| Frontend | `@fontsource-variable/m-plus-1` | `^5.2.9` | `5.2.9` | package.json / package-lock.json | 日本語font同梱 |
+| Frontend | `@fontsource/jetbrains-mono` | `^5.2.8` | `5.2.8` | package.json / package-lock.json | 等幅font同梱 |
+| Frontend | `@tanstack/react-virtual` | `^3.13.24` | `3.13.24` | package.json / package-lock.json | viewer仮想scroll |
+| Frontend | `@tauri-apps/plugin-shell` | `^2.3.5` | `2.3.5` | package.json / package-lock.json | 明示URL open |
+| Frontend | `react` | `^19.2.0` | `19.2.4` | package.json / package-lock.json | 画面/Hook |
+| Frontend | `react-dom` | `^19.2.0` | `19.2.4` | package.json / package-lock.json | DOM/flushSync |
 
 ### Backend
 
-| Layer                 | Technology                                                        | Version      | License          |
-| --------------------- | ----------------------------------------------------------------- | ------------ | ---------------- |
-| Language              | [Rust](https://www.rust-lang.org/)                                | Edition 2021 | Apache-2.0 / MIT |
-| Application Framework | [tauri](https://crates.io/crates/tauri)                           | 2.10.3       | Apache-2.0 / MIT |
-| Tauri Build           | [tauri-build](https://crates.io/crates/tauri-build)               | 2.5.6        | Apache-2.0 / MIT |
-| Tauri Shell Plugin    | [tauri-plugin-shell](https://crates.io/crates/tauri-plugin-shell) | 2.3.5        | Apache-2.0 / MIT |
-| Database              | [rusqlite](https://crates.io/crates/rusqlite) (`bundled` feature) | 0.38         | MIT              |
-| Date/Time             | [chrono](https://crates.io/crates/chrono)                         | 0.4          | Apache-2.0 / MIT |
-| Regex                 | [regex](https://crates.io/crates/regex)                           | 1.x          | Apache-2.0 / MIT |
-| Compression           | [zstd](https://crates.io/crates/zstd)                             | 0.13         | MIT              |
-| Archive               | [tar](https://crates.io/crates/tar)                               | 0.4          | Apache-2.0 / MIT |
-| Win32 API             | [windows](https://crates.io/crates/windows)                       | 0.58         | Apache-2.0 / MIT |
-| Registry I/O          | [winreg](https://crates.io/crates/winreg)                         | 0.52         | MIT              |
-| Shell Integration     | [opener](https://crates.io/crates/opener)                         | 0.8          | Apache-2.0 / MIT |
-| Image Encoding        | [image](https://crates.io/crates/image) (PNG only)                | 0.25         | Apache-2.0 / MIT |
-| Base64                | [base64](https://crates.io/crates/base64)                         | 0.22         | Apache-2.0 / MIT |
-| Content Hash          | [sha2](https://crates.io/crates/sha2)                             | 0.10         | Apache-2.0 / MIT |
-| Serialization         | [serde](https://crates.io/crates/serde) (with `derive`)           | 1.0          | Apache-2.0 / MIT |
+| Layer | Dependency | Declared version | Resolved version | Authority | Purpose |
+| --- | --- | --- | --- | --- | --- |
+| Backend | `tauri` | `2.10` | `2.10.3` | Cargo manifest / Cargo.lock | WebView/IPC |
+| Backend | `tauri-build` | `2.5` | `2.5.6` | Cargo manifest / Cargo.lock | build生成 |
+| Backend | `tauri-plugin-shell` | `2.3.5` | `2.3.5` | Cargo manifest / Cargo.lock | 明示open |
+| Backend | `rusqlite` | `0.38` | `0.38.0` | Cargo manifest / Cargo.lock | bundled SQLite |
+| Backend | `chrono` | `0.4` | `0.4.44` | Cargo manifest / Cargo.lock | 日時 |
+| Backend | `regex` | `1` | `1.12.3` | Cargo manifest / Cargo.lock | parser pattern |
+| Backend | `tar` | `0.4` | `0.4.45` | Cargo manifest / Cargo.lock | 1ログ1entry |
+| Backend | `zstd` | `0.13` | `0.13.3` | Cargo manifest / Cargo.lock | 圧縮 |
+| Backend | `sha2` | `0.10` | `0.10.9` | Cargo manifest / Cargo.lock | 本文指紋 |
+| Backend | `tempfile` | `3` | `3.27.0` | Cargo manifest / Cargo.lock | 一時archive/検証 |
+| Backend | `windows` | `0.58` | `0.58.0` | Cargo manifest / Cargo.lock | Win32 API |
+| Backend | `winreg` | `0.52` | `0.52.0` | Cargo manifest / Cargo.lock | registry |
+| Backend | `opener` | `0.8` | `0.8.4` | Cargo manifest / Cargo.lock | folder open |
+| Backend | `image` | `0.25` | `0.25.10` | Cargo manifest / Cargo.lock | PNG icon |
+| Backend | `base64` | `0.22` | `0.22.1` | Cargo manifest / Cargo.lock | icon payload |
+| Backend | `serde` | `1.0` | `1.0.228` | Cargo manifest / Cargo.lock | serialize |
 
-### Build and Distribution
+rusqliteはbundled、imageはdefault features無効/PNGのみ。tempfileは検証だけでなくarchive生成に使う。Rust editionは2021、release profileはLTO/strip/codegen-units=1（workspace Cargo.toml）。
 
-| Layer            | Technology                   | Configuration                                  |
-| ---------------- | ---------------------------- | ---------------------------------------------- |
-| Bundler          | Tauri Bundler (NSIS target)  | `src-tauri/tauri.conf.json`                    |
-| Installer Script | NSIS                         | `src-tauri/windows/installer.nsi`, `hooks.nsi` |
-| Install Mode     | currentUser                  | `%LOCALAPPDATA%\CosmoArtsStore\StellaRecord`   |
-| Languages        | Japanese                     | -                                              |
-| Release Profile  | LTO + strip + 1 codegen-unit | `Cargo.toml [profile.release]`                 |
+### Build and Verification Dependencies
 
-### Quality and Tooling
+| Layer | Dependency | Declared version | Resolved version | Authority | Purpose |
+| --- | --- | --- | --- | --- | --- |
+| Build / verification | `@eslint/js` | `^9.39.1` | `9.39.3` | package.json / package-lock.json | lint基本規則 |
+| Build / verification | `@tauri-apps/api` | `^2.10.1` | `2.10.1` | package.json / package-lock.json | invoke/event/app API |
+| Build / verification | `@tauri-apps/cli` | `^2.10.0` | `2.10.0` | package.json / package-lock.json | Tauri開発/配布build |
+| Build / verification | `@testing-library/react` | `^16.3.2` | `16.3.2` | package.json / package-lock.json | UI検証 |
+| Build / verification | `@types/node` | `^24.10.1` | `24.10.13` | package.json / package-lock.json | Node型 |
+| Build / verification | `@types/react` | `^19.2.7` | `19.2.14` | package.json / package-lock.json | React型 |
+| Build / verification | `@types/react-dom` | `^19.2.3` | `19.2.3` | package.json / package-lock.json | React DOM型 |
+| Build / verification | `@vitejs/plugin-react` | `^5.1.1` | `5.1.4` | package.json / package-lock.json | React変換 |
+| Build / verification | `@vitest/coverage-v8` | `^4.1.7` | `4.1.7` | package.json / package-lock.json | coverage出力 |
+| Build / verification | `eslint` | `^9.39.1` | `9.39.3` | package.json / package-lock.json | JS/TS lint |
+| Build / verification | `eslint-plugin-jsx-a11y` | `^6.10.2` | `6.10.2` | package.json / package-lock.json | JSX規則 |
+| Build / verification | `eslint-plugin-react` | `^7.37.5` | `7.37.5` | package.json / package-lock.json | React規則 |
+| Build / verification | `eslint-plugin-react-hooks` | `^7.0.1` | `7.0.1` | package.json / package-lock.json | Hook規則 |
+| Build / verification | `eslint-plugin-unicorn` | `^61.0.2` | `61.0.2` | package.json / package-lock.json | JS/TS規則 |
+| Build / verification | `globals` | `^16.5.0` | `16.5.0` | package.json / package-lock.json | lint用global |
+| Build / verification | `jsdom` | `^29.1.1` | `29.1.1` | package.json / package-lock.json | DOM検証環境 |
+| Build / verification | `prettier` | `^3.6.2` | `3.8.1` | package.json / package-lock.json | format |
+| Build / verification | `stylelint` | `^16.25.0` | `16.26.1` | package.json / package-lock.json | CSS lint |
+| Build / verification | `stylelint-config-standard` | `^38.0.0` | `38.0.0` | package.json / package-lock.json | CSS規則 |
+| Build / verification | `typescript` | `~5.9.3` | `5.9.3` | package.json / package-lock.json | 型確認 |
+| Build / verification | `typescript-eslint` | `^8.48.0` | `8.56.1` | package.json / package-lock.json | TS lint |
+| Build / verification | `vite` | `^7.3.1` | `7.3.6` | package.json / package-lock.json | 開発server/bundle |
+| Build / verification | `vitest` | `^4.1.7` | `4.1.7` | package.json / package-lock.json | Frontend test |
 
-| Layer                | Technology                                                                              | Version |
-| -------------------- | --------------------------------------------------------------------------------------- | ------- |
-| TS Linter            | [ESLint](https://eslint.org/) (flat config)                                             | 9.39    |
-| TS Type-Aware Linter | [typescript-eslint](https://typescript-eslint.io/)                                      | 8.48    |
-| React Linter         | [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react)                | 7.37    |
-| React Hooks Linter   | [eslint-plugin-react-hooks](https://www.npmjs.com/package/eslint-plugin-react-hooks)    | 7.0     |
-| A11y Linter          | [eslint-plugin-jsx-a11y](https://www.npmjs.com/package/eslint-plugin-jsx-a11y)          | 6.10    |
-| Code Quality Linter  | [eslint-plugin-unicorn](https://github.com/sindresorhus/eslint-plugin-unicorn)          | 61.0    |
-| CSS Linter           | [Stylelint](https://stylelint.io/) (`stylelint-config-standard`)                        | 16.25   |
-| Formatter            | [Prettier](https://prettier.io/)                                                        | 3.6     |
-| Rust Linter          | clippy (workspace lints)                                                                | bundled |
-| TS Test Runner       | [Vitest](https://vitest.dev/)                                                           | 4.1     |
-| TS Coverage          | [@vitest/coverage-v8](https://www.npmjs.com/package/@vitest/coverage-v8)                | 4.1     |
-| React Test Utilities | [@testing-library/react](https://testing-library.com/docs/react-testing-library/intro/) | 16.3    |
-| Test DOM             | [jsdom](https://github.com/jsdom/jsdom)                                                 | 29.1    |
-| Temporary Files      | [tempfile](https://crates.io/crates/tempfile)                                           | 3.x     |
-| Rust Test            | `cargo test --all-targets`                                                              | bundled |
-| CI                   | GitHub Actions (`.github/workflows/ci.yml`)                                             | -       |
+### Toolchain and Runtime Requirements
 
-### Testing and CI
+| Layer | Dependency | Declared version | Resolved version | Authority | Purpose |
+| --- | --- | --- | --- | --- | --- |
+| Compiler | Rust | 1.93.0 | toolchain指定値。導入環境は別確認 | rust-toolchain.toml | rustfmt/clippy/x86_64-pc-windows-msvc |
+| Platform | Windows / MSVC | Windows 10/11 x64 | SDK/MSVC版は固定しない | target設定/Windows API使用 | runtime/Rust build |
+| WebView | WebView2 Runtime | installerが導入有無を確認 | installed版はlockfileで固定しない | NSIS WebView2 section | 画面runtime |
+| Node | Vite要求 | ^20.19.0 または >=22.12.0 | installed版はlockfileで固定しない | package-lockのvite engines | Frontend開発/build |
 
-- **単体テスト**: Rust は組み込みの `#[cfg(test)]` と統合テストを含む全ターゲット (`cargo test --all-targets`)、フロントエンドは Vitest (`*.test.ts` / `*.test.tsx`) を採用。`tempfile` は原子的なアーカイブ生成とファイル I/O テストで使用する。
-- **カバレッジ**: フロントエンドは `@vitest/coverage-v8` (`npm run test:coverage`) を使用し、`src` 配下の TypeScript / TSX 全体を集計対象とする。下限は Statements 20%、Branches 10%、Functions 12%、Lines 20% とし、改善前の水準への後退を防ぐ。
-- **ローカル検証**: `npm run verify` で Prettier check → Stylelint → ESLint → Vitest coverage → production build → rustfmt --check → clippy → cargo test を一括実行する。Tauri / NSIS の配布ビルドは `npm run tauri build` で別途確認する。
-- **CI** (`.github/workflows/ci.yml`): master への push と master 宛 PR で起動。`rust` ジョブ (windows-latest) が `cargo fmt --all --check` / `cargo clippy --locked --all-targets -- -D warnings` / `cargo test --locked --all-targets` を、`frontend` ジョブ (ubuntu-latest) が `npm run format:check` / `npm run stylelint` / `npm run lint` / `npm run test:coverage` / `npm run build` を実行する。Rust toolchain は `rust-toolchain.toml` で 1.93.0 + rustfmt/clippy + x86_64-pc-windows-msvc にピン留め。
+ViteのNode要件は検証全体の条件ではない。jsdom 29.1.1は`^20.19.0 || ^22.13.0 || >=24.0.0`、Vitest 4.1.7は`^20.0.0 || ^22.0.0 || >=24.0.0`を宣言する。Node22.12/23をViteだけから全検証対応と扱わない。
 
----
+Rust native browser/startup検証は`node src/test/native-ipc/build-probe.ts`を直接実行するため、当該TypeScriptの直接実行を扱えるNode環境とnpm依存が必要。build-probeはesbuildをimportする。esbuildは現lockfileでVite等から解決される推移依存で、専用npm scriptはない。
 
-## Architecture Decision Records
+## Runtime Decisions
 
-各意思決定は以下のテンプレートで記述する。
-
-```
-- Status:    Accepted | Superseded | Deprecated
-- Date:      決定日
-- Context:   何を解決しようとしているか
-- Decision:  何を採用したか
-- Rationale: なぜそれを採用したか
-- Alternatives Considered: 検討した他の選択肢と却下理由
-- Consequences: 採用後に発生する影響（良い面・悪い面）
-```
+現在の採用理由と制約を示す。実行主体/状態/flowは[Architecture](architecture.md)、transaction/保持/保全は[Database Schema](database.md)を正本とし、以下の要約から性能/通知成功を保証しない。
 
 ### ADR-001 Application Framework: Tauri v2
 
-- **Status**: Accepted
-- **Date**: 2024-12 (StellaRecord プロジェクト発足時)
+**Status**: Accepted
 
-**Context**
+**Decision**: React/TypeScriptの画面をWebView2で動かし、Rustからfilesystem・SQLite・registry・Win32 APIへ接続する。
 
-VRChat のログを扱う Windows デスクトップアプリケーションを開発する必要があった。要件は以下の通り。
+**Rationale**: `invoke` とイベントで画面と処理を分離し、CSP/CapabilitiesでWebViewから使う機能を宣言できる。
 
-- 高度な UI（テーマ切替、仮想スクロール、モーダル）
-- ローカルファイル/レジストリへのアクセス
-- 配布バイナリのサイズ最小化
-- メモリ・CPU 消費の抑制
-- 長期メンテナンス可能なエコシステム
-
-**Decision**
-
-Tauri v2 を採用する。フロントエンドは WebView2 上の React、バックエンドは Rust で実装する。
-
-**Rationale**
-
-- バイナリサイズが Electron 比 1/10 以下（約 12 MB）
-- WebView2 が Windows 10 1809 以降に標準同梱されているためランタイム配布不要
-- バックエンドが Rust であることで、メモリ安全性・型安全性が言語仕様として保証される
-- Tauri Capabilities により、フロントエンドから呼び出せる OS API を明示的に許可する設計
-- Tauri v2 で公式に Mobile プラットフォームが対象となり、長期サポートへの安心感
-
-**Alternatives Considered**
-
-| Option                 | Rejected Reason                                                 |
-| ---------------------- | --------------------------------------------------------------- |
-| Electron               | バイナリ約 150 MB、メモリ約 200 MB、Node.js ランタイム同梱必須  |
-| WPF (.NET)             | TypeScript / React のフロントエンドエコシステムを活用できない   |
-| Flutter Desktop        | Win32 API 連携が Platform Channel 経由で煩雑、Dart の人材確保   |
-| ネイティブ Win32 (C++) | UI 開発コストが高い、テーマ切替・仮想スクロールの自前実装が必要 |
-
-**Consequences**
-
-- (+) ユーザーは 12 MB のセットアップ EXE をダウンロード・インストールするだけ
-- (+) Rust 側で Win32 API を直接呼び出せる
-- (+) セキュリティ既定値が堅牢（CSP・Capabilities が必須）
-- (−) WebView2 Runtime が前提（Windows 10 1809 以降は同梱、それ以前は別途インストール必要）
-- (−) ネイティブ通知やシステムトレイは未実装（Tauri 拡張で対応可能）
-
----
+**Consequences**: WebView2 Runtimeが必要である。Tauriを使うこと自体は、メモリ使用量、配布サイズ、全OS動作、全エラーの通知を保証しない。
 
 ### ADR-002 State Management: React Hooks
 
-- **Status**: Accepted
-- **Date**: 2024-12
+**Status**: Accepted
 
-**Context**
+**Decision**: `viewmodels/use*State` で状態を扱い、アプリルートで必要な状態と操作を組み合わせる。Redux / Zustand等は導入しない。
 
-フロントエンドはナビゲーション 3 セクション（Launcher / Analyze / Database）に加え、Analyze 内に組み込まれる Settings 機能と、各セクションから呼ばれる Archive 系モーダル群で構成される。状態は機能ごとに独立しており、グローバル共有は最小限。
+**Rationale**: ランチャー、解析、DBと、そのmodal・設定の責務を機能ごとに保つ。
 
-**Decision**
-
-React 標準の Hooks（`useState`, `useReducer`, `useCallback`, `useRef`, `useEffect`, `useMemo`）のみで状態管理を実装する。Redux / Zustand / Jotai 等の状態管理ライブラリは採用しない。
-
-**Rationale**
-
-- アプリ規模が小さい（`.tsx` コンポーネント十数個）ため、グローバル状態管理ライブラリは過剰
-- MVVM に近い `viewmodels/use*State.ts` カスタムフックパターンで状態を集約しており、Redux 等の追加抽象化を入れると複雑性が増す
-- 依存ライブラリゼロでバンドルサイズを最小化できる
-- React 19 の最新機能（`flushSync`, `useTransition`）を直接活用できる
-
-**Alternatives Considered**
-
-| Option         | Rejected Reason                                                    |
-| -------------- | ------------------------------------------------------------------ |
-| Redux Toolkit  | 規模に対してボイラープレート過多                                   |
-| Zustand        | 採用しても問題ないが、Hooks のみで成立しているため追加メリットなし |
-| Jotai / Recoil | アトミック設計が活きるほど状態が細分化されていない                 |
-| MobX           | reactive プログラミング学習コスト                                  |
-
-**Consequences**
-
-- (+) 依存ライブラリゼロ、バンドルサイズ最小
-- (+) フック単位で個別にテスト可能
-- (−) アプリ規模が現状の 10 倍を超える場合は再評価が必要
-- (−) Tauri イベント (`listen()`) の cleanup を `useEffect` で手書きする必要がある
-
----
+**Consequences**: Tauriイベントのlistener解除や非同期状態の更新をhook内で扱う。ログビューアのリセットには `flushSync` を使う。
 
 ### ADR-003 Virtual Scrolling: @tanstack/react-virtual
 
-- **Status**: Accepted
-- **Date**: 2024-12
+**Status**: Accepted
 
-**Context**
+**Decision**: ログビューアで表示範囲付近だけをDOM化し、`overscan: 10` を設定する。
 
-ログビューア機能で 10 万行超のテキスト表示が必要。全行を DOM 化すると React のリコンサイル処理がフリーズする。
+**Rationale**: ログ全行を画面要素に変換する負荷を避け、既存のスタイルと表示倍率を維持する。
 
-**Decision**
-
-[@tanstack/react-virtual](https://tanstack.com/virtual) を採用する。
-
-**Rationale**
-
-- ヘッドレス設計（CSS に介入してこない）のため、テーマ切替・独自スタイルと干渉しない
-- React 19 の concurrent features と互換性がある
-- TanStack 製で長期メンテナンスへの安心感
-
-**Alternatives Considered**
-
-| Option         | Rejected Reason                                       |
-| -------------- | ----------------------------------------------------- |
-| react-window   | 動的サイズ対応が HOC 必要、TypeScript 型情報が後付け  |
-| react-virtuoso | バンドルサイズ約 30 KB と大きい、水平スクロール非対応 |
-| 自前実装       | 開発・保守コスト過大                                  |
-
-**Consequences**
-
-- (+) 10 万行ログでも DOM 数は常に約 30 行（overscan 10 含む）
-- (+) ズーム時に `virtualizer.measure()` で再計算可能
-- (−) 動的高さ行は未使用（ログビューア用途では全行同じ高さで十分）
-
----
+**Consequences**: 行高を倍率に合わせて再計測する。表示されるDOM数やfpsはウィンドウ・環境によって変わる。
 
 ### ADR-004 Styling: CSS Modules
 
-- **Status**: Accepted
-- **Date**: 2024-12
+**Status**: Accepted
 
-**Context**
+**Decision**: CSS Modules、CSS Variables、`light-theme` / `dark-theme` / `midnight-theme` を採用する。
 
-3 テーマ（Light / Dark / Midnight）の切替が必要。コンポーネント別のスタイルスコープが欲しい。CSP は可能な限り厳格化したい。
+**Rationale**: 機能ごとのスタイルを分け、テーマ切替を共通変数へ反映する。
 
-**Decision**
-
-CSS Modules + CSS Variables によるテーマ切替を採用する。`<html>` 要素のクラス切替（`light-theme` / `dark-theme` / `midnight-theme`）で `:root` の CSS 変数を一括上書きする。
-
-**Rationale**
-
-- CSP の `unsafe-inline` の用途を最小化できる（CSS-in-JS は `unsafe-inline` 必須）
-- テーマ切替時はクラス 1 つの書き換えで全配色が変わる
-- Vite が CSS Modules を hash 化し、本番ビルドでの重複削減
-- ランタイムオーバーヘッドゼロ（styled-components のような実行時パーサ不要）
-
-**Alternatives Considered**
-
-| Option            | Rejected Reason                                         |
-| ----------------- | ------------------------------------------------------- |
-| styled-components | CSP `unsafe-inline` 必須                                |
-| Emotion           | 同上                                                    |
-| Tailwind CSS      | `dark:` variant では 3 値テーマ（Midnight）を扱いにくい |
-| Vanilla CSS       | スコープ衝突リスク                                      |
-
-**Consequences**
-
-- (+) Stylelint で CSS の品質保証が容易
-- (+) テーマ切替が CSS 変数の差し替えのみで完結
-- (−) 動的スタイルは `style={{}}` のため `style-src 'unsafe-inline'` は最小限残る
-- (−) デザイントークンの一元管理が `App.{theme}.css` 4 ファイルに分散
-
----
+**Consequences**: 動的なinline styleも使用するため、現行CSPの `style-src` は `'unsafe-inline'` を許可する。テーマはlocalStorageに保存する。
 
 ### ADR-005 Database: SQLite via rusqlite (bundled)
 
-- **Status**: Accepted
-- **Date**: 2024-12
+**Status**: Accepted
 
-**Context**
+**Decision**: bundled SQLite、WAL、外部キーを有効にし、10テーブル、3ビュー、11明示indexを持つ。
 
-VRChat ログ（数十 MB × 数百ファイル）を構造化保管し、横断検索可能にする必要がある。ローカル完結で動作させたい。
+**Rationale**: ログの関連データをSQLで扱い、savepointと外側transactionで取込の確定範囲を制御する。
 
-**Decision**
-
-[rusqlite](https://crates.io/crates/rusqlite) の `bundled` feature で SQLite を静的リンクする。WAL モードと外部キー制約を有効化する。
-
-**Rationale**
-
-- SQL の表現力で 10 テーブル + 3 ビュー + 11 インデックスの関係を自然に表現できる
-- `bundled` feature により OS の SQLite ライブラリに依存しない（環境差を排除）
-- WAL モードで取り込み中（書き込み）と閲覧（読み取り）の並行動作が可能
-- DB プレビュー機能で `SELECT * FROM <table>` をそのまま UI に表示できる
-- savepoint と transaction で部分失敗を許容する設計が可能
-
-**Alternatives Considered**
-
-| Option                  | Rejected Reason                                         |
-| ----------------------- | ------------------------------------------------------- |
-| IndexedDB               | WebView 内のみで完結、Rust バックエンドから操作できない |
-| sled (Rust 製 KVS)      | SQL 不可、ビュー・JOIN 不可                             |
-| ファイル + JSON         | スキーマ進化・検索効率が劣る                            |
-| 外部 DB (PostgreSQL 等) | サーバ起動が必要、ローカルアプリの要件に反する          |
-
-**Consequences**
-
-- (+) 単一ファイル `stellarecord.db` で完結、バックアップは file copy のみ
-- (+) `params!` マクロでパラメータバインドが容易、SQL インジェクションを物理的に排除
-- (+) 標準ツール（`sqlite3` CLI, DB Browser）で直接読み出し可能
-- (−) 同時書き込みは Rust 側の `AnalyzeCancelStatus.running` で排他制御が必要
-- (−) 発売前のため、旧スキーマ互換より現行 DDL の保守を優先する
-
----
+**Consequences**: 差分取込のファイル失敗は成功分を残せるが、手動バッチのファイル失敗と両方式の取消しは今回のDB更新全体を巻き戻す。WALでもあらゆる `SQLITE_BUSY` は防げない。確定境界・保全は [Write Transactions and Invariants](database.md#write-transactions-and-invariants) と [Backup and Restore](database.md#backup-and-restore) を参照する。
 
 ### ADR-006 Compression: tar + zstd
 
-- **Status**: Accepted
-- **Date**: 2024-12
+**Status**: Accepted
 
-**Context**
+**Decision**: 1ログ1tar entryをzstdレベル3で圧縮し、`output_log_*.txt.tar.zst` として保存する。
 
-VRChat の生ログ（数十〜数百 MB）を恒久保管する。圧縮率と速度を両立し、標準的なツールで展開可能なフォーマットを採用する。
+**Rationale**: entryに元ファイル名を保持し、ビューアとparserがストリームで読む。
 
-**Decision**
-
-[tar](https://crates.io/crates/tar) で 1 ログ 1 アーカイブを作成し、[zstd](https://crates.io/crates/zstd) 圧縮レベル 3 で圧縮する。出力は `*.tar.zst`。
-
-**Rationale**
-
-- zstd 圧縮レベル 3 は VRChat ログのテキストデータで圧縮率約 90%、速度は gzip の 3〜5 倍
-- tar でファイル名情報がアーカイブ内に保持されるため、後続パースでメタデータが不要
-- `.tar.zst` は 7-Zip / WinRAR / Linux 標準ツールで展開可能
-- Rust の `tar` crate / `zstd` crate は枯れていて安定
-
-**Alternatives Considered**
-
-| Option     | Rejected Reason                                 |
-| ---------- | ----------------------------------------------- |
-| zip        | 圧縮率約 80%、tar+zstd より 10pt 程度劣る       |
-| gzip       | 単一ファイルのみ、ファイル名保持不可            |
-| 7z (LZMA2) | 圧縮率約 95% だが速度が遅く、取り込み時間が数倍 |
-| 無圧縮     | ストレージ容量を圧迫                            |
-
-**Consequences**
-
-- (+) 数百 MB のログが数十 MB に縮む
-- (+) アーカイブ閲覧時は zstd ストリーム解凍で即座にビューア起動
-- (−) Windows エクスプローラ標準で `.tar.zst` を開けない（アプリ内ビューアでカバー）
-- (−) zstd 圧縮レベル 3 は速度寄りの設定。最高圧縮率の設定（圧縮レベル 19）は不採用
-
----
+**Consequences**: 一時ファイルへの生成完了後に配置し、置換では旧ファイルを `.bak` へ退避して配置失敗時の復元を試みる。複数ファイル同期全体を原子的に更新する処理はない。圧縮率と処理時間はログ内容による。
 
 ### ADR-007 Log Parser: Hand-written Regex State Machine
 
-- **Status**: Accepted
-- **Date**: 2024-12
+**Status**: Accepted
 
-**Context**
+**Decision**: 固定正規表現を `LazyLock` の初回利用時に構築し、行単位の状態で訪問・ユーザー・通知等を保存する。`friendship.rs` が訪問内のフレンド状態推定を扱う。
 
-VRChat ログは非構造化テキスト。11 項目の検出パターン（うち Entering Room は訪問確定前の補助状態）を扱い、時系列依存（直前のワールド名を保持する等）を解決する必要がある。
+**Rationale**: 直前のワールド名やユーザー対応など、行をまたぐ情報を保持する。
 
-**Decision**
-
-`LazyLock<Regex>` で 16 個の正規表現を一度だけコンパイルし、行単位ループ内のステートマシン（複数の `Option` 変数）で時系列依存を解決する。
-
-**Rationale**
-
-- VRChat のログ形式は安定しており、正規表現で十分追随可能
-- `LazyLock` でコンパイルコストは起動時 1 回のみ
-- 不正パターンは起動時に panic するため、開発時に即検知可能
-- 過剰な抽象化（パーサコンビネータ、Aggregate Root）を避けて手続き的に書く
-
-**Alternatives Considered**
-
-| Option                   | Rejected Reason                    |
-| ------------------------ | ---------------------------------- |
-| nom (パーサコンビネータ) | コードが冗長になる、デバッグ困難   |
-| BNF / lex+yacc           | 文法定義の保守コスト過大           |
-| LLM ベースのパース       | 確率的で再現性なし、レイテンシ過大 |
-
-**Consequences**
-
-- (+) 取り込み速度約 100k 行/秒 を達成
-- (+) 新イベント追加は正規表現 1 個と if 分岐 1 個を追加するだけ
-- (−) VRChat 側でログ形式が変更されたら正規表現の手動修正が必要
-- (−) 非 UTF-8 バイトを含む行は U+FFFD 置換後に解析されるため、破損箇所を含むフィールド値は完全復元できない
-
----
+**Consequences**: VRChatの形式変更にはpatternと状態処理の見直しが必要である。非UTF-8バイトはU+FFFDへ置換する。フレンド証拠が一意に対応しない場合は不明を保存し、parser版を使って必要なログを再解析する。固定patternのコンパイル失敗には明示的なpanicを許可する。
 
 ### ADR-008 Rust Lints: Deny panic-equivalent paths
 
-- **Status**: Accepted
-- **Date**: 2024-12
+**Status**: Accepted
 
-**Context**
+**Decision**: `unwrap_used` / `expect_used` / `panic` をdenyとし、clippyで確認する。局所的なallowを含め、実際の設定とコードを正本とする。
 
-デスクトップアプリで Rust 側がクラッシュすると「UI 停止 + DB の不完全な状態 + ユーザー操作の中断」という重大な障害状態になる。
+**Rationale**: 通常の失敗はResultで扱い、処理の確定範囲を明確にする。
 
-**Decision**
-
-Cargo workspace lints で `unwrap_used`, `expect_used`, `panic` を `deny` に設定する。
-
-```toml
-[workspace.lints.clippy]
-unwrap_used  = "deny"
-expect_used  = "deny"
-panic        = "deny"
-todo         = "warn"
-dbg_macro    = "warn"
-print_stdout = "warn"
-```
-
-**Rationale**
-
-- コンパイル時に `Result` の伝播を強制できる
-- 「忘れた頃のクラッシュ」原因を排除できる
-- コードレビュー時の議論を削減できる
-
-**Alternatives Considered**
-
-| Option                    | Rejected Reason       |
-| ------------------------- | --------------------- |
-| デフォルトのみ            | unwrap が混入しやすい |
-| `clippy::all = warn` のみ | 警告は無視されがち    |
-
-**Consequences**
-
-- (+) Rust コード約 4,700 行で `unwrap()` ゼロ、`expect()` ゼロ
-- (+) エラーは全て `Result` で UI まで伝播し、トースト通知される
-- (−) `parser.rs::compile_regex` のみ `#[allow(clippy::panic)]` を明示（固定パターン破損の早期検知のため意図的）
-- (−) プロトタイピング時は一時的に lint を緩める運用が必要
-
----
+**Consequences**: lintだけでは全panicの不存在を保証しない。本文ストリームの途中read失敗は運用ログと取得済み行・doneイベントで処理し、返却済みinvokeのエラーやtoastへは伝播しない。イベント送信とロガー自身の失敗も別の扱いである。
 
 ### ADR-009 Module Boundaries: Forbid feature-to-feature imports
 
-- **Status**: Accepted
-- **Date**: 2024-12
+**Status**: Accepted
 
-**Context**
+**Decision**: `eslint.config.js` が feature間参照、feature→app、shared→feature/appを制限する。appから必要なfeatureを組み合わせる。
 
-feature モジュールが肥大化するとファイル間依存がスパゲッティ化する。最初から境界を機械的に強制したい。
+**Rationale**: featureを独立して追跡し、依存方向を保つ。
 
-**Decision**
-
-ESLint の `no-restricted-imports` ルールで feature 間の相互 import を禁止する。共通処理は `shared/` に上げる以外の選択肢を消す。
-
-```js
-'no-restricted-imports': ['error', {
-  patterns: [
-    { group: ['**/features/analyze/**'], message: 'feature 間の直接参照禁止 → shared/ へ' },
-    { group: ['**/features/archive/**'], message: '同上' },
-    { group: ['**/features/database/**'], message: '同上' },
-    { group: ['**/features/registry/**'], message: '同上' },
-    { group: ['**/features/settings/**'], message: '同上' },
-  ]
-}]
-```
-
-**Rationale**
-
-- 各 feature を独立してテスト・リファクタ可能にする
-- 「ちょっと別 feature の関数を使いたい」誘惑を機械的に防止する
-
-**Alternatives Considered**
-
-| Option                 | Rejected Reason  |
-| ---------------------- | ---------------- |
-| 規約のみ（リント無し） | 守られない       |
-| Nx 等のモノレポツール  | 規模に対して過剰 |
-
-**Consequences**
-
-- (+) feature が独立性を保てる
-- (+) リファクタリング時の影響範囲が明確
-- (−) 共有が必要になった場合、毎回 `shared/` への切り出しと命名判断が発生
-
----
+**Consequences**: 再利用する共通処理はsharedで扱う。単独の処理を、参照規則だけを理由に不要な抽象化へ分割しない。
 
 ### ADR-010 Installer: NSIS via Tauri Bundler
 
-- **Status**: Accepted
-- **Date**: 2024-12
+**Status**: Accepted
 
-**Context**
+**Decision**: NSISのcurrent-user install、日本語UI、独自template/hookを採用する。Program FilesとWindows directoryを配置先として拒否する。
 
-Windows で配布する形式が必要。MSI / NSIS / MSIX / portable EXE の選択肢がある。
+**Rationale**: registryの配置情報、通常削除時のデータ保持、更新時の分岐を配布設定にまとめる。
 
-**Decision**
-
-Tauri Bundler の NSIS ターゲットを採用し、`installer.nsi` / `hooks.nsi` をカスタムテンプレートとして使用する。
-
-**Rationale**
-
-- Tauri Bundler が公式サポート（`tauri.conf.json` で `"targets": ["nsis"]` 指定のみ）
-- カスタムスクリプトで独自処理（タスクキル、データ保護）が記述可能
-- `installMode: "currentUser"` で管理者権限不要、配布障壁を最小化
-- NSIS スクリプトで Program Files / WINDIR への配置を明示的に拒否可能
-
-**Alternatives Considered**
-
-| Option       | Rejected Reason                                  |
-| ------------ | ------------------------------------------------ |
-| MSI (WiX)    | Tauri 標準サポートなし、カスタマイズコスト高     |
-| MSIX         | Microsoft Store 配布前提、現状はサイドロード配布 |
-| Portable EXE | レジストリ書き込み・自動起動登録ができない       |
-
-**Consequences**
-
-- (+) 約 12 MB のセットアップ EXE 1 つで配布完結
-- (+) アンインストール時に圧縮済みログの `Data/archive/` を保護対象として除外可能
-- (+) 日本語インストーラ UI
-- (−) 自動更新の仕組みは別途必要（v1.0 では未実装）
-- (−) コード署名は別途運用が必要（v1.0 では未実装）
+**Consequences**: `hooks.nsi` からアプリを強制終了せず、templateの `CheckIfAppIsRunning` へ委ねる。通常削除の固定Data対象と外部overrideは [Deletion and Retention](database.md#deletion-and-retention) を参照する。コード署名とTauri Updaterは現行設定にない。
 
 ---
 
-## Rejected Technologies
+### Rejected Technologies
 
-主要な検討の中で意図的に採用しなかった技術と却下理由の一覧。
+現行未採用の技術と採用済み構成の関係であり、比較試験/過去の採否議事録ではない。
 
-| Technology              | Reason for Rejection                           |
-| ----------------------- | ---------------------------------------------- |
-| Electron                | バイナリサイズ約 10 倍、メモリ約 4 倍          |
-| Redux / Zustand / Jotai | アプリ規模で過剰、Hooks のみで成立             |
-| Tailwind CSS            | 3 値テーマ（Midnight）と相性が悪い             |
-| TanStack Query          | サーバ通信ゼロ、ローカル DB にキャッシュ層不要 |
-| ORM (Diesel / SeaORM)   | スキーマが小規模で生 SQL が読みやすい          |
-| MSI / MSIX インストーラ | Tauri 標準サポートなし、または用途違い         |
-| Tauri Updater           | v1.0 ではスコープ外、インストーラ再実行で運用  |
-| Sentry / Telemetry      | ローカル完結ポリシーに反する                   |
-| tracing / log crate     | 月次ファイル append で十分                     |
-| i18next                 | 日本語固定、要件発生時に導入                   |
-| Storybook               | コンポーネント数十個規模で過剰                 |
-| GraphQL                 | フロント↔バック間は Tauri invoke で完結        |
+| Technology               | Reason for Rejection                                      |
+| ------------------------ | --------------------------------------------------------- |
+| Electron                 | 現行のTauri/WebView2/Rust構成で画面とOS連携を実装している |
+| Redux / Zustand / Jotai  | 状態管理はReact Hooksで構成している                       |
+| Tailwind CSS / CSS-in-JS | CSS ModulesとCSS Variablesで3テーマを実装している         |
+| TanStack Query / GraphQL | 画面とRustはTauri invoke・イベントで通信する              |
+| ORM / 外部DB server      | ローカルSQLiteと明示SQLでschema・transactionを扱う        |
+| MSI / MSIX               | 現行の配布targetはNSISである                              |
+| Tauri Updater            | 更新はインストーラーの再実行で扱う                        |
+| Sentry / Telemetry       | 通常動作は外部送信を行わず、月次のローカルログを保存する  |
+| tracing / log crate      | RustのWARN/ERRORを月次ファイルへappendする                |
+| i18next                  | 製品UIは日本語を使用する                                  |
+
+## Build and Packaging Contract
+
+repository rootで実行する。Windows MSVC開発環境、固定Rust toolchain、必要なNode/npmを用意する。READMEのnpm ci --ignore-scriptsとFrontend CIのnpm ciはinstall scripts実行条件が異なる。
+
+| Purpose | Command | Configuration / artifact |
+| --- | --- | --- |
+| lockfile導入 | npm ci --ignore-scripts | package-lock。CI Frontendはnpm ci |
+| Frontend開発 | npm run dev | Vite localhost:5173 |
+| デスクトップ開発 | npm run tauri dev | beforeDevCommandでFrontend起動、devUrl接続 |
+| Frontend本番build | npm run build | tsc -b && vite build → dist/ |
+| 配布build | npm run tauri build | beforeBuildCommandでFrontend build、frontendDist=../dist、NSIS |
+| 配布成果物 | 上記配布build | workspaceのtarget/release/bundle/nsis/ |
+
+Tauri configはproductName StellaRecord、identifier com.cosmoartsstore.stellarecord、version1.0.0、nsis target、resources空、製品iconを指定。Cargoのbin名はStellarecord、package名はstella_record_ui、version1.0.0。package.jsonも1.0.0。
+
+fontと画像/iconを同梱する。previewはGoogle Fontsを読む別資料。windowはconfigの静的windows配列でなくlib.rs setupで生成する。
+
+## Verification Commands and CI
+
+| Purpose | Command | Configuration | Scope | CI gate |
+| --- | --- | --- | --- | --- |
+| Frontend test | npm run test | Vitest | TS/TSX test | CIはcoverage variant |
+| watch | npm run test:watch | Vitest | 対話watch | なし |
+| coverage | npm run test:coverage | vite.config.ts | src/**/*.{ts,tsx}、型宣言/src/test/**除外 | Frontend必須、数値閾値なし |
+| Rust test | npm run test:rust | cargo test --locked --workspace --all-targets | unit/native連携 | CIはsrc-tauriでcargo test --locked --all-targets |
+| Prettier | npm run format:check | Prettier設定 | format | Frontend必須 |
+| CSS lint | npm run stylelint | stylelint設定 | src/**/*.css | Frontend必須 |
+| TS/JS lint | npm run lint | eslint.config.js | warnings 0、module参照規則等 | Frontend必須 |
+| Rust format | npm run fmt:check | cargo fmt --manifest-path src-tauri/Cargo.toml --all --check | Rust format | continue-on-error: true、参考check |
+| Rust lint | npm run clippy | --locked --all-targets -- -D warnings | workspace lint/局所allow | Rust必須 |
+| Frontend build/typecheck | npm run build | TypeScript/Vite | 型確認とbundle | Frontend必須 |
+| local統合 | npm run verify | package.json | format→stylelint→lint→coverage→Frontend build→clippy→Rust test | 別jobのCIと同一ではない |
+| 配布/実操作 | npm run tauri build / 明示実操作 | NSIS/Windows | installer/署名/導入/更新/削除 | 現CI対象外 |
+
+npm run formatとstylelint:fixは書換え用で検査commandではない。verifyにrustfmt/installer生成は含まない。coverage下限は現設定に存在しない。src/app/native-ipcはsrc/test/**除外に含まれない。coverage値/成功件数を全機能確認完了と扱わない。
+
+### Test Layout
+
+Frontendはapp/feature/shared近傍の*.test.ts(x)。Rustは各moduleのcfg(test)から隣接*_tests.rsをincludeし、commands_tests.rsがnative command/IPC/startup等を含む。tests/fixtures/native_launcher.rsはfixtureで、tests直下の独立targetではない。native-ipc補助は通常製品entryへ接続しない。
+
+### CI Definition and Boundaries
+
+master push/master宛PRで起動、同一refの新pushで実行中jobを取消す。Rustはwindows-latest/src-tauri、Frontendはubuntu-latest/Node20で別job。
+
+- Rust: checkout→rustup show→cargo cache→format（参考）→clippy→cargo test。
+- Frontend: checkout→setup-node20→npm ci→Prettier→Stylelint→ESLint→coverage→build。
+- NSIS生成/署名/installer実操作、coverage数値閾値、coverage artifact uploadは定義されていない。
+
+現Rust jobにNode版指定/npm依存導入はない。一方native IPC/startup testはNodeでbuild-probe.tsを実行しesbuild/npm依存を必要とする。checkout/cargo cacheはnode_modulesを用意しないため前提準備が不足する。runner同梱Nodeの有無/版や実行成功を推定しない。
+
+実行日時、成功件数、coverage、exit等は内部の実行記録を正本とし、静的照合日を実行完了と扱わない。
+
+## Installation Lifecycle
+
+| Stage | Process / placement / registry | Data and failure behavior |
+| --- | --- | --- |
+| 通常導入 | currentUser/日本語、既定LOCALAPPDATA/CosmoArtsStore/StellaRecord。禁止directory検証、CheckIfAppIsRunning、WebView2確認 | 本体/shortcut/uninstaller/製品登録。InstallLocation/DbPathを既定へwrite |
+| /UPDATE | 旧版通常削除をskip、Run/製品keyの通常削除skip | Data削除skip。ただしInstallLocation/DbPathのinstall writeは実行 |
+| 再実行UI | 同版再導入、upgrade/downgradeで既存app削除/継続を選ぶ | /UPDATEとは別。通常削除を選べばその範囲を適用 |
+| 通常uninstall | 実行中確認、本体/対象shortcut/登録/Run/Stella key削除、Polaris key保持 | 固定Data/db/logs/EBWebViewとbundle data paths削除、archive保持。外部overrideを探索削除しない |
+| 失敗/再試行 | 必須file/registry/shortcut更新・削除失敗で中断 | 全rollbackではない。必須削除完了前の失敗では再試行用uninstaller/後段登録を保持 |
+
+hooks.nsiから強制終了せずtemplateの起動中確認へ委ねる。通常app終了時のworker joinとは別。InstallLocationとDbPath=INSTDIR/Data/db/stellarecord.dbはinstallで無条件writeする。更新後の外部DB file保持と実効参照先保持は別である。
+
+通常uninstallでarchiveが残ってもArchivePath等のStella keyは消える。保存物ごとの範囲は[Deletion and Retention](database.md#deletion-and-retention)を参照する。
+
+## Current Distribution Constraints
+
+コード署名とTauri Updaterは現bundle設定にない。NSISの署名placeholderだけで署名済みと扱わない。Windows警告、実配布物署名、WebView2導入、導入/更新/削除の実操作結果は静的設定と別に確認する。
+
+成果物pathは公開済み配布URLやrelease成功の証拠ではない。未確認の将来署名予定を確定方針として記載しない。
+
+## References
+
+- [README](../README.md): 導入と開発開始。
+- [Specification](spec.md): 操作条件と結果。
+- [Architecture](architecture.md): module/状態/IPC/event/worker。
+- [Database Schema](database.md): schema/保存先/確定境界/保持/削除/保全。

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { UnlistenFn } from '@tauri-apps/api/event';
 import type { StorageStatus } from '../models/types';
 import { cancelAnalyze, loadStorageStatus, onAnalyzeFinished, onAnalyzeProgress } from '../services/analyzeService';
@@ -18,11 +18,15 @@ export function useAnalyzeState(addToast: AddToast) {
   const [analyzeProgress, setAnalyzeProgress] = useState('');
   const [analyzeStatus, setAnalyzeStatus] = useState('');
   const [storageStatus, setStorageStatus] = useState<StorageStatus>(emptyStorageStatus);
+  const storageRequestRef = useRef(0);
 
   /** Backendからアーカイブサイズを取得する（タイマーおよび同期完了時に呼ばれる） */
   const pollStorage = useCallback(async () => {
+    const request = ++storageRequestRef.current;
     try {
       const [current, limit] = await loadStorageStatus();
+      // 手動更新や完了時の再取得より遅い旧応答で、保存済みの表示を戻さない。
+      if (request !== storageRequestRef.current) return;
       const percent = limit > 0 ? Math.min(100, (current / limit) * 100) : 0;
       setStorageStatus({ current, limit, percent });
     } catch {
@@ -57,6 +61,8 @@ export function useAnalyzeState(addToast: AddToast) {
     );
 
     return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- 終了時点の全要求を無効化する世代番号であり、DOM nodeの参照ではない。
+      storageRequestRef.current++;
       window.clearTimeout(initialLoadTimer);
       window.clearInterval(storageInterval);
       for (const unlisten of unlistenFns) {

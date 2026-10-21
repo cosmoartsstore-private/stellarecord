@@ -74,4 +74,11 @@ describe('saveTheme', () => {
     saveTheme('midnight');
     expect(storage['stella-record-theme']).toBe('midnight');
   });
+
+  test('windowがない実行環境では保存せず、初期themeをlightにする', () => {
+    vi.stubGlobal('window', undefined);
+    expect(readInitialTheme()).toBe('light');
+    expect(() => { saveTheme('dark'); }).not.toThrow();
+    expect(storage).toEqual({});
+  });
 });

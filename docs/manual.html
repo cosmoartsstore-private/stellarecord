@@ -8,7 +8,7 @@
 <style>
 /* ════════════════════════════════════════════════════════════════
    STELLA RECORD — 操作体験サンプル（単一HTML / ハードコードデータ）
-   実アプリのUI・スタイル・操作性を忠実に再現したデモです。
+   主要画面の操作をサンプルデータで試すHTMLです。実ファイル・DB・registryには接続しません。
    ※「VRChat」以外のキーワードはすべて匿名のサンプル値です。
    ════════════════════════════════════════════════════════════════ */
 
@@ -459,6 +459,8 @@ body.no-guide #tip{display:none}
 </nav>
 
 <main class="content">
+<p>主要画面の操作体験サンプルです。匿名の固定データを使い、実ファイル・DB・registryには接続しません。操作条件と結果は <a href="spec.md">Specification</a>、内部構造は <a href="architecture.md">Architecture</a>、保存・削除・DB列は <a href="database.md">Database Schema</a> を参照してください。表示用フォントはGoogle Fontsから読み込みます。</p>
+<p>現行製品の設定はnavの「設定」から開きます。このサンプルにあるテーマ循環と解析画面内の警告ライン・自動起動は簡略化した旧導線で、入力検証・永続化を再現しません。初回の取込許可、保存先表示、外部ファイル選択、実DBのページ送り、通常失敗・取消し後のtransaction結果も再現対象外です。再読込は登録例を初期値へ戻し、削除は通知だけを表示します。進捗と完了はtimerによる例示で、実製品の停止完了や保存成功を示しません。Source review date: 2026-10-22（参照内容の静的照合日）。</p>
 
   <!-- ════ LAUNCHER ════ -->
   <section class="sec on view" id="sec-registry">
@@ -533,7 +535,7 @@ body.no-guide #tip{display:none}
   <section class="sec view" id="sec-database">
     <div class="shd"><h2>DBプレビュー</h2></div>
     <div class="db-ly">
-      <div class="db-sb" data-t="テーブル一覧|見たいテーブルやビューをクリックすると、右側にデータが表示されます。">
+      <div class="db-sb" data-t="テーブル一覧|固定データの表示例です。内部表 imported_logs も例示しますが、現行製品の一覧は9テーブルと3ビューです。">
         <div class="db-sb-top">
           <span class="db-sb-lbl">テーブル一覧</span>
           <button class="db-name-tog" id="nameTog" onclick="toggleNames()" data-t="名前切り替え|テーブル名を日本語(Logical)と物理名(Physical)で切り替えます。">Logical</button>
@@ -823,9 +825,9 @@ window.cancelImport=function(){importCancel=true;};
 
 /* ───────── アーカイブ選択モーダル ───────── */
 var ARCHIVES=[
-  {name:'2025-04-30_20-15-00.tar.zst',size:'2.40 MB'},
-  {name:'2025-05-01_18-30-00.tar.zst',size:'1.80 MB'},
-  {name:'2025-05-02_21-00-00.tar.zst',size:'3.10 MB'}
+  {name:'output_log_2025-04-30_20-15-00.txt.tar.zst',size:'2.40 MB'},
+  {name:'output_log_2025-05-01_18-30-00.txt.tar.zst',size:'1.80 MB'},
+  {name:'output_log_2025-05-02_21-00-00.txt.tar.zst',size:'3.10 MB'}
 ];
 var archiveSel=new Set();
 function renderArchive(){
@@ -966,45 +968,57 @@ var DB=[
    ['2','output_log_2025-05-01.txt','usr_self0001','User_Me','2025-05-01 18:30:00','2025-05-01 22:10:33'],
    ['1','output_log_2025-04-30.txt','usr_self0001','User_Me','2025-04-30 20:15:00','2025-04-30 23:45:12']
   ]},
+ {name:'imported_logs',label:'取込済みログ',view:false,desc:'本文と解析版の取込済み識別情報テーブル',
+  cols:[C('log_name','元ログ名'),C('content_sha256','本文SHA-256'),C('content_size','本文バイト長'),C('parser_version','解析版')],
+  rows:[
+   ['output_log_2025-05-03.txt','<BLOB>','1048576','2'],
+   ['output_log_2025-05-02.txt','<BLOB>','2097152','2']
+  ]},
  {name:'visits',label:'Join履歴',view:false,desc:'Joinしたインスタンスに紐づくデータテーブル',
   cols:[C('id','ID'),C('session_id','セッション'),C('world_name','ワールド名'),C('instance_id','インスタンスID'),C('instance_type','インスタンスタイプ'),C('region','リージョン'),C('join_time','Join時刻'),C('leave_time','Leave時刻')],
   rows:[
-   ['12','4','Sample World A','00001','friends','jp','2025-05-03 19:50:00','2025-05-03 20:40:00'],
-   ['11','3','Demo Lounge','00007','public','us','2025-05-02 21:05:00','2025-05-02 22:30:00'],
-   ['10','3','Sample World B','00003','invite','jp','2025-05-02 22:35:00','2025-05-02 23:50:00'],
-   ['9','2','Test Hub','00002','friends+','eu','2025-05-01 18:35:00','2025-05-01 21:00:00']
+   ['12', '4', 'Sample World A', '00001', 'friends', 'jp', '2025-05-03 19:50:00', '2025-05-03 20:40:00'],
+   ['11', '3', 'Demo Lounge', '00007', 'public', 'us', '2025-05-02 21:05:00', '2025-05-02 22:30:00'],
+   ['10', '3', 'Sample World B', '00003', 'private', 'jp', '2025-05-02 22:35:00', '2025-05-02 23:50:00'],
+   ['9', '2', 'Test Hub', '00002', 'hidden', 'eu', '2025-05-01 18:35:00', '2025-05-01 21:00:00']
   ]},
  {name:'with_users',label:'遭遇ユーザー',view:false,desc:'インスタンスごとに出会ったユーザー記録テーブル',
-  cols:[C('id','ID'),C('visit_id','Join'),C('vrchat_id','ユーザーID'),C('is_self','is_self'),C('join_time','Join時刻'),C('leave_time','Leave時刻')],
+  cols:[C('id','ID'),C('visit_id','Join'),C('vrchat_id','ユーザーID'),C('is_self','is_self'),C('friend_status','フレンド状態'),C('join_time','Join時刻'),C('leave_time','Leave時刻')],
   rows:[
-   ['40','12','usr_self0001','1','2025-05-03 19:50:00','2025-05-03 20:40:00'],
-   ['41','12','usr_aaaa0001','0','2025-05-03 19:52:10','2025-05-03 20:38:00'],
-   ['42','12','usr_bbbb0002','0','2025-05-03 20:01:00','2025-05-03 20:25:00'],
-   ['43','11','usr_cccc0003','0','2025-05-02 21:06:00','2025-05-02 22:10:00']
+   ['40', '12', 'usr_self0001', '1', '2', '2025-05-03 19:50:00', '2025-05-03 20:40:00'],
+   ['41', '12', 'usr_aaaa0001', '0', '2', '2025-05-03 19:52:10', '2025-05-03 20:38:00'],
+   ['42', '12', 'usr_bbbb0002', '0', '2', '2025-05-03 20:01:00', '2025-05-03 20:25:00'],
+   ['43', '11', 'usr_cccc0003', '0', '2', '2025-05-02 21:06:00', '2025-05-02 22:10:00']
   ]},
  {name:'find_users',label:'ユーザー一覧',view:false,desc:'ログから検出したユーザーの一覧テーブル',
   cols:[C('vrchat_id','ユーザーID'),C('account_name','ユーザー名')],
-  rows:[['usr_aaaa0001','User_A'],['usr_bbbb0002','User_B'],['usr_cccc0003','User_C'],['usr_dddd0004','User_D']]},
+  rows:[
+   ['usr_self0001', 'User_Me'],
+   ['usr_aaaa0001', 'User_A'],
+   ['usr_bbbb0002', 'User_B'],
+   ['usr_cccc0003', 'User_C'],
+   ['usr_dddd0004', 'User_D']
+  ]},
  {name:'notifications',label:'通知',view:false,desc:'招待やグループ通知などの履歴テーブル',
   cols:[C('id','ID'),C('notif_type','通知種別'),C('message','本文'),C('sender_name','送信者名'),C('sender_user_id','送信者ID'),C('notif_id','VRC通知ID'),C('session_id','セッション'),C('created_at','作成時刻'),C('received_at','受信時刻'),C('target_world_name','遷移先ワールド名'),C('target_instance_id','遷移先インスタンスID'),C('target_instance_type','遷移先インスタンスタイプ'),C('target_owner','遷移先オーナー'),C('target_region','遷移先リージョン')],
   rows:[
-   ['7','group','グループ投稿の通知','User_B','usr_bbbb0002','not_xxxx0003','2','2025-05-01 19:00:00','2025-05-01 19:00:03','NULL','NULL','NULL','NULL','NULL'],
-   ['6','invite','Join me!','User_A','usr_aaaa0001','not_xxxx0002','3','2025-05-02 21:20:00','2025-05-02 21:20:01','Sample World B','00003','invite','usr_aaaa0001','jp'],
-   ['5','friendRequest','フレンド申請が届きました','User_C','usr_cccc0003','not_xxxx0001','3','2025-05-02 21:10:00','2025-05-02 21:10:02','NULL','NULL','NULL','NULL','NULL']
+   ['7', 'group', 'グループ投稿の通知', 'User_B', 'usr_bbbb0002', 'not_xxxx0003', '2', '2025-05-01 19:00:00', '2025-05-01 19:00:03', 'NULL', 'NULL', 'NULL', 'NULL', 'NULL'],
+   ['6', 'invite', 'Join me!', 'User_A', 'usr_aaaa0001', 'not_xxxx0002', '3', '2025-05-02 21:20:00', '2025-05-02 21:20:01', 'Sample World B', '00003', 'private', 'usr_aaaa0001', 'jp'],
+   ['5', 'friendRequest', 'フレンド申請が届きました', 'User_C', 'usr_cccc0003', 'not_xxxx0001', '3', '2025-05-02 21:10:00', '2025-05-02 21:10:02', 'NULL', 'NULL', 'NULL', 'NULL', 'NULL']
   ]},
  {name:'screenshots',label:'写真',view:false,desc:'撮影した写真に紐づく関連情報テーブル',
-  cols:[C('id','ID'),C('visit_id','Join'),C('file_path','ファイルパス'),C('resolution_width','幅'),C('resolution_height','高さ'),C('timestamp','撮影時刻')],
+  cols:[C('id','ID'),C('visit_id','Join'),C('file_path','ファイルパス'),C('resolution_width','幅'),C('resolution_height','高さ'),C('timestamp','撮影時刻'),C('session_id','セッション')],
   rows:[
-   ['23','10','C:\\Users\\user\\Pictures\\VRChat\\2025-05\\img_0003.png','1920','1080','2025-05-02 23:10:00'],
-   ['22','11','C:\\Users\\user\\Pictures\\VRChat\\2025-05\\img_0002.png','3840','2160','2025-05-02 21:40:00'],
-   ['21','12','C:\\Users\\user\\Pictures\\VRChat\\2025-05\\img_0001.png','1920','1080','2025-05-03 20:05:00']
+   ['23', '10', 'C:\\Users\\user\\Pictures\\VRChat\\2025-05\\img_0003.png', '1920', '1080', '2025-05-02 23:10:00', '3'],
+   ['22', '11', 'C:\\Users\\user\\Pictures\\VRChat\\2025-05\\img_0002.png', '3840', '2160', '2025-05-02 21:40:00', '3'],
+   ['21', '12', 'C:\\Users\\user\\Pictures\\VRChat\\2025-05\\img_0001.png', '1920', '1080', '2025-05-03 20:05:00', '4']
   ]},
  {name:'osc',label:'OSC',view:false,desc:'OSCアプリケーションの関連情報テーブル',
   cols:[C('id','ID'),C('session_id','セッション'),C('event_type','イベント種別'),C('service_name','サービス名'),C('service_type','サービス種別'),C('ip_address','IPアドレス'),C('port','ポート番号'),C('timestamp','検出時刻')],
   rows:[
-   ['3','4','found','SampleOSCApp','OSCQuery','127.0.0.1','9001','2025-05-03 19:46:00'],
-   ['2','3','found','SampleOSCApp','OSC','127.0.0.1','9000','2025-05-02 21:01:00'],
-   ['1','2','found','ExternalToolB','OSCQuery','127.0.0.1','9002','2025-05-01 18:31:00']
+   ['3', '4', 'found', 'SampleOSCApp', 'NULL', '127.0.0.1', '9001', '2025-05-03 19:46:00'],
+   ['2', '3', 'found', 'SampleOSCApp', 'NULL', '127.0.0.1', '9000', '2025-05-02 21:01:00'],
+   ['1', '2', 'found', 'ExternalToolB', 'NULL', '127.0.0.1', '9002', '2025-05-01 18:31:00']
   ]},
  {name:'subscription',label:'VRChat+加入状態',view:false,desc:'セッションごとのVRChat+加入状態の記録テーブル',
   cols:[C('id','ID'),C('session_id','セッション'),C('is_active','有効フラグ'),C('subscription_id','VRC契約ID'),C('description','説明'),C('checked_at','確認時刻')],
@@ -1014,25 +1028,25 @@ var DB=[
    ['1','2','0','NULL','非加入','2025-05-01 18:30:30']
   ]},
  {name:'apps',label:'連携アプリ',view:false,desc:'ランチャーに登録されたアプリ情報テーブル',
-  cols:[C('name','アプリ名'),C('description','説明'),C('path','パス'),C('icon','アイコン')],
+  cols:[C('id','ID'),C('name','アプリ名'),C('description','説明'),C('path','パス'),C('icon','アイコン'),C('registered_at','登録日時')],
   rows:[
-   ['VRChat','ソーシャルVRプラットフォーム','C:\\Program Files (x86)\\Steam\\steamapps\\common\\VRChat\\VRChat.exe','<BLOB>'],
-   ['サンプルアプリ A','連携ツールの例','C:\\Apps\\SampleAppA\\SampleAppA.exe','<BLOB>'],
-   ['サンプルアプリ B','登録したアプリの例','D:\\Tools\\SampleAppB\\SampleAppB.exe','NULL']
+   ['1', 'VRChat', 'ソーシャルVRプラットフォーム', 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\VRChat\\VRChat.exe', '<BLOB>', '2025-05-03 19:40:00'],
+   ['2', 'サンプルアプリ A', '連携ツールの例', 'C:\\Apps\\SampleAppA\\SampleAppA.exe', '<BLOB>', '2025-05-03 19:40:00'],
+   ['3', 'サンプルアプリ B', '登録したアプリの例', 'D:\\Tools\\SampleAppB\\SampleAppB.exe', 'NULL', '2025-05-03 19:40:00']
   ]},
  {name:'visit_summary',label:'Join履歴詳細',view:true,desc:'Join履歴テーブル+ワールド名・滞在時間補完ビュー',
   cols:[C('visit_id','ID'),C('world_name','ワールド名'),C('instance_id','インスタンスID'),C('instance_type','インスタンスタイプ'),C('region','リージョン'),C('join_time','Join時刻'),C('leave_time','Leave時刻'),C('duration_sec','滞在秒数'),C('other_player_count','他プレイヤー数')],
   rows:[
-   ['12','Sample World A','00001','friends','jp','2025-05-03 19:50:00','2025-05-03 20:40:00','3000','2'],
-   ['11','Demo Lounge','00007','public','us','2025-05-02 21:05:00','2025-05-02 22:30:00','5100','8'],
-   ['10','Sample World B','00003','invite','jp','2025-05-02 22:35:00','2025-05-02 23:50:00','4500','4']
+   ['12', 'Sample World A', '00001', 'friends', 'jp', '2025-05-03 19:50:00', '2025-05-03 20:40:00', '3000', '2'],
+   ['11', 'Demo Lounge', '00007', 'public', 'us', '2025-05-02 21:05:00', '2025-05-02 22:30:00', '5100', '8'],
+   ['10', 'Sample World B', '00003', 'private', 'jp', '2025-05-02 22:35:00', '2025-05-02 23:50:00', '4500', '4']
   ]},
  {name:'with_users_detail',label:'遭遇ユーザー詳細',view:true,desc:'遭遇ユーザーテーブル+ワールド名・ユーザー名補完ビュー',
-  cols:[C('id','ID'),C('visit_id','Join'),C('world_name','ワールド名'),C('vrchat_id','ユーザーID'),C('user_name','ユーザー名'),C('is_self','is_self'),C('join_time','Join時刻'),C('leave_time','Leave時刻')],
+  cols:[C('id','ID'),C('visit_id','Join'),C('world_name','ワールド名'),C('vrchat_id','ユーザーID'),C('user_name','ユーザー名'),C('is_self','is_self'),C('friend_status','フレンド状態'),C('join_time','Join時刻'),C('leave_time','Leave時刻')],
   rows:[
-   ['41','12','Sample World A','usr_aaaa0001','User_A','0','2025-05-03 19:52:10','2025-05-03 20:38:00'],
-   ['42','12','Sample World A','usr_bbbb0002','User_B','0','2025-05-03 20:01:00','2025-05-03 20:25:00'],
-   ['43','11','Demo Lounge','usr_cccc0003','User_C','0','2025-05-02 21:06:00','2025-05-02 22:10:00']
+   ['41', '12', 'Sample World A', 'usr_aaaa0001', 'User_A', '0', '2', '2025-05-03 19:52:10', '2025-05-03 20:38:00'],
+   ['42', '12', 'Sample World A', 'usr_bbbb0002', 'User_B', '0', '2', '2025-05-03 20:01:00', '2025-05-03 20:25:00'],
+   ['43', '11', 'Demo Lounge', 'usr_cccc0003', 'User_C', '0', '2', '2025-05-02 21:06:00', '2025-05-02 22:10:00']
   ]},
  {name:'screenshots_detail',label:'写真詳細',view:true,desc:'写真テーブル+ワールド名補完ビュー',
   cols:[C('id','ID'),C('visit_id','Join'),C('world_name','ワールド名'),C('file_path','ファイルパス'),C('resolution_width','幅'),C('resolution_height','高さ'),C('timestamp','撮影時刻')],
