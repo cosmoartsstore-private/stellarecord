@@ -1,3 +1,5 @@
+import { appDisplayName, publisherName } from '../shared/constants';
+import { getMsg } from '../messages/getMsg';
 import { useEffect, useState } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
 import { open } from '@tauri-apps/plugin-shell';
@@ -9,9 +11,9 @@ import avatarSrc from '../assets/avatar.jpg';
 import logoDarkSrc from '../assets/logo-dark.png';
 
 const LINKS = [
-  { label: 'lit.link', icon: stellaIconNames.sparkle, url: 'https://lit.link/planet_vrc' },
-  { label: 'X (Twitter)', icon: stellaIconNames.bell, url: 'https://x.com/planet_vrc' },
-  { label: 'BOOTH', icon: stellaIconNames.rocket, url: 'https://cosmo-arts-store.booth.pm/' },
+  { label: getMsg('CreditModal.profileLink'), icon: stellaIconNames.sparkle, url: 'https://lit.link/planet_vrc' },
+  { label: getMsg('CreditModal.xLink'), icon: stellaIconNames.bell, url: 'https://x.com/planet_vrc' },
+  { label: getMsg('CreditModal.storeLink'), icon: stellaIconNames.rocket, url: 'https://cosmo-arts-store.booth.pm/' },
 ] as const;
 
 /** クレジットモーダルを開閉するヘッダー右側のフローティングボタン。 */
@@ -22,7 +24,7 @@ export function CreditButton() {
     <>
       <button type="button" className={styles.trigger} onClick={() => {
           setIsOpen(true);
-        }} aria-label="クレジット">
+        }} aria-label={getMsg('CreditModal.title')}>
         <StellaIcon name={stellaIconNames.info} style={{ width: '18px', height: '18px', fill: 'currentColor' }} />
       </button>
 
@@ -52,20 +54,20 @@ function CreditModal({ onClose }: { onClose: () => void }) {
   return (
     <dialog ref={dialogRef} className={shared.modalOverlay} aria-labelledby="credit-title" onClose={onClose} onMouseDown={closeDialogOnBackdrop}>
       <div className={`${shared.modalContent} ${styles.modal}`}>
-        <h3 id="credit-title" className={styles.visuallyHidden}>クレジット</h3>
-        <button type="button" className={styles.closeButton} onClick={closeDialog} aria-label="クレジットを閉じる" autoFocus><StellaIcon name={stellaIconNames.close} /></button>
+        <h3 id="credit-title" className={styles.visuallyHidden}>{getMsg('CreditModal.title')}</h3>
+        <button type="button" className={styles.closeButton} onClick={closeDialog} aria-label={getMsg('CreditModal.close')} autoFocus><StellaIcon name={stellaIconNames.close} /></button>
         <div className={styles.banner}>
           <div className={styles.bannerGlow} />
-          <img src={logoDarkSrc} alt="STELLA RECORD" className={styles.bannerLogo} />
+          <img src={logoDarkSrc} alt={appDisplayName} className={styles.bannerLogo} />
           {version && <span className={styles.bannerVersion}>v{version}</span>}
         </div>
 
         <div className={styles.body}>
           <div className={styles.profile}>
-            <img src={avatarSrc} alt="ぷらねっと" className={styles.avatar} />
+            <img src={avatarSrc} alt={getMsg('CreditModal.author')} className={styles.avatar} />
             <div className={styles.profileText}>
-              <p className={styles.brandName}>CosmoArtsStore</p>
-              <p className={styles.creatorName}>by ぷらねっと</p>
+              <p className={styles.brandName}>{publisherName}</p>
+              <p className={styles.creatorName}>{getMsg('CreditModal.authorByline')}</p>
             </div>
           </div>
 

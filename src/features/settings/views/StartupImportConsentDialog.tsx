@@ -1,3 +1,4 @@
+import { getMsg } from '../../../messages/getMsg';
 import shared from '../../../shared/styles/shared.module.css';
 import { preventDialogCancel, useModalDialog } from '../../../shared/hooks/useModalDialog';
 import { DataLocationList } from './DataLocationList';
@@ -19,16 +20,16 @@ export function StartupImportConsentDialog(props: StartupImportConsentDialogProp
   return (
     <dialog ref={dialogRef} className={shared.modalOverlay} aria-labelledby="startup-import-title" aria-describedby="startup-import-description startup-import-note" onCancel={preventDialogCancel}>
       <section className={`${shared.modalContent} ${styles.dialog}`}>
-        <h3 id="startup-import-title">起動時のログ取り込み</h3>
-        <p id="startup-import-description" className={styles.description}>StellaRecord は起動時に Polaris のログをログ保存先へコピーし、その内容を読み取って DB へ保存します。この読み取りを許可しますか。</p>
+        <h3 id="startup-import-title">{getMsg('StartupImportConsent.title')}</h3>
+        <p id="startup-import-description" className={styles.description}>{getMsg('StartupImportConsent.description')}</p>
 
         <div className={styles.locationPanel}><DataLocationList logArchivePath={logArchivePath} databasePath={databasePath} /></div>
 
-        <p id="startup-import-note" className={styles.note}>許可すると、次回以降もアプリ起動時に自動で取り込みます。ログと DB を StellaRecord から外部サーバーへ送信することはありません。</p>
+        <p id="startup-import-note" className={styles.note}>{getMsg('StartupImportConsent.details')}</p>
 
         <div className={shared.modalActions}>
-          <button type="button" className={shared.btn} onClick={onDecline} disabled={isSaving} autoFocus>読み取らない</button>
-          <button type="button" className={`${shared.btn} ${shared.primary}`} onClick={onAllow} disabled={isSaving}>読み取りを許可</button>
+          <button type="button" className={shared.btn} onClick={onDecline} disabled={isSaving} autoFocus>{getMsg('StartupImportConsent.decline')}</button>
+          <button type="button" className={`${shared.btn} ${shared.primary}`} onClick={onAllow} disabled={isSaving}>{getMsg('StartupImportConsent.allow')}</button>
         </div>
       </section>
     </dialog>

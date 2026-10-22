@@ -1,8 +1,10 @@
+import { getMsg } from '../../../messages/getMsg';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { renderHighlightedBody } from '../models/logFormat';
 import { parseArchiveDate } from '../models/archiveFormat';
 import { formatFileSize } from '../../../shared/lib/byteFormat';
+import { getFileNameFromPath } from '../../../shared/lib/pathUtils';
 import { closeDialog, closeDialogOnBackdrop, useModalDialog } from '../../../shared/hooks/useModalDialog';
 import type { ArchiveFileItem, LogViewerData } from '../models/types';
 import shared from '../../../shared/styles/shared.module.css';
@@ -12,7 +14,7 @@ const zoomMin = 0.5;
 const zoomMax = 2.5;
 
 /** フィルタチップ定義 — クリックで仮想リストを該当行に絞り込む */
-const CHIPS: { key: string; label: string; colorClass: string; matchKeys?: string[] }[] = [{ key: 'world', label: 'ワールド', colorClass: styles.legendWorld }, { key: 'notification', label: '通知', colorClass: styles.legendNotification }, { key: 'player', label: '入退室', colorClass: styles.legendPlayerJoin, matchKeys: ['player-join', 'player-ready', 'player-left'] }, { key: 'warning', label: '警告', colorClass: styles.legendWarning }, { key: 'error', label: 'エラー', colorClass: styles.legendError }, { key: 'debug', label: 'デバッグ', colorClass: styles.legendDebug }];
+const CHIPS: { key: string; label: string; colorClass: string; matchKeys?: string[] }[] = [{ key: 'world', label: getMsg('LogViewer.worldCategory'), colorClass: styles.legendWorld }, { key: 'notification', label: getMsg('LogViewer.notificationCategory'), colorClass: styles.legendNotification }, { key: 'player', label: getMsg('LogViewer.playerCategory'), colorClass: styles.legendPlayerJoin, matchKeys: ['player-join', 'player-ready', 'player-left'] }, { key: 'warning', label: getMsg('LogViewer.warningCategory'), colorClass: styles.legendWarning }, { key: 'error', label: getMsg('LogViewer.errorCategory'), colorClass: styles.legendError }, { key: 'debug', label: getMsg('LogViewer.debugCategory'), colorClass: styles.legendDebug }];
 
 const categoryClassMap: Record<string, string> = { world: styles.categoryWorld, notification: styles.categoryNotification, 'player-join': styles.categoryPlayerJoin, 'player-ready': styles.categoryPlayerReady, 'player-left': styles.categoryPlayerLeft, 'debug-system': styles.categoryDebugSystem };
 
@@ -35,13 +37,6 @@ const categoryKeys = [
   'player-left',
   'debug-system',
 ] as const;
-
-/** フルパスからファイル名だけを取り出す */
-function fileNameFromPath(fullPath: string): string {
-  const sep = fullPath.lastIndexOf('\\');
-  const sep2 = fullPath.lastIndexOf('/');
-  return fullPath.slice(Math.max(sep, sep2) + 1);
-}
 
 interface LogViewerModalProps {
   logViewerData: LogViewerData;
@@ -149,22 +144,22 @@ export function LogViewerModal({ logViewerData, archiveFiles, externalFiles, isL
         {/* ── サイドバー ── */}
         <aside className={styles.sidebar}>
           <div className={styles.sidebarHeader}>
-            <span className={styles.sidebarTitle}>ログファイル</span>
-            <span className={styles.sidebarCount}>{sidebarCount} 件</span>
+            <span className={styles.sidebarTitle}>{getMsg('LogViewer.filesHeading')}</span>
+            <span className={styles.sidebarCount}>{sidebarCount}{getMsg('LogViewer.fileCountSuffix')}</span>
           </div>
           <div className={styles.sidebarFolderSwitcher}>
-            <button type="button" className={styles.sidebarFolderButton} onClick={onPickExternalFiles} disabled={isLoading}>ファイルを選択</button>
+            <button type="button" className={styles.sidebarFolderButton} onClick={onPickExternalFiles} disabled={isLoading}>{getMsg('LogViewer.selectFile')}</button>
             {hasExternalFiles && (
-              <button type="button" className={styles.sidebarFolderButton} onClick={onClearExternalFiles} disabled={isLoading}>選択を解除</button>
+              <button type="button" className={styles.sidebarFolderButton} onClick={onClearExternalFiles} disabled={isLoading}>{getMsg('LogViewer.clearSelection')}</button>
             )}
           </div>
           <div className={styles.sidebarList}>
             {hasExternalFiles && (
               <>
-                <div className={styles.sidebarDivider}>選択ファイル</div>
+                <div className={styles.sidebarDivider}>{getMsg('LogViewer.selectedFiles')}</div>
                 {externalFiles.map((filePath) => {
                   const isActive = filePath === logViewerData.archive_name;
-                  const name = fileNameFromPath(filePath);
+                  const name = getFileNameFromPath(filePath);
                   const date = parseArchiveDate(name);
                   return (
                     <button key={filePath} type="button" className={`${styles.sidebarItem} ${isActive ? styles.sidebarItemActive : ''}`} onClick={() => {
@@ -174,11 +169,11 @@ export function LogViewerModal({ logViewerData, archiveFiles, externalFiles, isL
                     </button>
                   );
                 })}
-                <div className={styles.sidebarDivider}>アーカイブ</div>
+                <div className={styles.sidebarDivider}>{getMsg('LogViewer.archivesHeading')}</div>
               </>
             )}
             {archiveFiles.length === 0 && !hasExternalFiles ? (
-              <div className={styles.sidebarEmpty}>アーカイブがありません</div>
+              <div className={styles.sidebarEmpty}>{getMsg('LogViewer.archiveEmpty')}</div>
             ) : (
               archiveFiles.map((file) => {
                 const isActive = file.name === logViewerData.archive_name;
@@ -200,14 +195,14 @@ export function LogViewerModal({ logViewerData, archiveFiles, externalFiles, isL
         <div className={styles.main}>
           <div className={styles.mainHeader}>
             <div className={styles.mainHeaderCopy}>
-              <h3 id="log-viewer-title" className={styles.mainTitle} tabIndex={-1} autoFocus>ログビューア</h3>
+              <h3 id="log-viewer-title" className={styles.mainTitle} tabIndex={-1} autoFocus>{getMsg('common.logViewer')}</h3>
               <p id="log-viewer-source" className={styles.mainSub}>{logViewerData.source_name}</p>
             </div>
             <div className={styles.mainHeaderMeta}>
               <span className={`${styles.lineCount} ${!isLoaded ? styles.lineCountLoading : ''}`}>
                 {activeFilter
-                  ? `${String(filteredIndices?.length ?? 0)} / ${String(logViewerData.raw_lines.length)} 行`
-                  : `${String(logViewerData.raw_lines.length)} 行`}
+                  ? getMsg('LogViewer.filteredLineCount', { filtered: String(filteredIndices?.length ?? 0), total: String(logViewerData.raw_lines.length) })
+                  : getMsg('LogViewer.lineCount', { count: String(logViewerData.raw_lines.length) })}
               </span>
               {zoomLevel !== 1 && (
                 <span className={styles.zoomBadge}>{Math.round(zoomLevel * 100)}%</span>
@@ -229,7 +224,7 @@ export function LogViewerModal({ logViewerData, archiveFiles, externalFiles, isL
             {isLoading && (
               <div className={styles.loadingOverlay}>
                 <div className={styles.loadingSpinner} />
-                <span className={styles.loadingText}>読み込み中...</span>
+                <span className={styles.loadingText}>{getMsg('common.loadingAscii')}</span>
               </div>
             )}
 
@@ -246,7 +241,7 @@ export function LogViewerModal({ logViewerData, archiveFiles, externalFiles, isL
           </div>
 
           <div className={shared.modalActions}>
-            <button type="button" className={shared.btn} onClick={closeDialog}>閉じる</button>
+            <button type="button" className={shared.btn} onClick={closeDialog}>{getMsg('common.close')}</button>
           </div>
         </div>
       </div>

@@ -1,5 +1,6 @@
+import { getMsg } from '../../../messages/getMsg';
 /** Date.getDay() に対応する日本語曜日ラベル（0=日曜） */
-const dayNames = ['日', '月', '火', '水', '木', '金', '土'] as const;
+const dayNames = [getMsg('Date.sunday'), getMsg('Date.monday'), getMsg('Date.tuesday'), getMsg('Date.wednesday'), getMsg('Date.thursday'), getMsg('Date.friday'), getMsg('Date.saturday')] as const;
 
 /**
  * アーカイブファイル名から `yyyy/mm/dd (曜日) hh:mm` 形式の表示文字列を抽出する

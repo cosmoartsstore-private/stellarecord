@@ -1,3 +1,4 @@
+import { getMsg } from '../../../messages/getMsg';
 import { useRef, type KeyboardEvent, type MouseEvent } from 'react';
 import { StellaIcon, stellaIconNames } from '../../../shared/components/Icons';
 import { closeDialog, useModalDialog } from '../../../shared/hooks/useModalDialog';
@@ -55,21 +56,20 @@ export function ArchiveSelectorModal({ archiveFiles, selectedFiles, onClose, onS
       <div className={`${styles.content} ${shared.modalContent}`}>
         <div className={styles.header}>
           <div>
-            <h3 id="archive-selector-title" tabIndex={-1} autoFocus>復元</h3>
-            <p id="archive-selector-description">取り込むログを選択してください</p>
+            <h3 id="archive-selector-title" tabIndex={-1} autoFocus>{getMsg('common.restore')}</h3>
+            <p id="archive-selector-description">{getMsg('ArchiveSelector.description')}</p>
           </div>
           <div className={styles.meta}>
             <span className={styles.count} aria-live="polite">
-              {selectedFiles.size} / {archiveFiles.length} 件選択中
-            </span>
+              {selectedFiles.size} / {archiveFiles.length}{getMsg('ArchiveSelector.selectionSuffix')}</span>
             <button type="button" className={shared.btn} style={{ fontSize: '0.8rem', padding: '0.4rem 1rem' }} onClick={onSelectAll}>
-              {selectedFiles.size === archiveFiles.length ? 'すべて解除' : 'すべて選択'}
+              {selectedFiles.size === archiveFiles.length ? getMsg('common.clearSelection') : getMsg('common.selectAll')}
             </button>
           </div>
         </div>
         <div className={styles.list}>
           {archiveFiles.length === 0 ? (
-            <div className={styles.emptyState}>バックアップフォルダ内にアーカイブファイルが見つかりません</div>
+            <div className={styles.emptyState}>{getMsg('ArchiveSelector.empty')}</div>
           ) : (
             archiveFiles.map((file, index) => (
               <button key={file.name} ref={(element) => {
@@ -96,8 +96,8 @@ export function ArchiveSelectorModal({ archiveFiles, selectedFiles, onClose, onS
           )}
         </div>
         <div className={shared.modalActions}>
-          <button type="button" className={shared.btn} onClick={closeDialog}>キャンセル</button>
-          <button type="button" className={`${shared.btn} ${shared.primary}`} disabled={selectedFiles.size === 0} onClick={onConfirm}>取り込み開始</button>
+          <button type="button" className={shared.btn} onClick={closeDialog}>{getMsg('common.cancel')}</button>
+          <button type="button" className={`${shared.btn} ${shared.primary}`} disabled={selectedFiles.size === 0} onClick={onConfirm}>{getMsg('ArchiveSelector.startImport')}</button>
         </div>
       </div>
     </dialog>

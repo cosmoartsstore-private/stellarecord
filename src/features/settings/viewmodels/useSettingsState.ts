@@ -1,13 +1,15 @@
+import { getMsg } from '../../../messages/getMsg';
+import { archiveCapacity } from '../../../shared/constants';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ManagementSettings } from '../models/types';
 import { loadManagementSettings as loadManagementSettingsCommand, saveManagementSettings as saveManagementSettingsCommand } from '../services/settingsService';
 import { UserFacingError } from '../../../shared/lib/errors';
 
 /** Backend設定読込前の容量値と画面の下書きで共有する既定値。 */
-const defaultArchiveLimitMb = 300;
+const defaultArchiveLimitMb = archiveCapacity.DEFAULT_MB;
 const defaultManagementSettings: ManagementSettings = { startup_enabled: false, startup_preference_set: false, archive_limit_mb: defaultArchiveLimitMb };
 
-const maxArchiveLimitMb = 10_485_760;
+const maxArchiveLimitMb = archiveCapacity.MAX_MB;
 
 /** 保存可能な容量上限だけを数値へ変換する */
 function parseArchiveLimit(draft: string): number | null {
@@ -112,7 +114,7 @@ export function useSettingsState() {
   const saveArchiveLimit = useCallback(async () => {
     const parsed = parseArchiveLimit(archiveLimitDraft);
     if (parsed === null) {
-      throw new UserFacingError('警告ラインは 1MB～10,485,760MB (10TB) の整数で指定してください');
+      throw new UserFacingError(getMsg('SettingsState.invalidArchiveLimit'));
     }
     const canUseStartupDraft = isDraftSynchronizedRef.current;
     const draftGeneration = archiveDraftEditGenerationRef.current;

@@ -1,3 +1,4 @@
+import { getMsg } from '../../../messages/getMsg';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { UnlistenFn } from '@tauri-apps/api/event';
 import type { StorageStatus } from '../models/types';
@@ -77,9 +78,9 @@ export function useAnalyzeState(addToast: AddToast) {
   const handleCancelSync = useCallback(async () => {
     try {
       await cancelAnalyze();
-      addToast('解析の中断を要求しました');
+      addToast(getMsg('AnalyzeState.cancelRequested'));
     } catch (error) {
-      addErrorToast(addToast, '解析停止要求', '停止要求を送信できませんでした', error);
+      addErrorToast(addToast, getMsg('Operations.cancelAnalyze'), getMsg('AnalyzeState.cancelRequestFailed'), error);
     }
   }, [addToast]);
 

@@ -1,3 +1,4 @@
+import { getMsg } from '../../../messages/getMsg';
 import type { ReactNode } from 'react';
 import { StellaIcon, stellaIconNames } from '../../../shared/components/Icons';
 import { closeDialog, closeDialogOnBackdrop, useModalDialog } from '../../../shared/hooks/useModalDialog';
@@ -15,8 +16,8 @@ export function SettingsModal({ children, onClose }: SettingsModalProps) {
   return (
     <dialog ref={dialogRef} className={styles.dialog} aria-labelledby="settings-title" onClose={onClose} onMouseDown={closeDialogOnBackdrop}>
       <header className={styles.header}>
-        <h2 id="settings-title" className={styles.title} tabIndex={-1} autoFocus>設定</h2>
-        <button type="button" className={styles.closeButton} onClick={closeDialog} aria-label="設定を閉じる"><StellaIcon name={stellaIconNames.close} /></button>
+        <h2 id="settings-title" className={styles.title} tabIndex={-1} autoFocus>{getMsg('common.settings')}</h2>
+        <button type="button" className={styles.closeButton} onClick={closeDialog} aria-label={getMsg('SettingsModal.close')}><StellaIcon name={stellaIconNames.close} /></button>
       </header>
       <div className={styles.body}>{children}</div>
     </dialog>

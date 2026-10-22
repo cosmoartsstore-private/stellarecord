@@ -1,5 +1,4 @@
-/** テーマ永続化に使用するブラウザストレージのキー */
-const themeStorageKey = 'stella-record-theme';
+import { storageKeys } from '../../../shared/constants';
 
 /** アプリがサポートするテーマの切替順 */
 export const themeModes = ['light', 'dark', 'midnight'] as const;
@@ -15,7 +14,7 @@ export function readInitialTheme(): ThemeMode {
   if (typeof window === 'undefined') {
     return 'light';
   }
-  const stored = window.localStorage.getItem(themeStorageKey);
+  const stored = window.localStorage.getItem(storageKeys.THEME);
   return isThemeMode(stored) ? stored : 'light';
 }
 
@@ -24,5 +23,5 @@ export function saveTheme(themeMode: ThemeMode) {
   if (typeof window === 'undefined') {
     return;
   }
-  window.localStorage.setItem(themeStorageKey, themeMode);
+  window.localStorage.setItem(storageKeys.THEME, themeMode);
 }

@@ -1,3 +1,4 @@
+import { getMsg } from '../messages/getMsg';
 import { useState } from 'react';
 import { getDeletableSourceLogs, deleteSourceLogs } from '../features/analyze/services/analyzeService';
 import type { DeletableLogInfo } from '../features/analyze/models/types';
@@ -40,12 +41,12 @@ export function useAppModals(options: UseAppModalsOptions) {
     try {
       const files = await openEnhancedSync();
       if (files.length === 0) {
-        addToast('取り込み可能なアーカイブファイルが見つかりませんでした');
+        addToast(getMsg('AppModals.importableArchiveMissing'));
         return;
       }
       setIsArchiveSelectorVisible(true);
     } catch (error) {
-      addErrorToast(addToast, 'アーカイブ一覧取得', 'アーカイブ一覧を取得できませんでした', error);
+      addErrorToast(addToast, getMsg('Operations.loadArchiveList'), getMsg('AppModals.archiveListLoadFailed'), error);
     }
   };
 
@@ -59,7 +60,7 @@ export function useAppModals(options: UseAppModalsOptions) {
       await executeEnhancedSync(targets);
     } catch (error) {
       setAnalyzeRunning(false);
-      addErrorToast(addToast, '選択アーカイブ取り込み開始', '取り込みを開始できませんでした', error);
+      addErrorToast(addToast, getMsg('Operations.importSelectedArchives'), getMsg('AppModals.importStartFailed'), error);
     }
   };
 
@@ -68,22 +69,22 @@ export function useAppModals(options: UseAppModalsOptions) {
     try {
       const files = await openLogViewerSelection();
       if (files.length === 0) {
-        addToast('アーカイブファイルが見つかりませんでした');
+        addToast(getMsg('AppModals.archiveMissing'));
         return;
       }
       setIsLogViewerModalVisible(true);
       openSelectedLogViewer(files[0].name).catch((error: unknown) => {
-        addErrorToast(addToast, '最新アーカイブログ閲覧開始', 'ログの読み込みを開始できませんでした', error);
+        addErrorToast(addToast, getMsg('Operations.openLatestArchive'), getMsg('AppModals.logReadStartFailed'), error);
       });
     } catch (error) {
-      addErrorToast(addToast, 'ログビューア一覧取得', 'ログビューアを開けませんでした', error);
+      addErrorToast(addToast, getMsg('Operations.loadLogViewerList'), getMsg('AppModals.logViewerOpenFailed'), error);
     }
   };
 
   /** モーダルを閉じずに別のファイルに切り替える */
   const handleViewerNavigateToFile = (fileKey: string) => {
     openSelectedLogViewer(fileKey).catch((error: unknown) => {
-      addErrorToast(addToast, 'ログビューアファイル切替', 'ログの読み込みを開始できませんでした', error);
+      addErrorToast(addToast, getMsg('Operations.switchLogViewerFile'), getMsg('AppModals.logReadStartFailed'), error);
     });
   };
 
@@ -96,10 +97,10 @@ export function useAppModals(options: UseAppModalsOptions) {
       const newFiles = files.filter((f) => !externalFiles.includes(f));
       const target = newFiles.length > 0 ? newFiles[0] : files[0];
       openSelectedLogViewer(target).catch((error: unknown) => {
-        addErrorToast(addToast, '外部ログ閲覧開始', 'ログの読み込みを開始できませんでした', error);
+        addErrorToast(addToast, getMsg('Operations.openExternalLog'), getMsg('AppModals.logReadStartFailed'), error);
       });
     } catch (error) {
-      addErrorToast(addToast, '外部ログファイル選択', '外部ログファイルを開けませんでした', error);
+      addErrorToast(addToast, getMsg('Operations.selectExternalLog'), getMsg('AppModals.externalLogOpenFailed'), error);
     }
   };
 
@@ -108,14 +109,14 @@ export function useAppModals(options: UseAppModalsOptions) {
     try {
       const files = await clearExternalLogFiles();
       if (files.length === 0) {
-        addToast('アーカイブファイルが見つかりませんでした');
+        addToast(getMsg('AppModals.archiveMissing'));
         return;
       }
       openSelectedLogViewer(files[0].name).catch((error: unknown) => {
-        addErrorToast(addToast, '既定アーカイブログ閲覧開始', 'ログの読み込みを開始できませんでした', error);
+        addErrorToast(addToast, getMsg('Operations.openDefaultArchive'), getMsg('AppModals.logReadStartFailed'), error);
       });
     } catch (error) {
-      addErrorToast(addToast, '既定アーカイブフォルダ切替', '既定フォルダへ切り替えられませんでした', error);
+      addErrorToast(addToast, getMsg('Operations.switchDefaultArchiveFolder'), getMsg('AppModals.defaultFolderSwitchFailed'), error);
     }
   };
 
@@ -124,13 +125,13 @@ export function useAppModals(options: UseAppModalsOptions) {
     try {
       const logs = await getDeletableSourceLogs();
       if (logs.length === 0) {
-        addToast('削除可能な元ログが見つかりませんでした');
+        addToast(getMsg('AppModals.deletableSourceLogMissing'));
         return;
       }
       setDeletableLogs(logs);
       setIsCleanupModalOpen(true);
     } catch (error) {
-      addErrorToast(addToast, '元ログ削除候補取得', '元ログ一覧を取得できませんでした', error);
+      addErrorToast(addToast, getMsg('Operations.loadSourceLogCandidates'), getMsg('AppModals.sourceLogListLoadFailed'), error);
     }
   };
 
@@ -139,9 +140,9 @@ export function useAppModals(options: UseAppModalsOptions) {
     setIsCleanupModalOpen(false);
     try {
       const count = await deleteSourceLogs(fileNames);
-      addToast(`元ログ ${String(count)} 件を削除しました`);
+      addToast(getMsg('AppModals.sourceLogsDeleted', { count: String(count) }));
     } catch (error) {
-      addErrorToast(addToast, '元ログ削除', '元ログを削除できませんでした', error);
+      addErrorToast(addToast, getMsg('PolarisCleanup.title'), getMsg('AppModals.sourceLogsDeleteFailed'), error);
     }
   };
 

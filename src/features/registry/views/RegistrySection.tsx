@@ -1,3 +1,4 @@
+import { getMsg } from '../../../messages/getMsg';
 import type { AppCard, LauncherViewMode, RegistryCatalog } from '../models/types';
 import shared from '../../../shared/styles/shared.module.css';
 import { StellaIcon, stellaIconNames } from '../../../shared/components/Icons';
@@ -47,7 +48,7 @@ function LauncherItem({ app, viewMode, onLaunch, onOpenFolder, onUnregister }: L
     <div className={isList ? styles.launcherListCopy : styles.launcherCardLargeCopy}>
       <h4>{app.name}</h4>
       <p className={app.description ? undefined : styles.noDescription}>
-        {app.description || '説明なし'}
+        {app.description || getMsg('RegistrySection.noDescription')}
       </p>
     </div>
   );
@@ -72,17 +73,13 @@ function LauncherItem({ app, viewMode, onLaunch, onOpenFolder, onUnregister }: L
               : `${shared.btn} ${shared.primary} ${styles.launcherLaunchButton}`
           } onClick={() => {
             onLaunch(app);
-          }}>
-          起動
-        </button>
+          }}>{getMsg('common.launch')}</button>
         <button type="button" className={shared.btn} onClick={() => {
             onOpenFolder(app);
-          }}>
-          フォルダを開く
-        </button>
+          }}>{getMsg('RegistrySection.openFolder')}</button>
         <button type="button" className={styles.deleteButton} onClick={() => {
             onUnregister(app);
-          }} aria-label={`${app.name} の登録を解除`}>
+          }} aria-label={getMsg('RegistrySection.unregisterApplication', { name: app.name })}>
           <StellaIcon name={stellaIconNames.trash} />
         </button>
       </div>
@@ -98,36 +95,32 @@ export function RegistrySection({ registryApps, launcherViewMode, isReloading, o
     <div className={`${styles.root} ${shared.viewContainer}`}>
       <div className={shared.sectionHeader}>
         <div className={styles.sectionHeaderRow}>
-          <h2>ランチャー</h2>
+          <h2>{getMsg('common.launcher')}</h2>
           <div className={styles.headerActions}>
             <div className={styles.launcherViewSwitch}>
               <button type="button" className={`${styles.launcherViewButton} ${launcherViewMode === 'list' ? styles.active : ''}`} onClick={() => {
                   onSetLauncherViewMode('list');
-                }} aria-label="リスト表示" aria-pressed={launcherViewMode === 'list'}>
+                }} aria-label={getMsg('RegistrySection.listView')} aria-pressed={launcherViewMode === 'list'}>
                 <StellaIcon name={stellaIconNames.list} />
               </button>
               <button type="button" className={`${styles.launcherViewButton} ${launcherViewMode === 'card' ? styles.active : ''}`} onClick={() => {
                   onSetLauncherViewMode('card');
-                }} aria-label="カード表示" aria-pressed={launcherViewMode === 'card'}>
+                }} aria-label={getMsg('RegistrySection.cardView')} aria-pressed={launcherViewMode === 'card'}>
                 <StellaIcon name={stellaIconNames.grid} />
               </button>
             </div>
             <button type="button" className={`${shared.btn} ${shared.primary}`} onClick={onRegisterApp}>
-              <StellaIcon name={stellaIconNames.plus} />
-              登録
-            </button>
+              <StellaIcon name={stellaIconNames.plus} />{getMsg('common.register')}</button>
             <button type="button" className={`${shared.btn} ${styles.reloadButton}`} onClick={onReload} disabled={isReloading}>
               <span className={`${styles.reloadIcon} ${isReloading ? styles.reloadIconSpin : ''}`}>
                 <StellaIcon name={stellaIconNames.refresh} />
-              </span>
-              再読込
-            </button>
+              </span>{getMsg('common.reload')}</button>
           </div>
         </div>
       </div>
       <div className={`${shared.card} ${styles.section}`}>
         {allApps.length === 0 && (
-          <div className={styles.launcherEmptyState}>登録されているアプリはありません</div>
+          <div className={styles.launcherEmptyState}>{getMsg('RegistrySection.empty')}</div>
         )}
 
         {allApps.length > 0 && (

@@ -1,11 +1,19 @@
-use std::fs::{ self, OpenOptions };
-use std::io::{ self, Write };
+use std::fs::{self, OpenOptions};
+use std::io::{self, Write};
 use std::path::PathBuf;
 
+use crate::constants::{APP_NAME, DATA_DIRECTORY, INSTALL_LOCATION_VALUE, LOG_DIRECTORY, POLARIS_APP_NAME, REGISTRY_KEY_PREFIX};
 use chrono::Local;
-use tauri::{ AppHandle, Emitter };
+use tauri::{AppHandle, Emitter};
 use winreg::enums::HKEY_CURRENT_USER;
 use winreg::RegKey;
+
+/// Win32へ渡す文字列を、OSの文字表現を保持してNUL終端のUTF-16へ変換する。
+#[cfg(windows)]
+pub fn to_wide(value: impl AsRef<std::ffi::OsStr>) -> Vec<u16> {
+    use std::os::windows::ffi::OsStrExt;
+    value.as_ref().encode_wide().chain([0]).collect()
+}
 
 /// コマンド層の汎用エラーメッセージを整形する。
 ///
@@ -28,7 +36,7 @@ pub fn command_err<E: std::fmt::Display>(context: &str, err: E) -> String {
 /// # 戻り値
 /// コンテキスト付きエラー文字列。
 pub fn command_open_err<E: std::fmt::Display>(path: &std::path::Path, err: E) -> String {
-    command_err(&format!("開けませんでした [{}]", path.display()), err)
+    command_err(&format!(message!("Utils.commandOpenErr.openFailed"), path.display()), err)
 }
 
 /// 読み取り失敗時のエラーメッセージを整形する。
@@ -40,7 +48,7 @@ pub fn command_open_err<E: std::fmt::Display>(path: &std::path::Path, err: E) ->
 /// # 戻り値
 /// コンテキスト付きエラー文字列。
 pub fn command_read_err<E: std::fmt::Display>(path: &std::path::Path, err: E) -> String {
-    command_err(&format!("読み取れませんでした [{}]", path.display()), err)
+    command_err(&format!(message!("Utils.commandReadErr.readFailed"), path.display()), err)
 }
 
 /// 作成失敗時のエラーメッセージを整形する。
@@ -52,7 +60,7 @@ pub fn command_read_err<E: std::fmt::Display>(path: &std::path::Path, err: E) ->
 /// # 戻り値
 /// コンテキスト付きエラー文字列。
 pub fn command_create_err<E: std::fmt::Display>(path: &std::path::Path, err: E) -> String {
-    command_err(&format!("作成できませんでした [{}]", path.display()), err)
+    command_err(&format!(message!("Utils.commandCreateErr.createFailed"), path.display()), err)
 }
 
 /// 削除失敗時のエラーメッセージを整形する。
@@ -64,7 +72,7 @@ pub fn command_create_err<E: std::fmt::Display>(path: &std::path::Path, err: E) 
 /// # 戻り値
 /// コンテキスト付きエラー文字列。
 pub fn command_remove_err<E: std::fmt::Display>(path: &std::path::Path, err: E) -> String {
-    command_err(&format!("削除できませんでした [{}]", path.display()), err)
+    command_err(&format!(message!("Utils.commandRemoveErr.deleteFailed"), path.display()), err)
 }
 
 /// SQL に補間する識別子として安全な ASCII 英数字と `_` のみを許可する。
@@ -94,29 +102,29 @@ pub fn decode_log_line_lossy(bytes: &[u8]) -> String {
 /// # 戻り値
 /// registryエントリが存在し実在するパスを指す場合のインストールdirectory。
 pub fn get_component_install_dir(component_name: &str) -> Option<PathBuf> {
-    let key_path = format!("Software\\CosmoArtsStore\\{component_name}");
+    let key_path = format!("{REGISTRY_KEY_PREFIX}\\{component_name}");
     let root = RegKey::predef(HKEY_CURRENT_USER);
     let key = match root.open_subkey(&key_path) {
         Ok(key) => key,
         Err(err) => {
             // log_warn は append_log → get_stellarecord_data_dir → get_stellarecord_install_dir
             // を経由するため、ここで使うと無限再帰になる。stderr へ直接出力する。
-            eprintln!("[WARN] レジストリキーを開けませんでした [{key_path}]: {err}");
+            eprintln!(message!("Utils.getComponentInstallDir.registryOpenFailed"), err = err, key_path = key_path);
             return None;
         }
     };
 
-    let path: String = match key.get_value("InstallLocation") {
+    let path: String = match key.get_value(INSTALL_LOCATION_VALUE) {
         Ok(path) => path,
         Err(err) => {
-            eprintln!("[WARN] レジストリ値を読み取れませんでした [{key_path}\\InstallLocation]: {err}");
+            eprintln!(message!("Utils.getComponentInstallDir.registryReadFailed"), err = err, key_path = key_path);
             return None;
         }
     };
 
     let install_dir = PathBuf::from(path);
     if !install_dir.exists() {
-        eprintln!("[WARN] インストール先が存在しません [{}]", install_dir.display());
+        eprintln!(message!("Utils.getComponentInstallDir.missing"), install_dir.display());
         return None;
     }
 
@@ -128,19 +136,19 @@ pub fn get_component_install_dir(component_name: &str) -> Option<PathBuf> {
 /// # 戻り値
 /// インストールdirectoryのパス。利用不可の場合は `None`。
 pub fn get_stellarecord_install_dir() -> Option<PathBuf> {
-    get_component_install_dir("StellaRecord")
+    get_component_install_dir(APP_NAME)
 }
 
 /// `{InstallDir}/Data/{category}` 配下のカテゴリ別サブdirectoryを解決する。
 ///
 /// 存在しない場合はdirectoryを作成する。
 pub fn get_stellarecord_data_dir(category: &str) -> Option<PathBuf> {
-    let dir = get_stellarecord_install_dir()?.join("Data").join(category);
+    let dir = get_stellarecord_install_dir()?.join(DATA_DIRECTORY).join(category);
     if !dir.exists() {
         if let Err(err) = fs::create_dir_all(&dir) {
             // log_warn は append_log → get_stellarecord_data_dir を経由するため、
             // ここで使うと無限再帰になる。stderr へ直接出力する。
-            eprintln!("[WARN] Data ディレクトリを作成できませんでした [{}]: {}", dir.display(), err);
+            eprintln!(message!("Utils.getStellarecordDataDir.directoryCreateFailed"), dir.display(), err);
             return None;
         }
     }
@@ -152,7 +160,7 @@ pub fn get_stellarecord_data_dir(category: &str) -> Option<PathBuf> {
 /// # 戻り値
 /// インストールdirectoryのパス。利用不可の場合は `None`。
 pub fn get_polaris_install_dir() -> Option<PathBuf> {
-    get_component_install_dir("Polaris")
+    get_component_install_dir(POLARIS_APP_NAME)
 }
 
 /// `StellaRecord` の運用ログファイルに1行追記する。
@@ -164,8 +172,8 @@ pub fn get_polaris_install_dir() -> Option<PathBuf> {
 /// # 戻り値
 /// ログ行を書き込めたかどうかを表す I/O 結果。
 fn append_log(level: &str, msg: &str) -> io::Result<()> {
-    let Some(log_dir) = get_stellarecord_data_dir("logs") else {
-        return Err(io::Error::new(io::ErrorKind::NotFound, "StellaRecord のインストール先が見つかりません",));
+    let Some(log_dir) = get_stellarecord_data_dir(LOG_DIRECTORY) else {
+        return Err(io::Error::new(io::ErrorKind::NotFound, message!("Utils.appendLog.missing")));
     };
     append_log_to(&log_dir, level, msg)
 }
@@ -191,7 +199,7 @@ fn append_log_to(log_dir: &std::path::Path, level: &str, msg: &str) -> io::Resul
 fn log_msg(level: &str, msg: &str) {
     if let Err(err) = append_log(level, msg) {
         // 意図的: ファイルロガー自体が壊れたときだけ、stderr を最後の退避先として使う。
-        eprintln!("[{level}] {msg} (ログ退避にも失敗: {err})");
+        eprintln!(message!("Utils.logMsg.logFailed"), err = err, level = level, msg = msg);
     }
 }
 
@@ -222,7 +230,7 @@ pub fn log_err(msg: &str) {
 /// * `payload` - シリアライズ可能なイベントペイロード。
 pub fn emit_event_warn<T: serde::Serialize + Clone>(app: &AppHandle, event_name: &str, payload: T) {
     if let Err(err) = app.emit(event_name, payload) {
-        log_warn(&format!("イベント送信に失敗しました [{event_name}]: {err}"));
+        log_warn(&format!(message!("Utils.emitEventWarn.eventFailed"), err = err, event_name = event_name));
     }
 }
 

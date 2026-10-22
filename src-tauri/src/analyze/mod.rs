@@ -18,15 +18,15 @@ pub use parser::{
 };
 
 use chrono::NaiveDateTime;
-use rusqlite::{ params, Connection, Result, Savepoint, Transaction };
-use sha2::{ Digest, Sha256 };
+use rusqlite::{params, Connection, Result, Savepoint, Transaction};
+use sha2::{Digest, Sha256};
 use std::fs;
-use std::io::{ BufRead, BufReader, Read };
-use std::path::{ Path, PathBuf };
-use std::sync::atomic::{ AtomicBool, Ordering };
+use std::io::{BufRead, BufReader, Read};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::utils::decode_log_line_lossy;
-use friendship::{ FriendStatus, FriendshipTracker, UNKNOWN_FRIEND_STATUS };
+use friendship::{FriendStatus, FriendshipTracker, UNKNOWN_FRIEND_STATUS};
 
 /// 取り込み結果へ影響するログ解析仕様のバージョン。
 const CURRENT_PARSER_VERSION: i64 = 2;
@@ -35,7 +35,7 @@ const CURRENT_PARSER_VERSION: i64 = 2;
 ///
 /// パーサー、コマンド、UI で同一テキストを再利用し、キャンセルを
 /// 汎用的なエラーではなく一貫した制御結果として扱う。
-pub const ANALYZE_CANCELED_MESSAGE: &str = "解析を中断しました。変更はロールバックされました。";
+pub const ANALYZE_CANCELED_MESSAGE: &str = message!("Analyze.constants.rollbackCancelled");
 
 /// コンテキストラベルと元エラーから一貫した解析エラー文字列を生成する。
 ///
@@ -82,8 +82,8 @@ fn ensure_not_canceled(cancel_status: &AtomicBool) -> std::result::Result<(), St
 }
 
 /// メインデータベースの外側transactionをロールバックする。
-fn rollback_outer_transaction(main_tx: Transaction<'_>, context: &str,) -> std::result::Result<(), String> {
-    main_tx.rollback().map_err(|err| { analyze_err(&format!("{context}: メイン DB をロールバックできませんでした"), err,) })?;
+fn rollback_outer_transaction(main_tx: Transaction<'_>, context: &str) -> std::result::Result<(), String> {
+    main_tx.rollback().map_err(|err| analyze_err(&format!(message!("Analyze.rollbackOuterTransaction.databaseRollbackFailed"), context = context), err))?;
     Ok(())
 }
 
@@ -91,8 +91,8 @@ fn rollback_outer_transaction(main_tx: Transaction<'_>, context: &str,) -> std::
 ///
 /// 個別ファイルの解析失敗時に、そのファイルの変更のみを巻き戻す。
 /// 外側transactionは維持されるため、他ファイルの処理を続行できる。
-fn rollback_savepoint(mut main_sp: Savepoint<'_>, context: &str,) -> std::result::Result<(), String> {
-    main_sp.rollback().map_err(|err| { analyze_err(&format!("{context}: メイン DB savepoint をロールバックできませんでした"), err,) })?;
+fn rollback_savepoint(mut main_sp: Savepoint<'_>, context: &str) -> std::result::Result<(), String> {
+    main_sp.rollback().map_err(|err| analyze_err(&format!(message!("Analyze.rollbackSavepoint.databaseSavepointRollbackFailed"), context = context), err))?;
     Ok(())
 }
 
@@ -117,7 +117,7 @@ fn collect_log_files(archive_store_dir: &Path) -> Vec<PathBuf> {
     let entries = match fs::read_dir(archive_store_dir) {
         Ok(entries) => entries,
         Err(err) => {
-            crate::utils::log_warn(&format!("Data ディレクトリを読み取れませんでした [{}]: {}", archive_store_dir.display(), err));
+            crate::utils::log_warn(&format!(message!("Analyze.collectLogFiles.directoryReadFailed"), archive_store_dir.display(), err));
             return files;
         }
     };
@@ -125,7 +125,7 @@ fn collect_log_files(archive_store_dir: &Path) -> Vec<PathBuf> {
         let entry = match entry {
             Ok(entry) => entry,
             Err(err) => {
-                crate::utils::log_warn(&format!("Data エントリを読み取れませんでした: {err}"));
+                crate::utils::log_warn(&format!(message!("Analyze.collectLogFiles.entryReadFailed"), err = err));
                 continue;
             }
         };
@@ -181,14 +181,14 @@ where
     F: FnOnce(&mut dyn Read) -> Result<T>,
 {
     if log_path.file_name().and_then(|value| value.to_str()).is_some_and(|value| value.ends_with(".tar.zst")) {
-        let file = fs::File::open(log_path).map_err(|err| analyze_sqlite_err("圧縮ログを開けませんでした", err))?;
-        let decoder = zstd::stream::Decoder::new(file).map_err(|err| { analyze_sqlite_err("圧縮ログの zstd デコーダーを初期化できませんでした", err) })?;
+        let file = fs::File::open(log_path).map_err(|err| analyze_sqlite_err(message!("Analyze.withLogContentReader.logOpenFailed"), err))?;
+        let decoder = zstd::stream::Decoder::new(file).map_err(|err| analyze_sqlite_err(message!("Analyze.withLogContentReader.logZstdFailed"), err))?;
         let mut archive = tar::Archive::new(decoder);
-        let mut entries = archive.entries().map_err(|err| { analyze_sqlite_err("圧縮ログのエントリ一覧を取得できませんでした", err) })?;
+        let mut entries = archive.entries().map_err(|err| analyze_sqlite_err(message!("Analyze.withLogContentReader.logEntryEntryListReadFailed"), err))?;
         let Some(entry) = entries.next() else {
-            return Err(rusqlite::Error::InvalidParameterName("圧縮ログに解析対象がありませんでした".to_string(),));
+            return Err(rusqlite::Error::InvalidParameterName(message!("Analyze.withLogContentReader.logMissing").to_string()));
         };
-        let mut entry = entry.map_err(|err| analyze_sqlite_err("圧縮ログのエントリを読めませんでした", err))?;
+        let mut entry = entry.map_err(|err| analyze_sqlite_err(message!("Analyze.withLogContentReader.logEntryReadFailed"), err))?;
         return callback(&mut entry);
     }
 
@@ -197,10 +197,10 @@ where
     let mut file = {
         use std::os::windows::fs::OpenOptionsExt;
         use windows::Win32::Storage::FileSystem::FILE_SHARE_READ;
-        fs::OpenOptions::new().read(true).share_mode(FILE_SHARE_READ.0).open(log_path).map_err(|err| analyze_sqlite_err("ログファイルを開けませんでした", err))?
+        fs::OpenOptions::new().read(true).share_mode(FILE_SHARE_READ.0).open(log_path).map_err(|err| analyze_sqlite_err(message!("Analyze.withLogContentReader.logFileOpenFailed"), err))?
     };
     #[cfg(not(windows))]
-    let mut file = fs::File::open(log_path).map_err(|err| analyze_sqlite_err("ログファイルを開けませんでした", err))?;
+    let mut file = fs::File::open(log_path).map_err(|err| analyze_sqlite_err(message!("Analyze.withLogContentReader.logFileOpenFailed"), err))?;
 
     callback(&mut file)
 }
@@ -216,16 +216,16 @@ fn fingerprint_log_content(log_path: &Path, cancel_status: &AtomicBool) -> Resul
             if cancel_status.load(Ordering::SeqCst) {
                 return Err(analyze_cancel_sqlite_err());
             }
-            let bytes_read = reader.read(&mut buffer).map_err(|err| analyze_sqlite_err("ログ本文を読み取れませんでした", err))?;
+            let bytes_read = reader.read(&mut buffer).map_err(|err| analyze_sqlite_err(message!("Analyze.fingerprintLogContent.logReadFailed"), err))?;
             if bytes_read == 0 {
                 break;
             }
             hasher.update(&buffer[..bytes_read]);
-            content_size = content_size.checked_add(bytes_read as u64).ok_or_else(|| { rusqlite::Error::InvalidParameterName("ログ本文のサイズが上限を超えました".to_string(),) })?;
+            content_size = content_size.checked_add(bytes_read as u64).ok_or_else(|| rusqlite::Error::InvalidParameterName(message!("Analyze.fingerprintLogContent.logLimitExceeded").to_string()))?;
         }
 
-        let content_size = i64::try_from(content_size).map_err(|_| { rusqlite::Error::InvalidParameterName("ログ本文のサイズが上限を超えました".to_string()) })?;
-        Ok(LogFingerprint { sha256: hasher.finalize().into(), content_size, })
+        let content_size = i64::try_from(content_size).map_err(|_| rusqlite::Error::InvalidParameterName(message!("Analyze.fingerprintLogContent.logLimitExceeded").to_string()))?;
+        Ok(LogFingerprint { sha256: hasher.finalize().into(), content_size })
     })
 }
 
@@ -233,7 +233,7 @@ fn fingerprint_log_content(log_path: &Path, cancel_status: &AtomicBool) -> Resul
 ///
 /// 旧版 DB には指紋行が存在しないため、その場合は `false` として一度だけ安全に
 /// 再構築し、現在内容に対応する指紋を登録する。
-fn imported_content_is_current(conn: &Connection, filename: &str, fingerprint: &LogFingerprint,) -> Result<bool> {
+fn imported_content_is_current(conn: &Connection, filename: &str, fingerprint: &LogFingerprint) -> Result<bool> {
     conn.query_row(
         "SELECT EXISTS(
             SELECT 1
@@ -304,7 +304,7 @@ fn delete_imported_session(conn: &Connection, filename: &str) -> Result<()> {
 }
 
 /// 正常に再構築できたログ本文の指紋をセッションへ紐付けて保存する。
-fn record_imported_content(conn: &Connection, filename: &str, fingerprint: &LogFingerprint,) -> Result<()> {
+fn record_imported_content(conn: &Connection, filename: &str, fingerprint: &LogFingerprint) -> Result<()> {
     conn.execute(
         "INSERT INTO imported_logs (log_name, content_sha256, content_size, parser_version)
          VALUES (?1, ?2, ?3, ?4)",
@@ -324,7 +324,7 @@ enum ImportOutcome {
 ///
 /// 呼び出し元が渡す接続はファイル単位 savepoint であり、旧セッション削除、
 /// 再解析、指紋登録のいずれかが失敗すれば一式をロールバックする。
-fn import_log_in_savepoint<F>(conn: &Connection, log_path: &Path, filename: &str, cancel_status: &AtomicBool, progress_callback: &mut F,) -> Result<ImportOutcome>
+fn import_log_in_savepoint<F>(conn: &Connection, log_path: &Path, filename: &str, cancel_status: &AtomicBool, progress_callback: &mut F) -> Result<ImportOutcome>
 where
     F: FnMut(String, String),
 {
@@ -340,7 +340,7 @@ where
 }
 
 /// スクリーンショット撮影イベントをメインデータベースに挿入する。
-fn insert_screenshot(tx: &Connection, visit_id: Option<i64>, file_path: &str, resolution_width: Option<i64>, resolution_height: Option<i64>, timestamp: &str, session_id: i64,) -> Result<()> {
+fn insert_screenshot(tx: &Connection, visit_id: Option<i64>, file_path: &str, resolution_width: Option<i64>, resolution_height: Option<i64>, timestamp: &str, session_id: i64) -> Result<()> {
     tx.execute(
         "INSERT INTO screenshots
          (visit_id, file_path, resolution_width, resolution_height, timestamp, session_id)
@@ -351,7 +351,7 @@ fn insert_screenshot(tx: &Connection, visit_id: Option<i64>, file_path: &str, re
 }
 
 /// OSC/OSCQuery サービスイベントをメインデータベースに挿入する。
-fn insert_osc_event(tx: &Connection, session_id: i64, event_type: &str, service_name: Option<&str>, service_type: Option<&str>, ip_address: Option<&str>, port: Option<i64>, timestamp: &str,) -> Result<()> {
+fn insert_osc_event(tx: &Connection, session_id: i64, event_type: &str, service_name: Option<&str>, service_type: Option<&str>, ip_address: Option<&str>, port: Option<i64>, timestamp: &str) -> Result<()> {
     tx.execute(
         "INSERT INTO osc
          (session_id, event_type, service_name, service_type, ip_address, port, timestamp)
@@ -364,7 +364,7 @@ fn insert_osc_event(tx: &Connection, session_id: i64, event_type: &str, service_
 /// `VRChat`+ サブスクリプション状態のスナップショットをメインデータベースに挿入する。
 ///
 /// セッションごとにスナップショットは1件のみのため `INSERT OR IGNORE` を使用。
-fn insert_subscription_status(tx: &Connection, session_id: i64, is_active: bool, subscription_id: Option<&str>, description: Option<&str>, checked_at: &str,) -> Result<()> {
+fn insert_subscription_status(tx: &Connection, session_id: i64, is_active: bool, subscription_id: Option<&str>, description: Option<&str>, checked_at: &str) -> Result<()> {
     tx.execute(
         "INSERT OR IGNORE INTO subscription
          (session_id, is_active, subscription_id, description, checked_at)
@@ -379,7 +379,7 @@ fn insert_subscription_status(tx: &Connection, session_id: i64, is_active: bool,
 /// `Received Notification: <... message: "..." >` のうち、収集対象タイプ
 /// (`is_collectible_notification` 参照) のみ INSERT する。`worldId`/`worldName`
 /// のペイロードがある場合はターゲット情報も併せて保存する。
-fn persist_notification(main_tx: &Connection, session_id: i64, ts_str: &str, notification_text: &str,) -> Result<()> {
+fn persist_notification(main_tx: &Connection, session_id: i64, ts_str: &str, notification_text: &str) -> Result<()> {
     let Some(caps) = RE_NOTIFICATION.captures(notification_text) else {
         return Ok(());
     };
@@ -439,29 +439,29 @@ fn persist_notification(main_tx: &Connection, session_id: i64, ts_str: &str, not
 /// 続行・確定ができない場合にエラーを返す。ファイル単位の失敗は、正常に取り込めた
 /// ファイルを確定したうえで `DiffImportSummary` に格納する。
 #[allow(clippy::too_many_lines)]
-pub fn run_diff_import<F>(main_db_path: &Path, archive_store_dir: &Path, cancel_status: &AtomicBool, mut progress_callback: F,) -> Result<DiffImportSummary, String>
+pub fn run_diff_import<F>(main_db_path: &Path, archive_store_dir: &Path, cancel_status: &AtomicBool, mut progress_callback: F) -> Result<DiffImportSummary, String>
 where
     F: FnMut(String, String),
 {
-    let mut main_conn = Connection::open(main_db_path).map_err(|e| { analyze_err(&format!("メイン DB を開けませんでした [{}]", main_db_path.display()), e,) })?;
+    let mut main_conn = Connection::open(main_db_path).map_err(|e| analyze_err(&format!(message!("Analyze.runDiffImport.databaseOpenFailed"), main_db_path.display()), e))?;
 
-    init_main_db(&main_conn).map_err(|e| analyze_err("メイン DB を初期化できませんでした", e))?;
+    init_main_db(&main_conn).map_err(|e| analyze_err(message!("Analyze.runDiffImport.databaseFailed"), e))?;
 
     let log_files = collect_log_files(archive_store_dir);
     if log_files.is_empty() {
-        progress_callback("処理対象ログなし".to_string(), "0/0".to_string());
-        return Ok(DiffImportSummary { total_count: 0, failed_filenames: Vec::new(), });
+        progress_callback(message!("Analyze.runDiffImport.logText").to_string(), "0/0".to_string());
+        return Ok(DiffImportSummary { total_count: 0, failed_filenames: Vec::new() });
     }
 
-    progress_callback(format!("{}件のログを処理します", log_files.len()), format!("0/{}", log_files.len()),);
+    progress_callback(format!(message!("Analyze.runDiffImport.logCount"), log_files.len()), format!("0/{}", log_files.len()));
 
-    let mut main_tx = main_conn.transaction().map_err(|e| analyze_err("メイン DB トランザクションを開始できませんでした", e))?;
+    let mut main_tx = main_conn.transaction().map_err(|e| analyze_err(message!("Analyze.runDiffImport.databaseTransactionBeginFailed"), e))?;
 
     let total = log_files.len();
     let mut failed_filenames = Vec::new();
     for (idx, log_path) in log_files.iter().enumerate() {
         if let Err(err) = ensure_not_canceled(cancel_status) {
-            rollback_outer_transaction(main_tx, "解析中断時")?;
+            rollback_outer_transaction(main_tx, message!("Analyze.runDiffImport.cancelled"))?;
             return Err(err);
         }
 
@@ -469,47 +469,47 @@ where
             continue;
         };
 
-        progress_callback(format!("処理中: {filename}"), format_progress_fraction(idx, total),);
+        progress_callback(format!(message!("Analyze.runDiffImport.text"), filename = filename), format_progress_fraction(idx, total));
 
-        let main_sp = main_tx.savepoint().map_err(|e| analyze_err("メイン DB savepoint を開始できませんでした", e))?;
+        let main_sp = main_tx.savepoint().map_err(|e| analyze_err(message!("Analyze.runDiffImport.databaseSavepointBeginFailed"), e))?;
 
-        match import_log_in_savepoint(&main_sp, log_path, &filename, cancel_status, &mut progress_callback,) {
+        match import_log_in_savepoint(&main_sp, log_path, &filename, cancel_status, &mut progress_callback) {
             Ok(outcome) => {
-                main_sp.commit().map_err(|e| analyze_err("メイン DB savepoint を確定できませんでした", e))?;
+                main_sp.commit().map_err(|e| analyze_err(message!("Analyze.runDiffImport.databaseSavepointCommitFailed"), e))?;
                 let status = match outcome {
-                    ImportOutcome::Unchanged => format!("スキップ（内容変更なし）: {filename}"),
-                    ImportOutcome::Imported => format!("取り込み完了: {filename}"),
+                    ImportOutcome::Unchanged => format!(message!("Analyze.runDiffImport.unchangedLogSkipped"), filename = filename),
+                    ImportOutcome::Imported => format!(message!("Analyze.runDiffImport.completed"), filename = filename),
                 };
                 progress_callback(status, format_progress_fraction(idx + 1, total));
             }
             Err(err) if is_analyze_canceled_sqlite_err(&err) => {
-                rollback_savepoint(main_sp, "解析中断時")?;
-                rollback_outer_transaction(main_tx, "解析中断時")?;
+                rollback_savepoint(main_sp, message!("Analyze.runDiffImport.cancelled"))?;
+                rollback_outer_transaction(main_tx, message!("Analyze.runDiffImport.cancelled"))?;
                 return Err(ANALYZE_CANCELED_MESSAGE.to_string());
             }
             Err(err) => {
-                rollback_savepoint(main_sp, "ファイル単位ロールバック時")?;
-                crate::utils::log_err(&format!("[StellaRecord] エラー ({filename}): {err}"));
+                rollback_savepoint(main_sp, message!("Analyze.runDiffImport.fileRollbackText"))?;
+                crate::utils::log_err(&format!(message!("Analyze.runDiffImport.logImportError"), err = err, filename = filename));
                 failed_filenames.push(filename);
             }
         }
     }
 
     if let Err(err) = ensure_not_canceled(cancel_status) {
-        rollback_outer_transaction(main_tx, "解析中断時")?;
+        rollback_outer_transaction(main_tx, message!("Analyze.runDiffImport.cancelled"))?;
         return Err(err);
     }
 
-    main_tx.commit().map_err(|e| analyze_err("メイン DB 反映を確定できませんでした", e))?;
+    main_tx.commit().map_err(|e| analyze_err(message!("Analyze.runDiffImport.databaseCommitFailed"), e))?;
 
     if !failed_filenames.is_empty() {
         let failed_count = failed_filenames.len();
-        progress_callback(format!("{failed_count}件の取り込みに失敗（成功分は保存済み）"), format_progress_fraction(total - failed_count, total),);
-        return Ok(DiffImportSummary { total_count: total, failed_filenames, });
+        progress_callback(format!(message!("Analyze.runDiffImport.saveFailed"), failed_count = failed_count), format_progress_fraction(total - failed_count, total));
+        return Ok(DiffImportSummary { total_count: total, failed_filenames });
     }
 
-    progress_callback("処理完了".to_string(), format_progress_fraction(total, total),);
-    Ok(DiffImportSummary { total_count: total, failed_filenames, })
+    progress_callback(message!("Analyze.runDiffImport.processingCompleted").to_string(), format_progress_fraction(total, total));
+    Ok(DiffImportSummary { total_count: total, failed_filenames })
 }
 
 /// ログファイル（プレーンテキストまたは `.tar.zst` アーカイブ）を開き、
@@ -518,7 +518,7 @@ where
 /// `.tar.zst` が推奨アーカイブ形式: Zstandard は高速展開を提供し、tar は
 /// ログを単一ファイルにまとめてdirectory管理を簡素化する。
 /// 非圧縮 `VRChat` ログの手動インポート用にプレーンテキストのフォールバックもある。
-fn parse_and_import<F>(main_conn: &Connection, log_path: &Path, filename: &str, cancel_status: &AtomicBool, progress_callback: &mut F,) -> Result<()>
+fn parse_and_import<F>(main_conn: &Connection, log_path: &Path, filename: &str, cancel_status: &AtomicBool, progress_callback: &mut F) -> Result<()>
 where
     F: FnMut(String, String),
 {
@@ -526,7 +526,7 @@ where
         return Err(analyze_cancel_sqlite_err());
     }
 
-    with_log_content_reader(log_path, |reader| { parse_and_import_reader(main_conn, BufReader::new(reader), filename, cancel_status, progress_callback,) })
+    with_log_content_reader(log_path, |reader| parse_and_import_reader(main_conn, BufReader::new(reader), filename, cancel_status, progress_callback))
 }
 
 /// ログストリーム1件を解析し、正規化データをメインデータベースに書き込む。
@@ -535,7 +535,7 @@ where
 /// 時系列の副作用に依存しており、処理を過度に分割すると
 /// セッション・訪問・プレイヤー・通知の状態更新の整合性検証が困難になる。
 #[allow(clippy::too_many_lines)]
-fn parse_and_import_reader<R, F>(main_tx: &Connection, mut reader: BufReader<R>, filename: &str, cancel_status: &AtomicBool, progress_callback: &mut F,) -> Result<()>
+fn parse_and_import_reader<R, F>(main_tx: &Connection, mut reader: BufReader<R>, filename: &str, cancel_status: &AtomicBool, progress_callback: &mut F) -> Result<()>
 where
     R: std::io::Read,
     F: FnMut(String, String),
@@ -558,9 +558,9 @@ where
          VALUES ('', NULL, NULL, NULL, ?1)",
         params![filename],
     )?;
-    let session_id: i64 = main_tx.query_row("SELECT id FROM sessions WHERE log_name = ?1", params![filename], |row| row.get(0),)?;
+    let session_id: i64 = main_tx.query_row("SELECT id FROM sessions WHERE log_name = ?1", params![filename], |row| row.get(0))?;
 
-    progress_callback("パース開始".to_string(), String::new());
+    progress_callback(message!("Analyze.parseAndImportReader.started").to_string(), String::new());
 
     let mut line_count = 0;
     let mut invalid_utf8_line_count = 0;
@@ -571,7 +571,7 @@ where
         }
 
         line_buffer.clear();
-        let bytes_read = reader.read_until(b'\n', &mut line_buffer).map_err(|err| analyze_sqlite_err("ログ行を読み取れませんでした", err))?;
+        let bytes_read = reader.read_until(b'\n', &mut line_buffer).map_err(|err| analyze_sqlite_err(message!("Analyze.parseAndImportReader.logReadFailed"), err))?;
         if bytes_read == 0 {
             break;
         }
@@ -582,7 +582,7 @@ where
         line_count += 1;
 
         if line_count % 5000 == 0 {
-            progress_callback(format!("パース中... {line_count} 行"), String::new());
+            progress_callback(format!(message!("Analyze.parseAndImportReader.text"), line_count = line_count), String::new());
         }
 
         // --- 複数行通知の継続行 ---
@@ -613,7 +613,7 @@ where
                 }
                 end_time = Some(formatted);
             } else {
-                crate::utils::log_warn(&format!("タイムスタンプのパースをスキップしました [{filename}]: {ts_str}"));
+                crate::utils::log_warn(&format!(message!("Analyze.parseAndImportReader.timestampText"), filename = filename, ts_str = ts_str));
             }
         }
         let ts_str = current_ts.map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()).unwrap_or_default();
@@ -631,7 +631,7 @@ where
                 friendship_tracker.on_avatar_download(status, line_count);
             } else if let Some(caps) = RE_AVATAR_UNPACK.captures(&line) {
                 if let Some(payload) = caps.get(1) {
-                    if let (Some(visit_id), Some((user_id, friend_status))) = (current_visit_id, friendship_tracker.on_avatar_unpack(payload.as_str(), line_count),) {
+                    if let (Some(visit_id), Some((user_id, friend_status))) = (current_visit_id, friendship_tracker.on_avatar_unpack(payload.as_str(), line_count)) {
                         main_tx.execute(
                             "UPDATE with_users
                              SET friend_status = ?1
@@ -658,8 +658,8 @@ where
         if let Some(caps) = RE_ENTERING.captures(&line) {
             friendship_tracker.reset_visit();
             if let Some(visit_id) = current_visit_id {
-                main_tx.execute("UPDATE visits SET leave_time = ?1 WHERE id = ?2 AND leave_time IS NULL", params![ts_str, visit_id],)?;
-                main_tx.execute("UPDATE with_users SET leave_time = ?1 WHERE visit_id = ?2 AND leave_time IS NULL", params![ts_str, visit_id],)?;
+                main_tx.execute("UPDATE visits SET leave_time = ?1 WHERE id = ?2 AND leave_time IS NULL", params![ts_str, visit_id])?;
+                main_tx.execute("UPDATE with_users SET leave_time = ?1 WHERE visit_id = ?2 AND leave_time IS NULL", params![ts_str, visit_id])?;
             }
             if let Some(room_match) = caps.get(1) {
                 pending_room_name = Some(room_match.as_str().to_string());
@@ -691,8 +691,8 @@ where
 
         if RE_LEFT_ROOM.is_match(&line) {
             if let Some(visit_id) = current_visit_id {
-                main_tx.execute("UPDATE visits SET leave_time = ?1 WHERE id = ?2 AND leave_time IS NULL", params![ts_str, visit_id],)?;
-                main_tx.execute("UPDATE with_users SET leave_time = ?1 WHERE visit_id = ?2 AND leave_time IS NULL", params![ts_str, visit_id],)?;
+                main_tx.execute("UPDATE visits SET leave_time = ?1 WHERE id = ?2 AND leave_time IS NULL", params![ts_str, visit_id])?;
+                main_tx.execute("UPDATE with_users SET leave_time = ?1 WHERE visit_id = ?2 AND leave_time IS NULL", params![ts_str, visit_id])?;
                 current_visit_id = None;
                 pending_room_name = None;
             }
@@ -770,7 +770,7 @@ where
             if let Some(path_match) = caps.get(1) {
                 let width = caps.get(2).and_then(|m| m.as_str().parse::<i64>().ok());
                 let height = caps.get(3).and_then(|m| m.as_str().parse::<i64>().ok());
-                insert_screenshot(main_tx, current_visit_id, path_match.as_str(), width, height, &ts_str, session_id,)?;
+                insert_screenshot(main_tx, current_visit_id, path_match.as_str(), width, height, &ts_str, session_id)?;
             }
             continue;
         }
@@ -780,7 +780,7 @@ where
             let service_name = caps.get(1).map(|m| m.as_str());
             let ip_address = caps.get(2).map(|m| m.as_str());
             let port = caps.get(3).and_then(|m| m.as_str().parse::<i64>().ok());
-            insert_osc_event(main_tx, session_id, "found", service_name, None, ip_address, port, &ts_str,)?;
+            insert_osc_event(main_tx, session_id, "found", service_name, None, ip_address, port, &ts_str)?;
             continue;
         }
 
@@ -805,19 +805,19 @@ where
             let is_active = active.eq_ignore_ascii_case("true");
             let sub_id_opt = if subscription_id.is_empty() || subscription_id == "None" { None } else { Some(subscription_id) };
             let desc_opt = if desc.is_empty() { None } else { Some(desc) };
-            insert_subscription_status(main_tx, session_id, is_active, sub_id_opt, desc_opt, &ts_str,)?;
+            insert_subscription_status(main_tx, session_id, is_active, sub_id_opt, desc_opt, &ts_str)?;
         }
     }
     if invalid_utf8_line_count > 0 {
-        crate::utils::log_warn(&format!("無効な UTF-8 を含むログ行を置換して取り込みました [{filename}]: {invalid_utf8_line_count} 行"));
+        crate::utils::log_warn(&format!(message!("Analyze.parseAndImportReader.invalidUtf8Replaced"), filename = filename, invalid_utf8_line_count = invalid_utf8_line_count));
     }
 
-    progress_callback("コミット中".to_string(), String::new());
+    progress_callback(message!("Analyze.parseAndImportReader.committing").to_string(), String::new());
 
     if let Some(visit_id) = current_visit_id {
         let last_ts = current_ts.map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string()).unwrap_or_default();
-        main_tx.execute("UPDATE visits SET leave_time = ?1 WHERE id = ?2 AND leave_time IS NULL", params![last_ts, visit_id],)?;
-        main_tx.execute("UPDATE with_users SET leave_time = ?1 WHERE visit_id = ?2 AND leave_time IS NULL", params![last_ts, visit_id],)?;
+        main_tx.execute("UPDATE visits SET leave_time = ?1 WHERE id = ?2 AND leave_time IS NULL", params![last_ts, visit_id])?;
+        main_tx.execute("UPDATE with_users SET leave_time = ?1 WHERE visit_id = ?2 AND leave_time IS NULL", params![last_ts, visit_id])?;
     }
 
     main_tx.execute(
@@ -852,64 +852,64 @@ where
 /// # Errors
 /// DB セットアップ失敗、バッチ全体のロールバック必要、またはコミット前の
 /// キャンセル要求時にエラーを返す。
-pub fn run_enhanced_import_batch<F>(main_db_path: &Path, target_paths: &[PathBuf], cancel_status: &AtomicBool, mut progress_callback: F,) -> Result<(), String>
+pub fn run_enhanced_import_batch<F>(main_db_path: &Path, target_paths: &[PathBuf], cancel_status: &AtomicBool, mut progress_callback: F) -> Result<(), String>
 where
     F: FnMut(String, String),
 {
-    let mut main_conn = Connection::open(main_db_path).map_err(|e| { analyze_err(&format!("メイン DB を開けませんでした [{}]", main_db_path.display()), e,) })?;
+    let mut main_conn = Connection::open(main_db_path).map_err(|e| analyze_err(&format!(message!("Analyze.runEnhancedImportBatch.databaseOpenFailed"), main_db_path.display()), e))?;
 
-    init_main_db(&main_conn).map_err(|e| analyze_err("メイン DB を初期化できませんでした", e))?;
+    init_main_db(&main_conn).map_err(|e| analyze_err(message!("Analyze.runEnhancedImportBatch.databaseFailed"), e))?;
 
     if target_paths.is_empty() {
-        progress_callback("処理対象ログなし".to_string(), "0/0".to_string());
+        progress_callback(message!("Analyze.runEnhancedImportBatch.logText").to_string(), "0/0".to_string());
         return Ok(());
     }
 
-    let mut main_tx = main_conn.transaction().map_err(|e| analyze_err("メイン DB トランザクションを開始できませんでした", e))?;
+    let mut main_tx = main_conn.transaction().map_err(|e| analyze_err(message!("Analyze.runEnhancedImportBatch.databaseTransactionBeginFailed"), e))?;
 
     let total = target_paths.len();
     for (index, target_path) in target_paths.iter().enumerate() {
         if let Err(err) = ensure_not_canceled(cancel_status) {
-            rollback_outer_transaction(main_tx, "解析中断時")?;
+            rollback_outer_transaction(main_tx, message!("Analyze.runEnhancedImportBatch.cancelled"))?;
             return Err(err);
         }
 
-        let filename = source_name_for_archive(target_path).ok_or_else(|| "対象ファイル名を解決できませんでした".to_string())?;
+        let filename = source_name_for_archive(target_path).ok_or_else(|| message!("Analyze.runEnhancedImportBatch.fileFailed").to_string())?;
 
-        progress_callback(format!("処理中: {filename}"), format_progress_fraction(index + 1, total),);
+        progress_callback(format!(message!("Analyze.runEnhancedImportBatch.text"), filename = filename), format_progress_fraction(index + 1, total));
 
-        let main_sp = main_tx.savepoint().map_err(|e| analyze_err("メイン DB savepoint を開始できませんでした", e))?;
+        let main_sp = main_tx.savepoint().map_err(|e| analyze_err(message!("Analyze.runEnhancedImportBatch.databaseSavepointBeginFailed"), e))?;
 
-        match import_log_in_savepoint(&main_sp, target_path, &filename, cancel_status, &mut progress_callback,) {
+        match import_log_in_savepoint(&main_sp, target_path, &filename, cancel_status, &mut progress_callback) {
             Ok(outcome) => {
-                main_sp.commit().map_err(|e| analyze_err("メイン DB savepoint を確定できませんでした", e))?;
+                main_sp.commit().map_err(|e| analyze_err(message!("Analyze.runEnhancedImportBatch.databaseSavepointCommitFailed"), e))?;
                 let status = match outcome {
-                    ImportOutcome::Unchanged => format!("スキップ（内容変更なし）: {filename}"),
-                    ImportOutcome::Imported => format!("取り込み完了: {filename}"),
+                    ImportOutcome::Unchanged => format!(message!("Analyze.runEnhancedImportBatch.unchangedLogSkipped"), filename = filename),
+                    ImportOutcome::Imported => format!(message!("Analyze.runEnhancedImportBatch.completed"), filename = filename),
                 };
                 progress_callback(status, format_progress_fraction(index + 1, total));
             }
             Err(err) if is_analyze_canceled_sqlite_err(&err) => {
-                rollback_savepoint(main_sp, "解析中断時")?;
-                rollback_outer_transaction(main_tx, "解析中断時")?;
+                rollback_savepoint(main_sp, message!("Analyze.runEnhancedImportBatch.cancelled"))?;
+                rollback_outer_transaction(main_tx, message!("Analyze.runEnhancedImportBatch.cancelled"))?;
                 return Err(ANALYZE_CANCELED_MESSAGE.to_string());
             }
             Err(err) => {
-                rollback_savepoint(main_sp, "対象ログロールバック時")?;
-                rollback_outer_transaction(main_tx, "解析エラー時")?;
-                return Err(analyze_err("対象ログを取り込めませんでした", err));
+                rollback_savepoint(main_sp, message!("Analyze.runEnhancedImportBatch.logRollbackText"))?;
+                rollback_outer_transaction(main_tx, message!("Analyze.runEnhancedImportBatch.parseErrorContext"))?;
+                return Err(analyze_err(message!("Analyze.runEnhancedImportBatch.logImportFailed"), err));
             }
         }
     }
 
     if let Err(err) = ensure_not_canceled(cancel_status) {
-        rollback_outer_transaction(main_tx, "解析中断時")?;
+        rollback_outer_transaction(main_tx, message!("Analyze.runEnhancedImportBatch.cancelled"))?;
         return Err(err);
     }
 
-    main_tx.commit().map_err(|e| analyze_err("メイン DB 反映を確定できませんでした", e))?;
+    main_tx.commit().map_err(|e| analyze_err(message!("Analyze.runEnhancedImportBatch.databaseCommitFailed"), e))?;
 
-    progress_callback("完了".to_string(), format!("{total}/{total}"));
+    progress_callback(message!("Analyze.runEnhancedImportBatch.completedStatus").to_string(), format!("{total}/{total}"));
     Ok(())
 }
 

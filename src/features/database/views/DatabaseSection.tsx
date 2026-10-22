@@ -1,3 +1,4 @@
+import { getMsg } from '../../../messages/getMsg';
 import { useState } from 'react';
 import type { DbTableSummary, TableData } from '../models/types';
 import type { SortState } from '../viewmodels/useDatabaseState';
@@ -46,13 +47,13 @@ export function DatabaseSection({ dbTables, currentTable, tableData, isDbLoading
   return (
     <div className={`${styles.root} ${shared.viewContainer}`}>
       <div className={shared.sectionHeader}>
-        <h2>DBプレビュー</h2>
+        <h2>{getMsg('DatabaseSection.title')}</h2>
       </div>
 
       <div className={styles.layout}>
         <div className={styles.sidebar}>
           <div className={styles.sidebarTop}>
-            <div className={styles.sidebarLabel}>テーブル一覧</div>
+            <div className={styles.sidebarLabel}>{getMsg('DatabaseSection.tableList')}</div>
             <button type="button" className={styles.nameToggle} onClick={() => {
                 setIsPhysicalNames((prev) => !prev);
               }} aria-pressed={isPhysicalNames}>
@@ -60,13 +61,13 @@ export function DatabaseSection({ dbTables, currentTable, tableData, isDbLoading
             </button>
           </div>
           {dbTables.length === 0 && (
-            <div className={styles.sidebarEmpty}>表示できるテーブルがまだありません</div>
+            <div className={styles.sidebarEmpty}>{getMsg('DatabaseSection.emptyCatalog')}</div>
           )}
           <div className={styles.tableList}>
             {tables.map(renderSidebarItem)}
             {views.length > 0 && (
               <>
-                <div className={styles.sidebarDivider}>ビュー</div>
+                <div className={styles.sidebarDivider}>{getMsg('DatabaseSection.viewBadge')}</div>
                 {views.map(renderSidebarItem)}
               </>
             )}
@@ -81,22 +82,22 @@ export function DatabaseSection({ dbTables, currentTable, tableData, isDbLoading
                   ? tableData.label
                   : selectedTableSummary && selectedTableSummary.label.length > 0
                     ? selectedTableSummary.label
-                    : 'DB プレビュー'}
+                    : getMsg('DatabaseSection.tableLabel')}
               </h3>
               {selectedTableSummary && selectedTableSummary.description.length > 0 && (
                 <span className={styles.headerDesc}>{selectedTableSummary.description}</span>
               )}
               <span className={styles.headerMeta}>
                 {tableData.total_rows > 0
-                  ? `${String(rangeStart)}～${String(rangeEnd)} / 全 ${String(tableData.total_rows)} 件`
-                  : '0 件'}
+                  ? getMsg('DatabaseSection.rowRange', { start: String(rangeStart), end: String(rangeEnd), total: String(tableData.total_rows) })
+                  : getMsg('DatabaseSection.emptyRange')}
               </span>
             </div>
             {tableData.total_rows > 0 && (
               <div className={styles.pagination}>
                 <button type="button" className={shared.btn} onClick={() => {
                     onGoToPage(currentPage - 1);
-                  }} disabled={isDbLoading || currentPage === 0} aria-label="前のページ">
+                  }} disabled={isDbLoading || currentPage === 0} aria-label={getMsg('DatabaseSection.previousPage')}>
                   ←
                 </button>
                 <span className={styles.paginationInfo}>
@@ -104,7 +105,7 @@ export function DatabaseSection({ dbTables, currentTable, tableData, isDbLoading
                 </span>
                 <button type="button" className={shared.btn} onClick={() => {
                     onGoToPage(currentPage + 1);
-                  }} disabled={isDbLoading || currentPage >= totalPages - 1} aria-label="次のページ">
+                  }} disabled={isDbLoading || currentPage >= totalPages - 1} aria-label={getMsg('DatabaseSection.nextPage')}>
                   →
                 </button>
               </div>
@@ -112,7 +113,7 @@ export function DatabaseSection({ dbTables, currentTable, tableData, isDbLoading
           </div>
 
           <div className={styles.tableWrap}>
-            {isDbLoading && <div className={styles.loadingState}>読み込み中...</div>}
+            {isDbLoading && <div className={styles.loadingState}>{getMsg('common.loadingAscii')}</div>}
 
             {!isDbLoading && (
               <table className={styles.table}>
@@ -130,7 +131,7 @@ export function DatabaseSection({ dbTables, currentTable, tableData, isDbLoading
                           }>
                           <button type="button" className={styles.sortButton} onClick={() => {
                               onToggleSort(column.name);
-                            }} aria-label={`${column.label}で並べ替え`}>
+                            }} aria-label={getMsg('DatabaseSection.sortColumn', { label: column.label })}>
                             <span className={styles.columnLabel}>
                               {column.label}
                               <span aria-hidden="true" className={`${styles.sortArrow} ${isSorted ? styles.sortArrowActive : ''}`}>
@@ -146,12 +147,12 @@ export function DatabaseSection({ dbTables, currentTable, tableData, isDbLoading
                 <tbody>
                   {tableData.columns.length === 0 && (
                     <tr>
-                      <td colSpan={1} className={styles.empty}>テーブルを選択してください</td>
+                      <td colSpan={1} className={styles.empty}>{getMsg('DatabaseSection.selectTable')}</td>
                     </tr>
                   )}
                   {tableData.columns.length > 0 && tableData.rows.length === 0 && (
                     <tr>
-                      <td colSpan={tableData.columns.length} className={styles.empty}>データが存在しません</td>
+                      <td colSpan={tableData.columns.length} className={styles.empty}>{getMsg('DatabaseSection.noData')}</td>
                     </tr>
                   )}
                   {tableData.rows.map((row, rowIndex) => (

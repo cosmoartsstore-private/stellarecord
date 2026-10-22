@@ -7,8 +7,8 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::io::{ BufRead, BufReader, Read };
-use std::path::{ Path, PathBuf };
+use std::io::{BufRead, BufReader, Read};
+use std::path::{Path, PathBuf};
 
 use chrono::NaiveDateTime;
 use tauri::AppHandle;
@@ -16,11 +16,11 @@ use tauri::Emitter;
 
 use crate::analyze;
 use crate::config;
-use crate::models::{ ArchiveFileItem, DeletableLogInfo, LogViewerChunk, LogViewerMeta };
+use crate::models::{ArchiveFileItem, DeletableLogInfo, LogViewerChunk, LogViewerMeta};
 use crate::platform;
 use crate::utils;
 
-use super::{ get_archive_store_dir, get_db_path, get_source_log_dir };
+use super::{get_archive_store_dir, get_db_path, get_source_log_dir};
 
 /// 外部フォルダ閲覧で受け入れるログ拡張子。
 const EXTERNAL_LOG_EXTENSIONS: &[&str] = &[".txt", ".tar.zst"];
@@ -44,11 +44,11 @@ fn matches_source_log_file_name(file_name: &str) -> bool {
 ///
 /// IPC 引数はFrontendの一覧選択経由が通常だが、コマンド境界では
 /// 文字列を信用せず、単一ファイル名だけを許可して archive dir 外への脱出を防ぐ。
-pub(crate) fn resolve_managed_archive_path(archive_store_dir: &Path, file_name: &str,) -> Result<PathBuf, String> {
+pub(crate) fn resolve_managed_archive_path(archive_store_dir: &Path, file_name: &str) -> Result<PathBuf, String> {
     if matches_managed_archive_name(file_name) {
         Ok(archive_store_dir.join(file_name))
     } else {
-        Err(format!("不正なアーカイブファイル名です: {file_name}"))
+        Err(format!(message!("Commands.Archive.resolveManagedArchivePath.archiveFileInvalid"), file_name = file_name))
     }
 }
 
@@ -60,7 +60,7 @@ fn open_source_log_for_read(path: &Path) -> Result<fs::File, String> {
     #[cfg(windows)]
     {
         use std::os::windows::fs::OpenOptionsExt;
-        use windows::Win32::Storage::FileSystem::{ FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, };
+        use windows::Win32::Storage::FileSystem::{FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE};
 
         fs::OpenOptions::new().read(true).share_mode(FILE_SHARE_READ.0 | FILE_SHARE_WRITE.0 | FILE_SHARE_DELETE.0).open(path).map_err(|err| utils::command_open_err(path, err))
     }
@@ -71,22 +71,21 @@ fn open_source_log_for_read(path: &Path) -> Result<fs::File, String> {
     }
 }
 
-
 /// 開かれた出力ファイルへ単一ログを圧縮し、エンコーダーとファイルを明示的に確定する。
 ///
 /// `auto_finish` の Drop 時エラーを捨てず、zstd 終端と OS バッファの同期に成功した
 /// ファイルだけを最終アーカイブ名へ昇格できるようにする。
 fn compress_single_file_to_output(src: &Path, output: fs::File) -> Result<(), String> {
-    let mut encoder = zstd::stream::Encoder::new(output, 3).map_err(|err| utils::command_err("zstd エンコーダーを初期化できませんでした", err))?;
-    let file_name = src.file_name().ok_or_else(|| format!("ファイル名を解決できませんでした [{}]", src.display()))?;
+    let mut encoder = zstd::stream::Encoder::new(output, 3).map_err(|err| utils::command_err(message!("Commands.Archive.compressSingleFileToOutput.zstdFailed"), err))?;
+    let file_name = src.file_name().ok_or_else(|| format!(message!("Commands.Archive.compressSingleFileToOutput.fileFailed"), src.display()))?;
     let mut input = open_source_log_for_read(src)?;
     {
         let mut tar = tar::Builder::new(&mut encoder);
-        tar.append_file(file_name, &mut input).map_err(|err| utils::command_err("tar アーカイブへ追加できませんでした", err))?;
-        tar.finish().map_err(|err| utils::command_err("tar アーカイブを確定できませんでした", err))?;
+        tar.append_file(file_name, &mut input).map_err(|err| utils::command_err(message!("Commands.Archive.compressSingleFileToOutput.tarArchiveFailed"), err))?;
+        tar.finish().map_err(|err| utils::command_err(message!("Commands.Archive.compressSingleFileToOutput.tarArchiveCommitFailed"), err))?;
     }
-    let output = encoder.finish().map_err(|err| utils::command_err("zstd アーカイブを確定できませんでした", err))?;
-    output.sync_all().map_err(|err| utils::command_err("アーカイブをディスクへ同期できませんでした", err))?;
+    let output = encoder.finish().map_err(|err| utils::command_err(message!("Commands.Archive.compressSingleFileToOutput.zstdArchiveCommitFailed"), err))?;
+    output.sync_all().map_err(|err| utils::command_err(message!("Commands.Archive.compressSingleFileToOutput.archiveSynchronizeFailed"), err))?;
     Ok(())
 }
 
@@ -105,7 +104,7 @@ fn collect_source_logs(source_dir: &Path) -> Result<Vec<PathBuf>, String> {
         let entry = match entry {
             Ok(entry) => entry,
             Err(err) => {
-                utils::log_warn(&format!("Polaris 元ログ内の項目を読み取れませんでした: {err}"));
+                utils::log_warn(&format!(message!("Commands.Archive.collectSourceLogs.logReadFailed"), err = err));
                 continue;
             }
         };
@@ -154,7 +153,7 @@ fn fill_buf(reader: &mut impl Read, buf: &mut [u8]) -> std::io::Result<usize> {
 ///
 /// `reader_a` を EOF まで読み、同量のバイトを `reader_b` から読んで一致を確認する。
 /// `reader_a` の全バイトが `reader_b` の先頭と一致すれば `Ok(true)` を返す。
-fn streaming_prefix_equal(reader_a: &mut impl Read, reader_b: &mut impl Read,) -> std::io::Result<bool> {
+fn streaming_prefix_equal(reader_a: &mut impl Read, reader_b: &mut impl Read) -> std::io::Result<bool> {
     const CHUNK: usize = 64 * 1024;
     let mut buf_a = vec![0u8; CHUNK];
     let mut buf_b = vec![0u8; CHUNK];
@@ -175,37 +174,37 @@ fn streaming_prefix_equal(reader_a: &mut impl Read, reader_b: &mut impl Read,) -
 /// 既存アーカイブはソースログがアーカイブ済みバイト列を厳密に拡張している
 /// 場合のみ置き換える。ログの先頭が書き換わっている場合はデータ破損の
 /// 可能性があるため安全側に倒してスキップし、警告をログに記録する。
-fn build_archive_sync_plan(source_path: &Path, archive_store_dir: &Path,) -> Result<Option<ArchiveSyncPlan>, String> {
-    let file_name = source_path.file_name().and_then(|name| name.to_str()).ok_or_else(|| { format!("ファイル名を解決できませんでした [{}]", source_path.display()) })?;
+fn build_archive_sync_plan(source_path: &Path, archive_store_dir: &Path) -> Result<Option<ArchiveSyncPlan>, String> {
+    let file_name = source_path.file_name().and_then(|name| name.to_str()).ok_or_else(|| format!(message!("Commands.Archive.buildArchiveSyncPlan.fileFailed"), source_path.display()))?;
     let archive_path = archive_store_dir.join(format!("{file_name}.tar.zst"));
     if !archive_path.exists() {
-        return Ok(Some(ArchiveSyncPlan { source_path: source_path.to_path_buf(), archive_path, mode: ArchiveSyncMode::Create, }));
+        return Ok(Some(ArchiveSyncPlan { source_path: source_path.to_path_buf(), archive_path, mode: ArchiveSyncMode::Create }));
     }
 
     // アーカイブエントリのサイズを tar ヘッダーから取得し、ソースファイルサイズと比較する。
     // 全内容をメモリに読み込まず、ストリーミングでバイト比較を行う。
     let archive_file = fs::File::open(&archive_path).map_err(|err| utils::command_open_err(&archive_path, err))?;
-    let decoder = zstd::stream::Decoder::new(archive_file).map_err(|err| utils::command_err("zstd デコーダーを初期化できませんでした", err))?;
+    let decoder = zstd::stream::Decoder::new(archive_file).map_err(|err| utils::command_err(message!("Commands.Archive.buildArchiveSyncPlan.zstdFailed"), err))?;
     let mut archive = tar::Archive::new(decoder);
-    let mut entries = archive.entries().map_err(|err| utils::command_err("zst エントリ一覧を取得できませんでした", err))?;
+    let mut entries = archive.entries().map_err(|err| utils::command_err(message!("Commands.Archive.buildArchiveSyncPlan.zstdEntryEntryListReadFailed"), err))?;
     let Some(entry_result) = entries.next() else {
-        return Err(format!("アーカイブ内にログファイルがありません: {}", archive_path.display()));
+        return Err(format!(message!("Commands.Archive.buildArchiveSyncPlan.archiveLogFileMissing"), archive_path.display()));
     };
-    let mut entry = entry_result.map_err(|err| utils::command_err("zst エントリを読み取れませんでした", err))?;
-    let archived_size = entry.header().size().map_err(|err| { utils::command_err("アーカイブエントリのサイズを取得できませんでした", err) })?;
+    let mut entry = entry_result.map_err(|err| utils::command_err(message!("Commands.Archive.buildArchiveSyncPlan.zstdEntryReadFailed"), err))?;
+    let archived_size = entry.header().size().map_err(|err| utils::command_err(message!("Commands.Archive.buildArchiveSyncPlan.archiveEntryReadFailed"), err))?;
 
     let mut source_file = open_source_log_for_read(source_path)?;
     let source_size = source_file.metadata().map_err(|err| utils::command_read_err(source_path, err))?.len();
 
     if source_size < archived_size {
-        utils::log_warn(&format!("Data の zst を更新しません。元ログが既存アーカイブより小さいためです [{file_name}]"));
+        utils::log_warn(&format!(message!("Commands.Archive.buildArchiveSyncPlan.zstdLogArchiveUpdateFailed"), file_name = file_name));
         return Ok(None);
     }
 
     if source_size == archived_size {
         let equal = streaming_prefix_equal(&mut entry, &mut source_file).map_err(|err| utils::command_read_err(source_path, err))?;
         if !equal {
-            utils::log_warn(&format!("Data の zst を更新しません。同サイズですが内容が異なります [{file_name}]"));
+            utils::log_warn(&format!(message!("Commands.Archive.buildArchiveSyncPlan.zstdUpdateFailed"), file_name = file_name));
         }
         return Ok(None);
     }
@@ -213,11 +212,11 @@ fn build_archive_sync_plan(source_path: &Path, archive_store_dir: &Path,) -> Res
     // source_size > archived_size: ソースがアーカイブ済み内容を厳密に拡張しているか確認
     let extends = streaming_prefix_equal(&mut entry, &mut source_file).map_err(|err| utils::command_read_err(source_path, err))?;
     if !extends {
-        utils::log_warn(&format!("Data の zst を更新しません。元ログが既存アーカイブを素直に拡張していません [{file_name}]"));
+        utils::log_warn(&format!(message!("Commands.Archive.buildArchiveSyncPlan.archiveNotExtended"), file_name = file_name));
         return Ok(None);
     }
 
-    Ok(Some(ArchiveSyncPlan { source_path: source_path.to_path_buf(), archive_path, mode: ArchiveSyncMode::Replace, }))
+    Ok(Some(ArchiveSyncPlan { source_path: source_path.to_path_buf(), archive_path, mode: ArchiveSyncMode::Replace }))
 }
 
 /// ソースログの現在内容が管理アーカイブ内のログと完全に一致するか確認する。
@@ -229,22 +228,22 @@ fn is_source_log_exactly_archived(source_path: &Path, archive_path: &Path) -> Re
         return Ok(false);
     }
 
-    let source_name = source_path.file_name().and_then(|name| name.to_str()).ok_or_else(|| { format!("ファイル名を解決できませんでした [{}]", source_path.display()) })?;
+    let source_name = source_path.file_name().and_then(|name| name.to_str()).ok_or_else(|| format!(message!("Commands.Archive.isSourceLogExactlyArchived.fileFailed"), source_path.display()))?;
     let archived_name = read_archive_source_name(archive_path)?;
     if archived_name != source_name {
-        utils::log_warn(&format!("元ログ削除候補から除外します。アーカイブ内のファイル名が一致しません [{source_name} != {archived_name}]"));
+        utils::log_warn(&format!(message!("Commands.Archive.isSourceLogExactlyArchived.logArchiveFileDeleteFailed"), archived_name = archived_name, source_name = source_name));
         return Ok(false);
     }
 
     let archive_file = fs::File::open(archive_path).map_err(|err| utils::command_open_err(archive_path, err))?;
-    let decoder = zstd::stream::Decoder::new(archive_file).map_err(|err| utils::command_err("zstd デコーダーを初期化できませんでした", err))?;
+    let decoder = zstd::stream::Decoder::new(archive_file).map_err(|err| utils::command_err(message!("Commands.Archive.isSourceLogExactlyArchived.zstdFailed"), err))?;
     let mut archive = tar::Archive::new(decoder);
-    let mut entries = archive.entries().map_err(|err| utils::command_err("zst エントリ一覧を取得できませんでした", err))?;
+    let mut entries = archive.entries().map_err(|err| utils::command_err(message!("Commands.Archive.isSourceLogExactlyArchived.zstdEntryEntryListReadFailed"), err))?;
     let Some(entry_result) = entries.next() else {
         return Ok(false);
     };
-    let mut entry = entry_result.map_err(|err| utils::command_err("zst エントリを読み取れませんでした", err))?;
-    let archived_size = entry.header().size().map_err(|err| { utils::command_err("アーカイブエントリのサイズを取得できませんでした", err) })?;
+    let mut entry = entry_result.map_err(|err| utils::command_err(message!("Commands.Archive.isSourceLogExactlyArchived.zstdEntryReadFailed"), err))?;
+    let archived_size = entry.header().size().map_err(|err| utils::command_err(message!("Commands.Archive.isSourceLogExactlyArchived.archiveEntryReadFailed"), err))?;
 
     let mut source_file = open_source_log_for_read(source_path)?;
     let source_size = source_file.metadata().map_err(|err| utils::command_read_err(source_path, err))?.len();
@@ -263,7 +262,7 @@ fn is_source_log_exactly_archived(source_path: &Path, archive_path: &Path) -> Re
 ///
 /// # 戻り値
 /// 新規または安全に置き換え可能なログのアーカイブ同期計画（順序付き）。
-pub(crate) fn collect_pending_archive_sync_plans(source_dir: &Path, archive_store_dir: &Path,) -> Result<Vec<ArchiveSyncPlan>, String> {
+pub(crate) fn collect_pending_archive_sync_plans(source_dir: &Path, archive_store_dir: &Path) -> Result<Vec<ArchiveSyncPlan>, String> {
     let mut plans = Vec::new();
     for source_path in collect_source_logs(source_dir)? {
         if let Some(plan) = build_archive_sync_plan(&source_path, archive_store_dir)? {
@@ -282,7 +281,7 @@ fn collect_directory_size(path: &Path) -> Result<u64, String> {
     let mut stack = vec![path.to_path_buf()];
 
     while let Some(current) = stack.pop() {
-        let metadata = fs::metadata(&current).map_err(|err| { utils::command_err(&format!("メタデータを取得できませんでした [{}]", current.display()), err,) })?;
+        let metadata = fs::metadata(&current).map_err(|err| utils::command_err(&format!(message!("Commands.Archive.collectDirectorySize.readFailed"), current.display()), err))?;
 
         if metadata.is_file() {
             total += metadata.len();
@@ -295,7 +294,7 @@ fn collect_directory_size(path: &Path) -> Result<u64, String> {
             let entry = match entry {
                 Ok(entry) => entry,
                 Err(err) => {
-                    utils::log_warn(&format!("ストレージ項目を読み取れませんでした: {err}"));
+                    utils::log_warn(&format!(message!("Commands.Archive.collectDirectorySize.storageEntryReadFailed"), err = err));
                     continue;
                 }
             };
@@ -317,17 +316,17 @@ fn replace_file_atomically(temp_path: &Path, target_path: &Path) -> Result<(), S
         fs::remove_file(&backup_path).map_err(|err| utils::command_remove_err(&backup_path, err))?;
     }
 
-    fs::rename(target_path, &backup_path).map_err(|err| { utils::command_err(&format!("バックアップへ退避できませんでした [{}]", target_path.display()), err,) })?;
+    fs::rename(target_path, &backup_path).map_err(|err| utils::command_err(&format!(message!("Commands.Archive.replaceFileAtomically.backupFailed"), target_path.display()), err))?;
 
     if let Err(err) = fs::rename(temp_path, target_path) {
         if let Err(restore_err) = fs::rename(&backup_path, target_path) {
-            utils::log_warn(&format!("バックアップの復元に失敗しました [{} -> {}]: {}", backup_path.display(), target_path.display(), restore_err));
+            utils::log_warn(&format!(message!("Commands.Archive.replaceFileAtomically.backupRestoreFailed"), backup_path.display(), target_path.display(), restore_err));
         }
-        return Err(utils::command_err(&format!("置き換えに失敗しました [{}]", target_path.display()), err,));
+        return Err(utils::command_err(&format!(message!("Commands.Archive.replaceFileAtomically.failed"), target_path.display()), err));
     }
 
     if let Err(err) = fs::remove_file(&backup_path) {
-        utils::log_warn(&format!("バックアップの削除に失敗しましたが、アーカイブの置き換えは成功しています [{}]: {}", backup_path.display(), err));
+        utils::log_warn(&format!(message!("Commands.Archive.replaceFileAtomically.backupArchiveDeleteFailed"), backup_path.display(), err));
     }
     Ok(())
 }
@@ -336,9 +335,9 @@ fn replace_file_atomically(temp_path: &Path, target_path: &Path) -> Result<(), S
 ///
 /// 新規作成でも最終パスへ直接書かない。圧縮・同期・リネームのいずれかが失敗した
 /// 場合は `TempPath` が一時ファイルを除去し、最終名に部分ファイルを残さない。
-fn write_archive_safely(source_path: &Path, target_path: &Path, mode: ArchiveSyncMode,) -> Result<(), String> {
+fn write_archive_safely(source_path: &Path, target_path: &Path, mode: ArchiveSyncMode) -> Result<(), String> {
     let parent = target_path.parent().unwrap_or_else(|| Path::new("."));
-    let target_name = target_path.file_name().and_then(|name| name.to_str()).ok_or_else(|| { format!("アーカイブファイル名を解決できませんでした [{}]", target_path.display()) })?;
+    let target_name = target_path.file_name().and_then(|name| name.to_str()).ok_or_else(|| format!(message!("Commands.Archive.writeArchiveSafely.archiveFileFailed"), target_path.display()))?;
     let staged = tempfile::Builder::new().prefix(&format!(".{target_name}.")).suffix(".tmp").tempfile_in(parent).map_err(|err| utils::command_create_err(parent, err))?;
     let (output, temp_path) = staged.into_parts();
     let temp_path_buf = temp_path.to_path_buf();
@@ -347,7 +346,7 @@ fn write_archive_safely(source_path: &Path, target_path: &Path, mode: ArchiveSyn
 
     match mode {
         ArchiveSyncMode::Create => {
-            fs::rename(&temp_path_buf, target_path).map_err(|err| { utils::command_err(&format!("新規アーカイブを最終名へ移動できませんでした [{}]", target_path.display()), err,) })?;
+            fs::rename(&temp_path_buf, target_path).map_err(|err| utils::command_err(&format!(message!("Commands.Archive.writeArchiveSafely.archiveFailed"), target_path.display()), err))?;
         }
         ArchiveSyncMode::Replace => {
             replace_file_atomically(&temp_path_buf, target_path)?;
@@ -363,7 +362,7 @@ fn write_archive_safely(source_path: &Path, target_path: &Path, mode: ArchiveSyn
 ///
 /// 元ログは削除もリネームもしない。`StellaRecord` は自身の `.tar.zst`
 /// コピーの作成またはアトミック置き換えのみ行う。
-pub(crate) fn sync_source_logs_into_archive_store(source_dir: &Path, archive_store_dir: &Path,) -> Result<usize, String> {
+pub(crate) fn sync_source_logs_into_archive_store(source_dir: &Path, archive_store_dir: &Path) -> Result<usize, String> {
     fs::create_dir_all(archive_store_dir).map_err(|err| utils::command_create_err(archive_store_dir, err))?;
 
     let plans = collect_pending_archive_sync_plans(source_dir, archive_store_dir)?;
@@ -410,15 +409,15 @@ fn encode_log_category_u8(category: &str) -> u8 {
 /// アーカイブ内容は展開せず、ヘッダーのみ読み取る。
 fn read_archive_source_name(archive_path: &Path) -> Result<String, String> {
     let file = fs::File::open(archive_path).map_err(|err| utils::command_open_err(archive_path, err))?;
-    let decoder = zstd::stream::Decoder::new(file).map_err(|err| utils::command_err("zstd デコーダーを初期化できませんでした", err))?;
+    let decoder = zstd::stream::Decoder::new(file).map_err(|err| utils::command_err(message!("Commands.Archive.readArchiveSourceName.zstdFailed"), err))?;
     let mut archive = tar::Archive::new(decoder);
-    let mut entries = archive.entries().map_err(|err| utils::command_err("zst エントリ一覧を取得できませんでした", err))?;
+    let mut entries = archive.entries().map_err(|err| utils::command_err(message!("Commands.Archive.readArchiveSourceName.zstdEntryEntryListReadFailed"), err))?;
     let Some(entry) = entries.next() else {
-        return Err(format!("アーカイブ内にログファイルがありません: {}", archive_path.display()));
+        return Err(format!(message!("Commands.Archive.readArchiveSourceName.archiveLogFileMissing"), archive_path.display()));
     };
-    let entry = entry.map_err(|err| utils::command_err("zst エントリを読み取れませんでした", err))?;
-    let entry_path = entry.path().map_err(|err| utils::command_err("zst エントリパスを解決できませんでした", err))?;
-    entry_path.file_name().and_then(|value| value.to_str()).ok_or_else(|| "アーカイブ内のファイル名を解決できませんでした".to_string()).map(str::to_string)
+    let entry = entry.map_err(|err| utils::command_err(message!("Commands.Archive.readArchiveSourceName.zstdEntryReadFailed"), err))?;
+    let entry_path = entry.path().map_err(|err| utils::command_err(message!("Commands.Archive.readArchiveSourceName.zstdEntryPathFailed"), err))?;
+    entry_path.file_name().and_then(|value| value.to_str()).ok_or_else(|| message!("Commands.Archive.readArchiveSourceName.archiveFileFailed").to_string()).map(str::to_string)
 }
 
 /// DB 内容から導出されたログビューアのハイライト文字列。
@@ -458,7 +457,7 @@ fn classify_log_level(line: &str) -> &'static str {
 ///
 /// ビューアカテゴリごとに1つの SQL ブロックを意図的に維持し、
 /// 格納データとハイライト対象ログ行の関係を監査しやすくする。
-fn collect_db_log_categories(conn: &rusqlite::Connection, source_name: &str,) -> Result<HashMap<String, Vec<String>>, String> {
+fn collect_db_log_categories(conn: &rusqlite::Connection, source_name: &str) -> Result<HashMap<String, Vec<String>>, String> {
     let mut categories: HashMap<String, Vec<String>> = HashMap::new();
 
     // DB に格納済みのカテゴリだけを収集する。
@@ -489,9 +488,9 @@ fn collect_db_log_categories(conn: &rusqlite::Connection, source_name: &str,) ->
          WHERE session_id IN (SELECT id FROM sessions WHERE log_name = ?1)
     ";
 
-    let mut stmt = conn.prepare(sql).map_err(|err| { utils::command_err("ログビューア用カテゴリクエリを準備できませんでした", err) })?;
+    let mut stmt = conn.prepare(sql).map_err(|err| utils::command_err(message!("Commands.Archive.collectDbLogCategories.logPrepareFailed"), err))?;
 
-    let rows = stmt.query_map([source_name], |row| { Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)) }).map_err(|err| { utils::command_err("ログビューア用カテゴリクエリを実行できませんでした", err) })?;
+    let rows = stmt.query_map([source_name], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))).map_err(|err| utils::command_err(message!("Commands.Archive.collectDbLogCategories.logFailed"), err))?;
 
     for row in rows {
         match row {
@@ -499,7 +498,7 @@ fn collect_db_log_categories(conn: &rusqlite::Connection, source_name: &str,) ->
                 categories.entry(timestamp).or_default().push(category);
             }
             Err(err) => {
-                utils::log_warn(&format!("ログビューア行をデコードできませんでした: {err}"));
+                utils::log_warn(&format!(message!("Commands.Archive.collectDbLogCategories.logViewerRowDecodeFailed"), err = err));
             }
         }
     }
@@ -512,7 +511,7 @@ fn collect_db_log_categories(conn: &rusqlite::Connection, source_name: &str,) ->
 /// マーカーは最長優先でソートし、行に複数の候補文字列が含まれる場合
 /// （例: ワールド名の部分文字列であるプレイヤー名）に最も具体的なマッチが
 /// 優先されるようにする。
-fn collect_db_keyword_markers(conn: &rusqlite::Connection, source_name: &str,) -> Result<Vec<DbKeywordMarker>, String> {
+fn collect_db_keyword_markers(conn: &rusqlite::Connection, source_name: &str) -> Result<Vec<DbKeywordMarker>, String> {
     let mut markers = Vec::new();
 
     let sql = "
@@ -540,24 +539,24 @@ fn collect_db_keyword_markers(conn: &rusqlite::Connection, source_name: &str,) -
            AND sender_name IS NOT NULL AND trim(sender_name) <> ''
     ";
 
-    let mut stmt = conn.prepare(sql).map_err(|err| utils::command_err("キーワード抽出クエリを準備できませんでした", err))?;
+    let mut stmt = conn.prepare(sql).map_err(|err| utils::command_err(message!("Commands.Archive.collectDbKeywordMarkers.prepareFailed"), err))?;
 
-    let rows = stmt.query_map([source_name], |row| row.get::<_, String>(0)).map_err(|err| utils::command_err("キーワード抽出クエリを実行できませんでした", err))?;
+    let rows = stmt.query_map([source_name], |row| row.get::<_, String>(0)).map_err(|err| utils::command_err(message!("Commands.Archive.collectDbKeywordMarkers.failed"), err))?;
 
     for row in rows {
         match row {
             Ok(text) => {
                 let trimmed = text.trim();
                 if trimmed.len() >= 2 {
-                    markers.push(DbKeywordMarker { text: trimmed.to_string(), });
+                    markers.push(DbKeywordMarker { text: trimmed.to_string() });
                 }
             }
-            Err(err) => utils::log_warn(&format!("ログビューア用キーワードをデコードできませんでした: {err}")),
+            Err(err) => utils::log_warn(&format!(message!("Commands.Archive.collectDbKeywordMarkers.logFailed"), err = err)),
         }
     }
 
     // 最長優先ソートにより、行スキャン時に最も具体的なキーワードが優先される。
-    markers.sort_by(|left, right| { right.text.len().cmp(&left.text.len()).then_with(|| left.text.cmp(&right.text)) });
+    markers.sort_by(|left, right| right.text.len().cmp(&left.text.len()).then_with(|| left.text.cmp(&right.text)));
     markers.dedup_by(|left, right| left.text == right.text);
     Ok(markers)
 }
@@ -567,7 +566,7 @@ fn collect_db_keyword_markers(conn: &rusqlite::Connection, source_name: &str,) -
 /// DB タイムスタンプが権威で、同一秒に複数カテゴリがある場合は行内容で
 /// タイブレークする。`player_ready` は DB に直接列を持たないが、訪問への
 /// 参加完了として `player_join` の派生扱いにする。
-fn resolve_db_category(line: &str, timestamp: &str, db_categories: &HashMap<String, Vec<String>>,) -> Option<String> {
+fn resolve_db_category(line: &str, timestamp: &str, db_categories: &HashMap<String, Vec<String>>) -> Option<String> {
     let matched = db_categories.get(timestamp)?;
 
     if analyze::RE_PLAYER_JOIN_COMPLETE.is_match(line) {
@@ -596,7 +595,7 @@ fn resolve_db_category(line: &str, timestamp: &str, db_categories: &HashMap<Stri
 }
 
 /// 生ログ行に含まれる最初のキーワードマーカーを検索する。
-fn resolve_db_keyword_marker<'a>(line: &str, db_keyword_markers: &'a [DbKeywordMarker],) -> Option<&'a DbKeywordMarker> {
+fn resolve_db_keyword_marker<'a>(line: &str, db_keyword_markers: &'a [DbKeywordMarker]) -> Option<&'a DbKeywordMarker> {
     db_keyword_markers.iter().find(|marker| line.contains(marker.text.as_str()))
 }
 
@@ -629,10 +628,10 @@ fn classify_text_category(line: &str) -> Option<&'static str> {
 ///
 /// 範囲分類を最優先し、次に DB の同一時刻候補と行構造が一致するカテゴリを採用する。
 /// DB 候補が行構造と矛盾する場合はテキスト判定へ戻し、キーワード一致は分類に使わない。
-fn resolve_viewer_category(line: &str, timestamp: &str, active_range_category: Option<&str>, db_categories: Option<&HashMap<String, Vec<String>>>,) -> String {
+fn resolve_viewer_category(line: &str, timestamp: &str, active_range_category: Option<&str>, db_categories: Option<&HashMap<String, Vec<String>>>) -> String {
     active_range_category
         .map(str::to_string)
-        .or_else(|| { db_categories.and_then(|categories| resolve_db_category(line, timestamp, categories)) })
+        .or_else(|| db_categories.and_then(|categories| resolve_db_category(line, timestamp, categories)))
         .or_else(|| classify_text_category(line).map(str::to_string))
         .unwrap_or_else(|| "plain".to_string())
 }
@@ -671,10 +670,10 @@ const DEBUG_SYSTEM_BLOCK_MAX_LINES: usize = 2000;
 /// 行が新しい範囲ブロックを開始するなら、その種類とカテゴリを返す。
 fn detect_range_block_start(line: &str) -> Option<RangeBlock> {
     if line.contains("[UserInfoLogger] Environment Info:") || line.contains("[UserInfoLogger] User Settings Info:") || line.contains("Microphones installed (") {
-        return Some(RangeBlock { kind: RangeBlockKind::DebugSystem, category: "debug-system", span_lines: 0, });
+        return Some(RangeBlock { kind: RangeBlockKind::DebugSystem, category: "debug-system", span_lines: 0 });
     }
     if line.contains("Received Notification: <Notification") && !line.contains('>') {
-        return Some(RangeBlock { kind: RangeBlockKind::Notification, category: "notification", span_lines: 0, });
+        return Some(RangeBlock { kind: RangeBlockKind::Notification, category: "notification", span_lines: 0 });
     }
     None
 }
@@ -689,7 +688,7 @@ fn detect_range_block_start(line: &str) -> Option<RangeBlock> {
 /// レコード（UserInfo ブロック、複数行通知、動画ロードシーケンス）は
 /// 範囲全体に同一カテゴリを付与し、フィルタチップで一括選択できるようにする。
 #[allow(clippy::too_many_lines)]
-fn emit_log_viewer_chunks(mut reader: impl BufRead, session_id: String, db_categories: Option<HashMap<String, Vec<String>>>, db_keyword_markers: Option<Vec<DbKeywordMarker>>, app: AppHandle,) {
+fn emit_log_viewer_chunks(mut reader: impl BufRead, session_id: String, db_categories: Option<HashMap<String, Vec<String>>>, db_keyword_markers: Option<Vec<DbKeywordMarker>>, app: AppHandle) {
     // 1イベントあたり500行で IPC オーバーヘッドを抑えつつ UI への更新を途絶えさせない。
     const CHUNK_SIZE: usize = 500;
 
@@ -702,7 +701,7 @@ fn emit_log_viewer_chunks(mut reader: impl BufRead, session_id: String, db_categ
     let flush = |ts: &mut Vec<String>, lv: &mut Vec<u8>, cat: &mut Vec<u8>, rl: &mut Vec<String>, hl: &mut Vec<Option<String>>, sid: &str, app: &AppHandle| -> bool {
         app.emit(
             "log_viewer_chunk",
-            &LogViewerChunk { session_id: sid.to_string(), timestamps: std::mem::take(ts), levels: std::mem::take(lv), categories: std::mem::take(cat), raw_lines: std::mem::take(rl), highlights: std::mem::take(hl), },
+            &LogViewerChunk { session_id: sid.to_string(), timestamps: std::mem::take(ts), levels: std::mem::take(lv), categories: std::mem::take(cat), raw_lines: std::mem::take(rl), highlights: std::mem::take(hl) },
         )
         .is_ok()
     };
@@ -715,7 +714,7 @@ fn emit_log_viewer_chunks(mut reader: impl BufRead, session_id: String, db_categ
             Ok(0) => break,
             Ok(_) => {}
             Err(err) => {
-                utils::log_warn(&format!("ログビューア行を読み取れませんでした: {err}"));
+                utils::log_warn(&format!(message!("Commands.Archive.emitLogViewerChunks.logReadFailed"), err = err));
                 break;
             }
         }
@@ -754,7 +753,7 @@ fn emit_log_viewer_chunks(mut reader: impl BufRead, session_id: String, db_categ
         }
 
         let timestamp =
-            analyze::RE_TIME.captures(&line).and_then(|caps| caps.get(1)).and_then(|m| { NaiveDateTime::parse_from_str(m.as_str(), "%Y.%m.%d %H:%M:%S").ok().map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string()) }).unwrap_or_default();
+            analyze::RE_TIME.captures(&line).and_then(|caps| caps.get(1)).and_then(|m| NaiveDateTime::parse_from_str(m.as_str(), "%Y.%m.%d %H:%M:%S").ok().map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())).unwrap_or_default();
 
         // 範囲ブロック内では debug-system 由来なら debug 固定。
         // Notification 範囲はタイムスタンプ付き行の本来のログレベルを尊重する。
@@ -768,7 +767,7 @@ fn emit_log_viewer_chunks(mut reader: impl BufRead, session_id: String, db_categ
         //   2. DB タイムスタンプ候補と行構造が一致するカテゴリ
         //   3. 行テキストからの分類（未取り込みの外部ログでもカテゴリ地色を付与）
         //   4. 上記いずれも該当しなければ "plain"
-        let category = resolve_viewer_category(&line, &timestamp, active_range.as_ref().map(|block| block.category), db_categories.as_ref(),);
+        let category = resolve_viewer_category(&line, &timestamp, active_range.as_ref().map(|block| block.category), db_categories.as_ref());
 
         // ハイライト（キーワード強調）は DB マーカーがマッチした場合のみ付与する。
         // カテゴリ地色は未取り込みログでも classify_text_category で付くが、ハイライトは
@@ -786,13 +785,13 @@ fn emit_log_viewer_chunks(mut reader: impl BufRead, session_id: String, db_categ
         raw_lines.push(line);
         highlights.push(highlight_text);
 
-        if raw_lines.len() >= CHUNK_SIZE && !flush(&mut timestamps, &mut levels, &mut categories, &mut raw_lines, &mut highlights, &session_id, &app,) {
+        if raw_lines.len() >= CHUNK_SIZE && !flush(&mut timestamps, &mut levels, &mut categories, &mut raw_lines, &mut highlights, &session_id, &app) {
             return;
         }
     }
 
     if !raw_lines.is_empty() {
-        flush(&mut timestamps, &mut levels, &mut categories, &mut raw_lines, &mut highlights, &session_id, &app,);
+        flush(&mut timestamps, &mut levels, &mut categories, &mut raw_lines, &mut highlights, &session_id, &app);
     }
 
     utils::emit_event_warn(&app, "log_viewer_done", session_id);
@@ -816,7 +815,7 @@ pub fn list_archive_files() -> Result<Vec<ArchiveFileItem>, String> {
         let entry = match entry {
             Ok(entry) => entry,
             Err(err) => {
-                utils::log_warn(&format!("archive 内の項目を読み取れませんでした: {err}"));
+                utils::log_warn(&format!(message!("Commands.Archive.listArchiveFiles.readFailed"), err = err));
                 continue;
             }
         };
@@ -827,11 +826,11 @@ pub fn list_archive_files() -> Result<Vec<ArchiveFileItem>, String> {
                 let size_bytes = match entry.metadata() {
                     Ok(metadata) => metadata.len(),
                     Err(err) => {
-                        utils::log_warn(&format!("archive メタデータを読み取れませんでした [{}]: {}", path.display(), err));
+                        utils::log_warn(&format!(message!("Commands.Archive.listArchiveFiles.archiveMetadataReadFailed"), path.display(), err));
                         0
                     }
                 };
-                files.push(ArchiveFileItem { name: name.to_string(), size_bytes, });
+                files.push(ArchiveFileItem { name: name.to_string(), size_bytes });
             }
         }
     }
@@ -846,75 +845,75 @@ pub fn list_archive_files() -> Result<Vec<ArchiveFileItem>, String> {
 /// 警告ログを出して `(None, None)` を返し、ビューアは正規表現ベースの分類に
 /// フォールバックする。
 #[allow(clippy::type_complexity)]
-fn build_db_hints(source_name: &str,) -> (Option<HashMap<String, Vec<String>>>, Option<Vec<DbKeywordMarker>>,) {
+fn build_db_hints(source_name: &str) -> (Option<HashMap<String, Vec<String>>>, Option<Vec<DbKeywordMarker>>) {
     match get_db_path() {
         Ok(db_path) if db_path.exists() => match rusqlite::Connection::open(&db_path) {
             Ok(conn) => {
                 let categories = match collect_db_log_categories(&conn, source_name) {
                     Ok(c) => Some(c),
                     Err(err) => {
-                        utils::log_warn(&format!("ログビューア用カテゴリを読み込めませんでした: {err}"));
+                        utils::log_warn(&format!(message!("Commands.Archive.buildDbHints.logFailed"), err = err));
                         None
                     }
                 };
                 let keyword_markers = match collect_db_keyword_markers(&conn, source_name) {
                     Ok(m) => Some(m),
                     Err(err) => {
-                        utils::log_warn(&format!("ログビューア用キーワードを読み込めませんでした: {err}"));
+                        utils::log_warn(&format!(message!("Commands.Archive.buildDbHints.logKeywordReadFailed"), err = err));
                         None
                     }
                 };
                 (categories, keyword_markers)
             }
             Err(err) => {
-                utils::log_warn(&format!("ログビューア用 DB を開けませんでした [{}]: {}", db_path.display(), err));
+                utils::log_warn(&format!(message!("Commands.Archive.buildDbHints.logDatabaseOpenFailed"), db_path.display(), err));
                 (None, None)
             }
         },
         Ok(_) => (None, None),
         Err(err) => {
-            utils::log_warn(&format!("ログビューア用 DB パスを解決できませんでした: {err}"));
+            utils::log_warn(&format!(message!("Commands.Archive.buildDbHints.logDatabasePathFailed"), err = err));
             (None, None)
         }
     }
 }
 
 /// 圧縮済み `.tar.zst` ログを別スレッドでストリーミングしてビューアイベントを送出する。
-fn spawn_compressed_log_stream(archive_path: PathBuf, session_id: String, db_categories: Option<HashMap<String, Vec<String>>>, db_keyword_markers: Option<Vec<DbKeywordMarker>>, app: AppHandle,) {
+fn spawn_compressed_log_stream(archive_path: PathBuf, session_id: String, db_categories: Option<HashMap<String, Vec<String>>>, db_keyword_markers: Option<Vec<DbKeywordMarker>>, app: AppHandle) {
     std::thread::spawn(move || {
         let app_fallback = app.clone();
         let sid_fallback = session_id.clone();
         let result: Result<(), String> = (|| {
             let file = fs::File::open(&archive_path).map_err(|err| utils::command_open_err(&archive_path, err))?;
-            let decoder = zstd::stream::Decoder::new(file).map_err(|err| { utils::command_err("zstd デコーダーを初期化できませんでした", err) })?;
+            let decoder = zstd::stream::Decoder::new(file).map_err(|err| utils::command_err(message!("Commands.Archive.spawnCompressedLogStream.zstdFailed"), err))?;
             let mut archive = tar::Archive::new(decoder);
-            let mut entries = archive.entries().map_err(|err| utils::command_err("zst エントリ一覧を取得できませんでした", err))?;
+            let mut entries = archive.entries().map_err(|err| utils::command_err(message!("Commands.Archive.spawnCompressedLogStream.zstdEntryEntryListReadFailed"), err))?;
             let Some(entry_result) = entries.next() else {
-                return Err(format!("アーカイブ内にログファイルがありません: {}", archive_path.display()));
+                return Err(format!(message!("Commands.Archive.spawnCompressedLogStream.archiveLogFileMissing"), archive_path.display()));
             };
-            let mut entry = entry_result.map_err(|err| utils::command_err("zst エントリを読み取れませんでした", err))?;
-            emit_log_viewer_chunks(BufReader::new(&mut entry), session_id, db_categories, db_keyword_markers, app,);
+            let mut entry = entry_result.map_err(|err| utils::command_err(message!("Commands.Archive.spawnCompressedLogStream.zstdEntryReadFailed"), err))?;
+            emit_log_viewer_chunks(BufReader::new(&mut entry), session_id, db_categories, db_keyword_markers, app);
             Ok(())
         })();
         if let Err(err) = result {
-            utils::log_warn(&format!("ログビューアストリーム失敗: {err}"));
+            utils::log_warn(&format!(message!("Commands.Archive.spawnCompressedLogStream.logFailed"), err = err));
             utils::emit_event_warn(&app_fallback, "log_viewer_done", sid_fallback);
         }
     });
 }
 
 /// プレーンテキスト `.txt` ログを別スレッドでストリーミングしてビューアイベントを送出する。
-fn spawn_plain_log_stream(log_path: PathBuf, session_id: String, db_categories: Option<HashMap<String, Vec<String>>>, db_keyword_markers: Option<Vec<DbKeywordMarker>>, app: AppHandle,) {
+fn spawn_plain_log_stream(log_path: PathBuf, session_id: String, db_categories: Option<HashMap<String, Vec<String>>>, db_keyword_markers: Option<Vec<DbKeywordMarker>>, app: AppHandle) {
     std::thread::spawn(move || {
         let app_fallback = app.clone();
         let sid_fallback = session_id.clone();
         let result: Result<(), String> = (|| {
             let file = open_source_log_for_read(&log_path)?;
-            emit_log_viewer_chunks(BufReader::new(file), session_id, db_categories, db_keyword_markers, app,);
+            emit_log_viewer_chunks(BufReader::new(file), session_id, db_categories, db_keyword_markers, app);
             Ok(())
         })();
         if let Err(err) = result {
-            utils::log_warn(&format!("ログビューアストリーム失敗: {err}"));
+            utils::log_warn(&format!(message!("Commands.Archive.spawnPlainLogStream.logFailed"), err = err));
             utils::emit_event_warn(&app_fallback, "log_viewer_done", sid_fallback);
         }
     });
@@ -928,10 +927,10 @@ fn spawn_plain_log_stream(log_path: PathBuf, session_id: String, db_categories: 
 /// # Errors
 /// アーカイブファイルが見つからない、またはデコードできない場合にエラーを返す。
 #[tauri::command]
-pub fn read_archive_log_viewer(file_name: String, session_id: String, app: AppHandle,) -> Result<LogViewerMeta, String> {
+pub fn read_archive_log_viewer(file_name: String, session_id: String, app: AppHandle) -> Result<LogViewerMeta, String> {
     let archive_path = resolve_managed_archive_path(&get_archive_store_dir()?, &file_name)?;
     if !archive_path.exists() {
-        return Err(format!("ファイルが見つかりません: {file_name}"));
+        return Err(format!(message!("Commands.Archive.readArchiveLogViewer.fileMissing"), file_name = file_name));
     }
 
     let source_name = read_archive_source_name(&archive_path)?;
@@ -939,9 +938,9 @@ pub fn read_archive_log_viewer(file_name: String, session_id: String, app: AppHa
 
     // セッション ID により、前回のストリームがまだ飛行中にユーザーが別ファイルに
     // 切り替えた場合、Frontendが古いチャンクイベントを破棄できる。
-    spawn_compressed_log_stream(archive_path, session_id.clone(), db_categories, db_keyword_markers, app,);
+    spawn_compressed_log_stream(archive_path, session_id.clone(), db_categories, db_keyword_markers, app);
 
-    Ok(LogViewerMeta { session_id, archive_name: file_name, source_name, })
+    Ok(LogViewerMeta { session_id, archive_name: file_name, source_name })
 }
 
 /// 現在のアーカイブdirectoryサイズと設定済み上限値を算出する。
@@ -964,7 +963,7 @@ pub fn get_storage_status() -> Result<(u64, u64), String> {
 /// フォルダを開けない場合にエラーを返す。
 #[tauri::command]
 pub fn open_folder(path: &str) -> Result<(), String> {
-    opener::open(path).map_err(|err| utils::command_err("フォルダを開けませんでした", err))
+    opener::open(path).map_err(|err| utils::command_err(message!("Commands.Archive.openFolder.directoryOpenFailed"), err))
 }
 
 /// `.tar.zst` 内のログと現在内容が一致し、安全に削除可能なソースログを一覧表示する。
@@ -976,7 +975,7 @@ pub fn get_deletable_source_logs() -> Result<Vec<DeletableLogInfo>, String> {
     let source_dir = get_source_log_dir()?;
     let archive_dir = get_archive_store_dir()?;
 
-    let entries = fs::read_dir(&source_dir).map_err(|err| format!("ソースログディレクトリの読み取りに失敗しました: {err}"))?;
+    let entries = fs::read_dir(&source_dir).map_err(|err| format!(message!("Commands.Archive.getDeletableSourceLogs.logDirectoryReadFailed"), err = err))?;
 
     let mut results: Vec<DeletableLogInfo> = entries
         .filter_map(|entry| {
@@ -992,7 +991,7 @@ pub fn get_deletable_source_logs() -> Result<Vec<DeletableLogInfo>, String> {
             let is_archived = match is_source_log_exactly_archived(&path, &archive_path) {
                 Ok(value) => value,
                 Err(err) => {
-                    utils::log_warn(&format!("元ログ削除候補の確認に失敗しました [{name}]: {err}"));
+                    utils::log_warn(&format!(message!("Commands.Archive.getDeletableSourceLogs.logVerifyFailed"), err = err, name = name));
                     false
                 }
             };
@@ -1000,7 +999,7 @@ pub fn get_deletable_source_logs() -> Result<Vec<DeletableLogInfo>, String> {
                 return None;
             }
             let size_bytes = path.metadata().map(|m| m.len()).unwrap_or(0);
-            Some(DeletableLogInfo { file_name: name, size_bytes, })
+            Some(DeletableLogInfo { file_name: name, size_bytes })
         })
         .collect();
 
@@ -1037,15 +1036,15 @@ pub fn pick_log_files() -> Result<Vec<String>, String> {
 /// # Errors
 /// ファイルパスが不正、ファイルが見つからない、または開けない場合にエラーを返す。
 #[tauri::command]
-pub fn read_external_log_viewer(file_path: String, session_id: String, app: AppHandle,) -> Result<LogViewerMeta, String> {
+pub fn read_external_log_viewer(file_path: String, session_id: String, app: AppHandle) -> Result<LogViewerMeta, String> {
     let log_path = PathBuf::from(&file_path);
-    let file_name = log_path.file_name().and_then(|n| n.to_str()).ok_or_else(|| "ファイル名を取得できません。".to_string())?.to_string();
+    let file_name = log_path.file_name().and_then(|n| n.to_str()).ok_or_else(|| message!("Commands.Archive.readExternalLogViewer.fileReadFailed").to_string())?.to_string();
 
     if !matches_external_log_format(&file_name) {
-        return Err(format!("対応していないログ形式です: {file_name}"));
+        return Err(format!(message!("Commands.Archive.readExternalLogViewer.logText"), file_name = file_name));
     }
     if !log_path.is_file() {
-        return Err(format!("ファイルが見つかりません: {file_path}"));
+        return Err(format!(message!("Commands.Archive.readExternalLogViewer.fileMissing"), file_path = file_path));
     }
 
     let is_compressed = file_name.ends_with(".tar.zst");
@@ -1054,12 +1053,12 @@ pub fn read_external_log_viewer(file_path: String, session_id: String, app: AppH
     let (db_categories, db_keyword_markers) = build_db_hints(&source_name);
 
     if is_compressed {
-        spawn_compressed_log_stream(log_path, session_id.clone(), db_categories, db_keyword_markers, app,);
+        spawn_compressed_log_stream(log_path, session_id.clone(), db_categories, db_keyword_markers, app);
     } else {
-        spawn_plain_log_stream(log_path, session_id.clone(), db_categories, db_keyword_markers, app,);
+        spawn_plain_log_stream(log_path, session_id.clone(), db_categories, db_keyword_markers, app);
     }
 
-    Ok(LogViewerMeta { session_id, archive_name: file_path, source_name, })
+    Ok(LogViewerMeta { session_id, archive_name: file_path, source_name })
 }
 
 /// 各ファイルの `.tar.zst` 内容が現在の元ログと一致することを確認して削除する。
@@ -1075,18 +1074,18 @@ pub fn delete_source_logs(file_names: Vec<String>) -> Result<usize, String> {
 
     for file_name in &file_names {
         if !matches_source_log_file_name(file_name) {
-            return Err(format!("不正なファイル名です: {file_name}"));
+            return Err(format!(message!("Commands.Archive.deleteSourceLogs.fileInvalid"), file_name = file_name));
         }
         let source_path = source_dir.join(file_name);
         if source_path.exists() {
             let archive_path = archive_dir.join(format!("{file_name}.tar.zst"));
             if !archive_path.exists() {
-                return Err(format!("アーカイブが見つかりません。削除を中止しました: {file_name}.tar.zst"));
+                return Err(format!(message!("Commands.Archive.deleteSourceLogs.archiveTarZstdMissing"), file_name = file_name));
             }
             if !is_source_log_exactly_archived(&source_path, &archive_path)? {
-                return Err(format!("元ログの現在内容がアーカイブと一致しません。Data 同期後に再実行してください: {file_name}"));
+                return Err(format!(message!("Commands.Archive.deleteSourceLogs.logArchiveSynchronizeFailed"), file_name = file_name));
             }
-            fs::remove_file(&source_path).map_err(|err| format!("{file_name} の削除に失敗しました: {err}"))?;
+            fs::remove_file(&source_path).map_err(|err| format!(message!("Commands.Archive.deleteSourceLogs.deleteFailed"), err = err, file_name = file_name))?;
             deleted_count += 1;
         }
     }

@@ -4,7 +4,7 @@
 //! ダウンロード完了、展開完了、入室中ユーザーを組み合わせる。対応が一意でない場合や
 //! 同一訪問内で証拠が矛盾した場合は、既知状態として扱わない。
 
-use std::collections::{ HashMap, HashSet };
+use std::collections::{HashMap, HashSet};
 
 /// DB 上で「判定不能」を表す値。
 pub const UNKNOWN_FRIEND_STATUS: i64 = 2;
@@ -110,7 +110,7 @@ impl FriendshipTracker {
     /// そのまとまり全体を曖昧として扱う。
     pub fn on_avatar_download(&mut self, status: Option<FriendStatus>, line_number: usize) {
         self.pending_download = match self.pending_download {
-            PendingDownload::Empty => PendingDownload::One { status, line_number, },
+            PendingDownload::Empty => PendingDownload::One { status, line_number },
             PendingDownload::One { .. } | PendingDownload::Ambiguous => PendingDownload::Ambiguous,
         };
     }
@@ -119,9 +119,9 @@ impl FriendshipTracker {
     ///
     /// 戻り値は、対象ユーザー ID と DB 保存値（0: 非フレンド、1: フレンド、
     /// 2: 判定不能）。展開行を受け取るたびに未確定ダウンロードは消費する。
-    pub fn on_avatar_unpack(&mut self, unpack_payload: &str, line_number: usize,) -> Option<(String, i64)> {
+    pub fn on_avatar_unpack(&mut self, unpack_payload: &str, line_number: usize) -> Option<(String, i64)> {
         let pending = std::mem::take(&mut self.pending_download);
-        let PendingDownload::One { status: Some(status), line_number: download_line, } = pending else {
+        let PendingDownload::One { status: Some(status), line_number: download_line } = pending else {
             return None;
         };
         if line_number < download_line || line_number.saturating_sub(download_line) > MAX_DOWNLOAD_UNPACK_LINE_GAP {

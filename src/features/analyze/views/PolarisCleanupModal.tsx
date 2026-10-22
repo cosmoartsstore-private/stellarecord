@@ -1,3 +1,4 @@
+import { getMsg } from '../../../messages/getMsg';
 import { useState } from 'react';
 import { StellaIcon, stellaIconNames } from '../../../shared/components/Icons';
 import { closeDialog, closeDialogOnBackdrop, useModalDialog } from '../../../shared/hooks/useModalDialog';
@@ -47,26 +48,21 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
         <div className={styles.header}>
           <div className={styles.warningIcon}><StellaIcon name={stellaIconNames.alert} /></div>
           <div>
-            <h3 id="polaris-cleanup-title" className={styles.title} tabIndex={-1} autoFocus>元ログ削除</h3>
-            <p id="polaris-cleanup-description" className={styles.subtitle}>
-              Polaris側に存在する元ログを削除します
-              <br />
-              <span className={styles.dangerText}>※削除した場合、元には戻せません</span>
+            <h3 id="polaris-cleanup-title" className={styles.title} tabIndex={-1} autoFocus>{getMsg('PolarisCleanup.title')}</h3>
+            <p id="polaris-cleanup-description" className={styles.subtitle}>{getMsg('PolarisCleanup.description')}<br />
+              <span className={styles.dangerText}>{getMsg('PolarisCleanup.irreversible')}</span>
             </p>
           </div>
         </div>
 
-        <div id="polaris-cleanup-notice" className={styles.notice}>
-          対象データはSTELLA
-          RECORD側の圧縮ログと一致しているため、削除後もログビューアから閲覧できます
-        </div>
+        <div id="polaris-cleanup-notice" className={styles.notice}>{getMsg('PolarisCleanup.archiveRetained')}</div>
 
         <div className={styles.listHeader}>
           <button type="button" className={styles.toggleAllBtn} onClick={toggleAll}>
-            {isAllSelected ? 'すべて解除' : 'すべて選択'}
+            {isAllSelected ? getMsg('common.clearSelection') : getMsg('common.selectAll')}
           </button>
           <span className={styles.listMeta}>
-            {String(selected.size)} / {String(logs.length)} 件 選択中 — {formatFileSize(totalSize)}
+            {String(selected.size)} / {String(logs.length)}{getMsg('PolarisCleanup.selectionSuffix')}{formatFileSize(totalSize)}
           </span>
         </div>
 
@@ -88,12 +84,11 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
         </div>
 
         <div className={shared.modalActions}>
-          <button type="button" className={shared.btn} onClick={closeDialog}>キャンセル</button>
+          <button type="button" className={shared.btn} onClick={closeDialog}>{getMsg('common.cancel')}</button>
           <button type="button" className={`${shared.btn} ${shared.danger} ${shared.wipe}`} disabled={selected.size === 0} onClick={() => {
               onConfirm(Array.from(selected));
             }}>
-            {String(selected.size)} 件を削除
-          </button>
+            {String(selected.size)}{getMsg('PolarisCleanup.deleteCountSuffix')}</button>
         </div>
       </div>
     </dialog>

@@ -23,7 +23,7 @@ const result = esbuild.buildSync({ entryPoints: [entry], outfile: output,
   bundle: true, platform: 'browser', format: 'iife', target: 'es2022', jsx: 'automatic', sourcemap: false, logLevel: 'warning', metafile: true,
   alias: mode === 'ui-picker' ? { '@tauri-apps/api/core': path.join(directory, 'picker-boundary.ts') } : undefined,
   define: { 'process.env.NODE_ENV': JSON.stringify(mode === 'ui-production' ? 'production' : 'development') },
-  assetNames: 'probe-assets/[name]-[hash]', loader: { '.png': 'file', '.jpg': 'file', '.woff': 'file', '.woff2': 'file' } });
+  assetNames: 'probe-assets/[name]-[hash]', loader: { '.properties': 'text', '.png': 'file', '.jpg': 'file', '.woff': 'file', '.woff2': 'file' } });
 const files = Object.keys(result.metafile.outputs).map(file => {
   const relative = path.relative(path.dirname(output), path.resolve(file));
   if (path.isAbsolute(relative) || relative.startsWith('..')) throw new Error('probeの出力が専用領域の外です。');

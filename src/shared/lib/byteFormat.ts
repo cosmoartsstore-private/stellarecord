@@ -1,5 +1,4 @@
-/** バイト表示で使用する2進単位の基準値。 */
-export const byteUnitBytes = { KB: 1024, MB: 1024 * 1024, GB: 1024 * 1024 * 1024 } as const;
+import { byteUnitBytes } from '../constants';
 
 type ByteUnit = keyof typeof byteUnitBytes;
 

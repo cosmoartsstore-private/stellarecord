@@ -4,7 +4,7 @@
 //! ここにある DDL を正とし、追加テーブルと追加列は既存データを保持したまま
 //! 初期化時に適用する。
 
-use rusqlite::{ Connection, Result };
+use rusqlite::{Connection, Result};
 
 /// メイン `StellaRecord` データベースの DDL。
 ///
@@ -274,7 +274,7 @@ pub fn init_main_db(conn: &Connection) -> Result<()> {
     conn.execute_batch("SAVEPOINT refresh_main_views;")?;
     if let Err(error) = conn.execute_batch(MAIN_VIEWS) {
         if let Err(rollback_error) = conn.execute_batch("ROLLBACK TO refresh_main_views; RELEASE refresh_main_views;") {
-            return Err(rusqlite::Error::InvalidParameterName(format!("viewを初期化できませんでした: {error}; viewの復元にも失敗しました: {rollback_error}")));
+            return Err(rusqlite::Error::InvalidParameterName(format!(message!("Analyze.Db.initMainDb.restoreFailed"), error = error, rollback_error = rollback_error)));
         }
         return Err(error);
     }

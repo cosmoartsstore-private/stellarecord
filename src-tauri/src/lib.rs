@@ -11,9 +11,12 @@
 //!   registry、プロセス起動）。
 //! - **utils** -- ログ出力、エラー整形、registry参照、イベント送信ヘルパー。
 
+include!(concat!(env!("OUT_DIR"), "/messages.rs"));
+
 pub mod analyze;
 pub mod commands;
 pub mod config;
+pub mod constants;
 pub mod models;
 pub mod platform;
 pub mod utils;
@@ -21,7 +24,7 @@ pub mod utils;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-use tauri::{ WebviewUrl, WebviewWindowBuilder };
+use tauri::{WebviewUrl, WebviewWindowBuilder};
 
 /// 長時間実行される解析タスクの共有状態。
 ///
@@ -37,7 +40,7 @@ pub struct AnalyzeCancelStatus {
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .manage(AnalyzeCancelStatus { cancel: Arc::new(AtomicBool::new(false)), running: Arc::new(AtomicBool::new(false)), })
+        .manage(AnalyzeCancelStatus { cancel: Arc::new(AtomicBool::new(false)), running: Arc::new(AtomicBool::new(false)) })
         .invoke_handler(tauri::generate_handler![
             commands::archive::list_archive_files,
             commands::archive::read_archive_log_viewer,
@@ -65,10 +68,10 @@ pub fn run() {
             commands::log_client_error,
         ])
         .setup(|app| {
-            let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default()).title("STELLA RECORD").inner_size(1280.0, 800.0).maximized(true);
+            let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default()).title(constants::APP_DISPLAY_NAME).inner_size(1280.0, 800.0).maximized(true);
 
             if let Some(install_dir) = utils::get_stellarecord_install_dir() {
-                builder = builder.data_directory(install_dir.join("Data").join("EBWebView"));
+                builder = builder.data_directory(install_dir.join(constants::DATA_DIRECTORY).join("EBWebView"));
             }
 
             builder.build()?;
@@ -77,7 +80,7 @@ pub fn run() {
         })
         .run(tauri::generate_context!());
     if let Err(err) = app {
-        let msg = format!("Tauri アプリケーションの起動に失敗しました: {err}");
+        let msg = format!(message!("Backend.run.failed"), err = err);
         utils::log_err(&msg);
         show_error_dialog(&msg);
         #[allow(clippy::exit)]
@@ -89,10 +92,10 @@ pub fn run() {
 #[cfg(windows)]
 fn show_error_dialog(msg: &str) {
     use windows::core::HSTRING;
-    use windows::Win32::UI::WindowsAndMessaging::{ MessageBoxW, MB_ICONERROR, MB_OK };
+    use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
 
     let text = HSTRING::from(msg);
-    let caption = HSTRING::from("StellaRecord");
+    let caption = HSTRING::from(constants::APP_NAME);
     unsafe {
         MessageBoxW(None, &text, &caption, MB_ICONERROR | MB_OK);
     }

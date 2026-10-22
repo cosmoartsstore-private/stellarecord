@@ -1,3 +1,5 @@
+import { appDisplayName } from '../shared/constants';
+import { getMsg } from '../messages/getMsg';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import '../App.css';
 import '../App.light.css';
@@ -69,9 +71,9 @@ function App() {
   const handleLaunch = async (app: AppCard) => {
     try {
       await launchExternalApp(app.path);
-      addToast(`${app.name} を起動しました`);
+      addToast(getMsg('App.applicationStarted', { name: app.name }));
     } catch (error) {
-      addErrorToast(addToast, '登録済みアプリの起動', `${app.name} の起動に失敗しました`, error);
+      addErrorToast(addToast, getMsg('Operations.launchApplication'), getMsg('App.applicationStartFailed', { name: app.name }), error);
     }
   };
 
@@ -81,7 +83,7 @@ function App() {
       const dir = app.path.substring(0, app.path.lastIndexOf('\\'));
       await openFolder(dir);
     } catch (error) {
-      addErrorToast(addToast, '登録済みアプリのフォルダを開く', 'フォルダを開けませんでした', error);
+      addErrorToast(addToast, getMsg('Operations.openApplicationFolder'), getMsg('App.folderOpenFailed'), error);
     }
   };
 
@@ -89,11 +91,11 @@ function App() {
   const handleRegisterApp = async (path: string, name: string, description: string) => {
     try {
       await registerApp(path, name, description);
-      addToast(`${name} を登録しました`);
+      addToast(getMsg('App.applicationRegistered', { name: name }));
       setIsRegisterModalOpen(false);
       await refreshRegistry();
     } catch (error) {
-      addErrorToast(addToast, 'サードパーティアプリ登録', `${name} の登録に失敗しました`, error);
+      addErrorToast(addToast, getMsg('Operations.registerApplication'), getMsg('App.applicationRegistrationFailed', { name: name }), error);
     }
   };
 
@@ -101,10 +103,10 @@ function App() {
   const handleUnregisterApp = async (app: AppCard) => {
     try {
       await unregisterApp(app.path);
-      addToast(`${app.name} の登録を解除しました`);
+      addToast(getMsg('App.applicationUnregistered', { name: app.name }));
       await refreshRegistry();
     } catch (error) {
-      addErrorToast(addToast, 'サードパーティアプリ登録解除', `${app.name} の登録解除に失敗しました`, error);
+      addErrorToast(addToast, getMsg('Operations.unregisterApplication'), getMsg('App.applicationUnregistrationFailed', { name: app.name }), error);
     }
   };
 
@@ -113,9 +115,9 @@ function App() {
     try {
       const shouldEnable = !isStartupEnabledDraft;
       await toggleStartup();
-      addToast(shouldEnable ? '自動起動を有効にしました' : '自動起動を無効にしました');
+      addToast(shouldEnable ? getMsg('App.startupEnabled') : getMsg('App.startupDisabled'));
     } catch (error) {
-      addErrorToast(addToast, '自動起動設定保存', '設定保存に失敗しました', error);
+      addErrorToast(addToast, getMsg('Operations.saveStartupSetting'), getMsg('App.settingsSaveFailed'), error);
     }
   };
 
@@ -123,10 +125,10 @@ function App() {
   const handleSaveArchiveLimit = async () => {
     try {
       await saveArchiveLimit();
-      addToast('設定を保存しました');
+      addToast(getMsg('App.settingsSaved'));
       void pollStorage();
     } catch (error) {
-      addErrorToast(addToast, 'アーカイブ容量設定保存', '設定保存に失敗しました', error);
+      addErrorToast(addToast, getMsg('Operations.saveArchiveCapacity'), getMsg('App.settingsSaveFailed'), error);
     }
   };
 
@@ -135,7 +137,7 @@ function App() {
     try {
       await runStartupImport();
     } catch (error) {
-      addErrorToast(addToast, '起動時取り込み開始', '起動時取り込みを開始できませんでした', error);
+      addErrorToast(addToast, getMsg('Operations.startStartupImport'), getMsg('App.startupImportFailed'), error);
     }
   }, [addToast, runStartupImport]);
 
@@ -145,7 +147,7 @@ function App() {
       await saveStartupImportPreference(enabled);
       return true;
     } catch (error) {
-      addErrorToast(addToast, '起動時ログ取り込み設定保存', 'ログの読み取り設定を保存できませんでした', error);
+      addErrorToast(addToast, getMsg('Operations.saveStartupImportSetting'), getMsg('App.startupImportSettingSaveFailed'), error);
       return false;
     }
   };
@@ -163,8 +165,8 @@ function App() {
     if (isSaved) {
       addToast(
         shouldEnable
-          ? '次回からログの自動取り込みを有効にします'
-          : 'ログの自動取り込みを無効にしました',
+          ? getMsg('App.startupImportEnabled')
+          : getMsg('App.startupImportDisabled'),
       );
     }
   };
@@ -201,10 +203,10 @@ function App() {
   useEffect(() => {
     if (!startupImportSettingsError || startupImportSettingsErrorShownRef.current) return;
     startupImportSettingsErrorShownRef.current = true;
-    addErrorToast(addToast, 'ログ保存先の取得', 'ログとDBの保存先を取得できませんでした', startupImportSettingsError);
+    addErrorToast(addToast, getMsg('Operations.loadDataLocations'), getMsg('App.dataLocationsLoadFailed'), startupImportSettingsError);
   }, [addToast, startupImportSettingsError]);
 
-  const navItems: { section: SectionId; label: string }[] = [{ section: 'registry', label: 'ランチャー' }, { section: 'analyze', label: '解析' }, { section: 'database', label: 'DB' }];
+  const navItems: { section: SectionId; label: string }[] = [{ section: 'registry', label: getMsg('common.launcher') }, { section: 'analyze', label: getMsg('common.analyze') }, { section: 'database', label: getMsg('common.database') }];
 
   const navIcons = { registry: stellaIconNames.rocket, analyze: stellaIconNames.chartBar, database: stellaIconNames.tableGrid } as const;
 
@@ -254,9 +256,9 @@ function App() {
 
   return (
     <div className={`stella-record-root ${styles.mainWrapper} ${styles.root} ${themeMode}-theme`}>
-      <nav className={styles.topNavigation} aria-label="メインナビゲーション">
+      <nav className={styles.topNavigation} aria-label={getMsg('App.mainNavigation')}>
         <div className={styles.navBrand}>
-          <img src={themeMode === 'light' ? logoLightSrc : logoDarkSrc} alt="STELLA RECORD" className={
+          <img src={themeMode === 'light' ? logoLightSrc : logoDarkSrc} alt={appDisplayName} className={
               styles[
                 themeMode === 'midnight'
                   ? 'navLogoMidnight'
@@ -278,7 +280,7 @@ function App() {
           ))}
         </div>
 
-        <button type="button" className={styles.navSettingsButton} onClick={() => { setIsSettingsModalOpen(true); }}><StellaIcon name={stellaIconNames.settings} />設定</button>
+        <button type="button" className={styles.navSettingsButton} onClick={() => { setIsSettingsModalOpen(true); }}><StellaIcon name={stellaIconNames.settings} />{getMsg('common.settings')}</button>
       </nav>
 
       <main className={styles.contentArea}>{renderSection()}</main>

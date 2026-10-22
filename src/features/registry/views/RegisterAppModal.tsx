@@ -1,3 +1,5 @@
+import { getMsg } from '../../../messages/getMsg';
+import { getFileNameFromPath } from '../../../shared/lib/pathUtils';
 import { useRef, useState } from 'react';
 import { closeDialog, useModalDialog } from '../../../shared/hooks/useModalDialog';
 import shared from '../../../shared/styles/shared.module.css';
@@ -39,7 +41,7 @@ export function RegisterAppModal({ onClose, onConfirm }: RegisterAppModalProps) 
       try {
         suggested = await extractExeDisplayName(selected);
       } catch {
-        const fileName = selected.split(/[\\/]/).pop() ?? '';
+        const fileName = getFileNameFromPath(selected);
         suggested = fileName.replace(/\.exe$/i, '');
       }
       // 表示名の取得中に行ったEXEの再選択と手入力を優先する。
@@ -56,41 +58,37 @@ export function RegisterAppModal({ onClose, onConfirm }: RegisterAppModalProps) 
   return (
     <dialog ref={dialogRef} className={shared.modalOverlay} aria-labelledby="register-app-title" aria-describedby="register-app-description" onClose={onClose}>
       <div className={shared.modalContent}>
-        <h3 id="register-app-title" tabIndex={-1} autoFocus>アプリを登録</h3>
-        <p id="register-app-description">ランチャーから起動する実行ファイルを登録します。</p>
+        <h3 id="register-app-title" tabIndex={-1} autoFocus>{getMsg('RegisterApp.title')}</h3>
+        <p id="register-app-description">{getMsg('RegisterApp.description')}</p>
         <div className={styles.registerForm}>
           <label className={styles.formField}>
-            <span>実行ファイル</span>
+            <span>{getMsg('RegisterApp.executableLabel')}</span>
             <div className={styles.filePickerRow}>
-              <input type="text" className={styles.formInput} value={path} readOnly placeholder="ファイルを選択してください" />
+              <input type="text" className={styles.formInput} value={path} readOnly placeholder={getMsg('RegisterApp.executablePlaceholder')} />
               <button type="button" className={shared.btn} onClick={() => {
                   void handlePickFile();
-                }}>
-                参照
-              </button>
+                }}>{getMsg('RegisterApp.browse')}</button>
             </div>
           </label>
           <label className={styles.formField}>
-            <span>アプリ名</span>
+            <span>{getMsg('RegisterApp.nameLabel')}</span>
             <input type="text" className={styles.formInput} value={name} onChange={(e) => {
                 nameEditGenerationRef.current += 1;
                 setName(e.target.value);
-              }} placeholder="表示名を入力" />
+              }} placeholder={getMsg('RegisterApp.namePlaceholder')} />
           </label>
           <label className={styles.formField}>
-            <span>説明（任意）</span>
+            <span>{getMsg('RegisterApp.descriptionLabel')}</span>
             <input type="text" className={styles.formInput} value={description} onChange={(e) => {
                 setDescription(e.target.value);
-              }} placeholder="アプリの説明" />
+              }} placeholder={getMsg('RegisterApp.descriptionPlaceholder')} />
           </label>
         </div>
         <div className={shared.modalActions}>
-          <button type="button" className={shared.btn} onClick={closeDialog}>キャンセル</button>
+          <button type="button" className={shared.btn} onClick={closeDialog}>{getMsg('common.cancel')}</button>
           <button type="button" className={`${shared.btn} ${shared.primary}`} disabled={!canSubmit} onClick={() => {
               onConfirm(path, name.trim(), description);
-            }}>
-            登録
-          </button>
+            }}>{getMsg('common.register')}</button>
         </div>
       </div>
     </dialog>

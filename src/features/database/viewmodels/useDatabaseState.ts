@@ -1,8 +1,12 @@
+import { getMsg } from '../../../messages/getMsg';
 import { useCallback, useRef, useState } from 'react';
 import type { DbTableSummary, TableData } from '../models/types';
 import { emptyTableData } from '../models/types';
 import { loadDbTableData, loadDbTables } from '../services/databaseService';
 import { addErrorToast, type AddToast } from '../../../shared/lib/errors';
+
+// Backend側の同機能のPAGE_SIZEと一致する、DBプレビュー固有のページ件数。
+const pageSize = 500;
 
 /** ソート状態（column名と方向） */
 export interface SortState {
@@ -25,9 +29,6 @@ export function useDatabaseState(addToast: AddToast) {
   const [sortState, setSortState] = useState<SortState | null>(null);
   const requestGenerationRef = useRef(0);
   const committedTableRef = useRef('');
-  // Backend側 (src-tauri/src/commands/database.rs の PAGE_SIZE) と一致させる必要がある
-  const pageSize = 500;
-
   /** 同じ要求世代に属するテーブルデータだけをプレビュー状態へ反映する */
   const loadTableDataForRequest = useCallback(
     async (requestGeneration: number, tableName: string, page = 0, sort?: SortState | null) => {
@@ -46,7 +47,7 @@ export function useDatabaseState(addToast: AddToast) {
       } catch (error) {
         if (requestGenerationRef.current === requestGeneration) {
           setCurrentTable(committedTableRef.current);
-          addErrorToast(addToast, 'DBテーブルデータ取得', 'データを読み込めませんでした', error);
+          addErrorToast(addToast, getMsg('Operations.loadDatabaseTable'), getMsg('DatabaseState.tableLoadFailed'), error);
         }
       } finally {
         if (requestGenerationRef.current === requestGeneration) {
@@ -119,7 +120,7 @@ export function useDatabaseState(addToast: AddToast) {
         }
       } catch (error) {
         if (requestGenerationRef.current !== requestGeneration) return;
-        addErrorToast(addToast, 'DBカタログ取得', 'DB一覧を取得できませんでした', error);
+        addErrorToast(addToast, getMsg('Operations.loadDatabaseCatalog'), getMsg('DatabaseState.catalogLoadFailed'), error);
         committedTableRef.current = '';
         setDbTables([]);
         setCurrentTable('');

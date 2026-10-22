@@ -1,14 +1,12 @@
-use base64::{ engine::general_purpose::STANDARD as BASE64, Engine as _ };
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use rusqlite::Connection;
-use serde::{ Deserialize, Serialize };
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use winreg::enums::HKEY_CURRENT_USER;
 use winreg::RegKey;
 
+use crate::constants::{ARCHIVE_DIRECTORY, DATABASE_DIRECTORY, DATABASE_FILE, DEFAULT_ARCHIVE_CAPACITY_BYTES as DEFAULT_CAPACITY, POLARIS_KEY, STELLA_RECORD_KEY};
 use crate::utils;
-
-const STELLA_RECORD_KEY: &str = "Software\\CosmoArtsStore\\StellaRecord";
-const POLARIS_KEY: &str = "Software\\CosmoArtsStore\\Polaris";
 
 /// 起動時ログ取り込みについて、ユーザーが選択した許可状態。
 #[derive(Debug, Clone, Copy, Default)]
@@ -24,7 +22,7 @@ fn open_key(path: &str) -> Option<RegKey> {
 
 /// HKCU 配下にキーを作成し、失敗時はコマンドエラー文字列に整形して返す。
 fn create_key(path: &str) -> Result<RegKey, String> {
-    RegKey::predef(HKEY_CURRENT_USER).create_subkey(path).map(|(key, _)| key).map_err(|err| { utils::command_err(&format!("レジストリキーを作成できませんでした [{path}]"), err,) })
+    RegKey::predef(HKEY_CURRENT_USER).create_subkey(path).map(|(key, _)| key).map_err(|err| utils::command_err(&format!(message!("Config.createKey.registryCreateFailed"), path = path), err))
 }
 
 /// registryから文字列値を読み取る。失敗時は空文字列を返す。
@@ -49,11 +47,9 @@ pub struct PolarisSetting {
     pub capacity_threshold_bytes: u64,
 }
 
-const DEFAULT_CAPACITY: u64 = 314_572_800;
-
 impl Default for PolarisSetting {
     fn default() -> Self {
-        Self { archive_path: String::new(), capacity_threshold_bytes: DEFAULT_CAPACITY, }
+        Self { archive_path: String::new(), capacity_threshold_bytes: DEFAULT_CAPACITY }
     }
 }
 
@@ -96,7 +92,7 @@ fn load_polaris_setting_from(key_path: &str) -> PolarisSetting {
         return PolarisSetting::default();
     };
 
-    PolarisSetting { archive_path: read_str(&key, "ArchivePath"), capacity_threshold_bytes: read_u64(&key, "CapacityThresholdBytes", DEFAULT_CAPACITY), }
+    PolarisSetting { archive_path: read_str(&key, "ArchivePath"), capacity_threshold_bytes: read_u64(&key, "CapacityThresholdBytes", DEFAULT_CAPACITY) }
 }
 
 /// Polaris 設定をregistryに保存する。
@@ -110,8 +106,8 @@ pub fn save_polaris_setting(setting: &PolarisSetting) -> Result<(), String> {
 /// 指定されたregistryキーパスに Polaris 設定を保存する。
 fn save_polaris_setting_to(key_path: &str, setting: &PolarisSetting) -> Result<(), String> {
     let key = create_key(key_path)?;
-    key.set_value("ArchivePath", &setting.archive_path).map_err(|e| utils::command_err("ArchivePath の書き込みに失敗しました", e))?;
-    key.set_value("CapacityThresholdBytes", &setting.capacity_threshold_bytes).map_err(|e| utils::command_err("CapacityThresholdBytes の書き込みに失敗しました", e))?;
+    key.set_value("ArchivePath", &setting.archive_path).map_err(|e| utils::command_err(message!("Config.savePolarisSettingTo.failed"), e))?;
+    key.set_value("CapacityThresholdBytes", &setting.capacity_threshold_bytes).map_err(|e| utils::command_err(message!("Config.savePolarisSettingTo.capacityThresholdWriteFailed"), e))?;
     Ok(())
 }
 
@@ -126,7 +122,7 @@ fn load_stellarecord_setting_from(key_path: &str) -> StellaRecordSetting {
         return StellaRecordSetting::default();
     };
 
-    StellaRecordSetting { archive_path: read_str(&key, "ArchivePath"), db_path: read_str(&key, "DbPath"), enable_startup: read_bool(&key, "EnableStartup", false), startup_preference_set: read_bool(&key, "StartupPreferenceSet", false), }
+    StellaRecordSetting { archive_path: read_str(&key, "ArchivePath"), db_path: read_str(&key, "DbPath"), enable_startup: read_bool(&key, "EnableStartup", false), startup_preference_set: read_bool(&key, "StartupPreferenceSet", false) }
 }
 
 /// `StellaRecord` 設定をregistryに保存する。
@@ -143,7 +139,7 @@ pub fn load_startup_import_preference() -> StartupImportPreference {
         return StartupImportPreference::default();
     };
 
-    StartupImportPreference { enabled: read_bool(&key, "StartupImportEnabled", false), preference_set: read_bool(&key, "StartupImportPreferenceSet", false), }
+    StartupImportPreference { enabled: read_bool(&key, "StartupImportEnabled", false), preference_set: read_bool(&key, "StartupImportPreferenceSet", false) }
 }
 
 /// 起動時ログ取り込みの選択結果をregistryへ保存する。
@@ -156,18 +152,18 @@ pub fn load_startup_import_preference() -> StartupImportPreference {
 /// エラーを返す。
 pub fn save_startup_import_preference(enabled: bool) -> Result<(), String> {
     let key = create_key(STELLA_RECORD_KEY)?;
-    key.set_value("StartupImportEnabled", &u32::from(enabled)).map_err(|e| utils::command_err("起動時ログ取り込み設定の書き込みに失敗しました", e))?;
-    key.set_value("StartupImportPreferenceSet", &1u32).map_err(|e| utils::command_err("起動時ログ取り込み設定の確定に失敗しました", e))?;
+    key.set_value("StartupImportEnabled", &u32::from(enabled)).map_err(|e| utils::command_err(message!("Config.saveStartupImportPreference.logSettingsFailed"), e))?;
+    key.set_value("StartupImportPreferenceSet", &1u32).map_err(|e| utils::command_err(message!("Config.saveStartupImportPreference.logSettingsCommitFailed"), e))?;
     Ok(())
 }
 
 /// 指定されたregistryキーパスに `StellaRecord` 設定を保存する。
-fn save_stellarecord_setting_to(key_path: &str, setting: &StellaRecordSetting,) -> Result<(), String> {
+fn save_stellarecord_setting_to(key_path: &str, setting: &StellaRecordSetting) -> Result<(), String> {
     let key = create_key(key_path)?;
-    key.set_value("ArchivePath", &setting.archive_path).map_err(|e| utils::command_err("ArchivePath の書き込みに失敗しました", e))?;
-    key.set_value("DbPath", &setting.db_path).map_err(|e| utils::command_err("DbPath の書き込みに失敗しました", e))?;
-    key.set_value("EnableStartup", &u32::from(setting.enable_startup)).map_err(|e| utils::command_err("EnableStartup の書き込みに失敗しました", e))?;
-    key.set_value("StartupPreferenceSet", &u32::from(setting.startup_preference_set),).map_err(|e| utils::command_err("StartupPreferenceSet の書き込みに失敗しました", e))?;
+    key.set_value("ArchivePath", &setting.archive_path).map_err(|e| utils::command_err(message!("Config.saveStellarecordSettingTo.failed"), e))?;
+    key.set_value("DbPath", &setting.db_path).map_err(|e| utils::command_err(message!("Config.saveStellarecordSettingTo.databasePathWriteFailed"), e))?;
+    key.set_value("EnableStartup", &u32::from(setting.enable_startup)).map_err(|e| utils::command_err(message!("Config.saveStellarecordSettingTo.startupEnabledWriteFailed"), e))?;
+    key.set_value("StartupPreferenceSet", &u32::from(setting.startup_preference_set)).map_err(|e| utils::command_err(message!("Config.saveStellarecordSettingTo.startupPreferenceWriteFailed"), e))?;
     Ok(())
 }
 
@@ -179,7 +175,7 @@ fn save_stellarecord_setting_to(key_path: &str, setting: &StellaRecordSetting,) 
 pub fn load_registry_catalog() -> RegistryCatalog {
     let setting = load_stellarecord_setting();
     let Some(db_path) = setting.get_effective_db_path() else {
-        utils::log_warn("レジストリ読み込み時にデータベースパスを取得できませんでした");
+        utils::log_warn(message!("Config.loadRegistryCatalog.registryDatabasePathReadFailed"));
         return RegistryCatalog::default();
     };
     load_catalog_from_db(&db_path)
@@ -197,12 +193,12 @@ fn load_catalog_from_db(db_path: &std::path::Path) -> RegistryCatalog {
     let conn = match Connection::open(db_path) {
         Ok(c) => c,
         Err(err) => {
-            utils::log_warn(&format!("レジストリ読み込み時にデータベースを開けませんでした: {err}"));
+            utils::log_warn(&format!(message!("Config.loadCatalogFromDb.registryDatabaseOpenFailed"), err = err));
             return RegistryCatalog::default();
         }
     };
 
-    let has_table: bool = conn.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='apps')", [], |row| row.get(0),).unwrap_or(false);
+    let has_table: bool = conn.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='apps')", [], |row| row.get(0)).unwrap_or(false);
 
     if !has_table {
         return RegistryCatalog::default();
@@ -211,7 +207,7 @@ fn load_catalog_from_db(db_path: &std::path::Path) -> RegistryCatalog {
     let mut stmt = match conn.prepare("SELECT name, description, path, icon FROM apps ORDER BY name") {
         Ok(s) => s,
         Err(err) => {
-            utils::log_warn(&format!("レジストリクエリの準備に失敗しました: {err}"));
+            utils::log_warn(&format!(message!("Config.loadCatalogFromDb.registryPrepareFailed"), err = err));
             return RegistryCatalog::default();
         }
     };
@@ -222,11 +218,11 @@ fn load_catalog_from_db(db_path: &std::path::Path) -> RegistryCatalog {
         let path: String = row.get(2)?;
         let icon: Option<Vec<u8>> = row.get(3)?;
         let icon_data = icon.map(|bytes| BASE64.encode(&bytes));
-        Ok(AppCard { name, description, path, icon_data, })
+        Ok(AppCard { name, description, path, icon_data })
     }) {
         Ok(r) => r,
         Err(err) => {
-            utils::log_warn(&format!("レジストリクエリの実行に失敗しました: {err}"));
+            utils::log_warn(&format!(message!("Config.loadCatalogFromDb.registryFailed"), err = err));
             return RegistryCatalog::default();
         }
     };
@@ -245,7 +241,7 @@ impl StellaRecordSetting {
         if !self.archive_path.is_empty() {
             return Some(PathBuf::from(&self.archive_path));
         }
-        utils::get_stellarecord_data_dir("archive")
+        utils::get_stellarecord_data_dir(ARCHIVE_DIRECTORY)
     }
 
     /// `StellaRecord` が開くメインデータベースのパスを解決する。
@@ -253,7 +249,7 @@ impl StellaRecordSetting {
         if !self.db_path.is_empty() {
             return Some(PathBuf::from(&self.db_path));
         }
-        Some(utils::get_stellarecord_data_dir("db")?.join("stellarecord.db"))
+        Some(utils::get_stellarecord_data_dir(DATABASE_DIRECTORY)?.join(DATABASE_FILE))
     }
 }
 

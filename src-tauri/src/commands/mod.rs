@@ -21,11 +21,7 @@ use crate::config;
 use crate::models::AnalyzePayload;
 use crate::utils;
 
-/// アプリの自動起動を有効にする際に使用するスタートアップ登録名。
-const STELLA_RECORD_RUN_VALUE: &str = "StellaRecord";
-
-/// アーカイブ容量設定用の 1 メビバイト（バイト単位）。
-const ONE_MB_BYTES: u64 = 1024 * 1024;
+use crate::constants::{APP_NAME as STELLA_RECORD_RUN_VALUE, ARCHIVE_DIRECTORY, BYTES_PER_MEBIBYTE as ONE_MB_BYTES, DATA_DIRECTORY};
 
 /// UI の設定ダイアログに公開する管理設定。
 ///
@@ -46,7 +42,7 @@ pub struct ManagementSettings {
 /// コマンド層でイベントフォーマットを集約し、全インポートエントリポイントが
 /// 同一のペイロード形式で状態を報告する。
 fn emit_analyze_progress(app: &AppHandle, status: String, progress: String, is_running: bool) {
-    utils::emit_event_warn(app, "analyze-progress", AnalyzePayload { status, progress, is_running, },);
+    utils::emit_event_warn(app, "analyze-progress", AnalyzePayload { status, progress, is_running });
 }
 
 /// `StellaRecord` が管理する圧縮ログ用データdirectoryを解決する。
@@ -58,13 +54,13 @@ fn emit_analyze_progress(app: &AppHandle, status: String, progress: String, is_r
 /// 設定が未定義でアーカイブ操作を続行できない場合にエラーを返す。
 fn get_archive_store_dir() -> Result<PathBuf, String> {
     let setting = config::load_stellarecord_setting();
-    setting.get_effective_archive_dir().ok_or_else(|| "Data ディレクトリが見つかりません。".to_string())
+    setting.get_effective_archive_dir().ok_or_else(|| message!("Commands.getArchiveStoreDir.directoryMissing").to_string())
 }
 
 /// コピー元として使用する Polaris 管理のログアーカイブdirectoryを解決する。
 fn get_source_log_dir() -> Result<PathBuf, String> {
-    let polaris_dir = utils::get_polaris_install_dir().ok_or_else(|| { "Polaris のインストール先が見つかりません。レジストリを確認してください。".to_string() })?;
-    Ok(polaris_dir.join("Data").join("archive"))
+    let polaris_dir = utils::get_polaris_install_dir().ok_or_else(|| message!("Commands.getSourceLogDir.registryMissing").to_string())?;
+    Ok(polaris_dir.join(DATA_DIRECTORY).join(ARCHIVE_DIRECTORY))
 }
 
 /// `StellaRecord` の実効メインデータベースパスを解決する。
@@ -73,7 +69,7 @@ fn get_source_log_dir() -> Result<PathBuf, String> {
 /// あるため、必要に応じて作成する。
 fn get_db_path() -> Result<PathBuf, String> {
     let setting = config::load_stellarecord_setting();
-    let path = setting.get_effective_db_path().ok_or_else(|| "データベースパスが見つかりません。".to_string())?;
+    let path = setting.get_effective_db_path().ok_or_else(|| message!("Commands.getDbPath.databasePathMissing").to_string())?;
     ensure_parent_dir(&path)?;
     Ok(path)
 }
@@ -84,7 +80,7 @@ fn get_db_path() -> Result<PathBuf, String> {
 fn open_initialized_main_db() -> Result<Connection, String> {
     let db_path = get_db_path()?;
     let conn = Connection::open(&db_path).map_err(|err| utils::command_open_err(&db_path, err))?;
-    analyze::init_main_db(&conn).map_err(|err| utils::command_err("メイン DB を初期化できませんでした", err))?;
+    analyze::init_main_db(&conn).map_err(|err| utils::command_err(message!("Commands.openInitializedMainDb.databaseFailed"), err))?;
     Ok(conn)
 }
 
@@ -95,7 +91,7 @@ fn open_initialized_main_db() -> Result<Connection, String> {
 fn ensure_parent_dir(path: &std::path::Path) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         if !parent.exists() {
-            fs::create_dir_all(parent).map_err(|err| { format!("データベースディレクトリを作成できませんでした [{}]: {err}", parent.display()) })?;
+            fs::create_dir_all(parent).map_err(|err| format!(message!("Commands.ensureParentDir.databaseDirectoryCreateFailed"), parent.display(), err = err))?;
         }
     }
     Ok(())
