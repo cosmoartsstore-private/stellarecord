@@ -411,7 +411,7 @@ FunctionEnd
 
 ; アンインストーラーの画面
 ; 1. 削除の確認
-!define MUI_UNCONFIRMPAGE_TEXT_TOP "${PRODUCTNAME} のアプリ本体、ショートカット、自動起動登録を削除します。$\r$\nDB、アーカイブ、ログ、設定は残ります。"
+!define MUI_UNCONFIRMPAGE_TEXT_TOP "${PRODUCTNAME} のアプリ本体を削除します。$\r$\nDB、アーカイブ、ログ、設定は残ります。"
 !define MUI_PAGE_CUSTOMFUNCTION_PRE un.SkipIfPassive
 !insertmacro MUI_UNPAGE_CONFIRM
 
