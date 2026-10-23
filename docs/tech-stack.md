@@ -281,17 +281,17 @@ Rust jobのrun既定directoryはsrc-tauriだが、npm ciのstepだけはreposito
 
 ## Installation Lifecycle
 
-| Stage         | Process / placement / registry                                                                                         | Data and failure behavior                                                                    |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| 通常導入      | currentUser/日本語、既定LOCALAPPDATA/CosmoArtsStore/StellaRecord。禁止directory検証、CheckIfAppIsRunning、WebView2確認 | 本体/shortcut/uninstaller/製品登録。InstallLocation/DbPathを既定へwrite                      |
-| /UPDATE       | 旧版通常削除をskip、Run/製品keyの通常削除skip                                                                          | Data削除skip。ただしInstallLocation/DbPathのinstall writeは実行                              |
-| 再実行UI      | 同版再導入、upgrade/downgradeで既存app削除/継続を選ぶ                                                                  | /UPDATEとは別。通常削除を選べばその範囲を適用                                                |
-| 通常uninstall | 実行中確認、本体/対象shortcut/登録/Run/Stella key削除、Polaris key保持                                                 | 固定Data/db/logs/EBWebViewとbundle data paths削除、archive保持。外部overrideを探索削除しない |
-| 失敗/再試行   | 必須file/registry/shortcut更新・削除失敗で中断                                                                         | 全rollbackではない。必須削除完了前の失敗では再試行用uninstaller/後段登録を保持               |
+| Stage         | Process / placement / registry                                                                                         | Data and failure behavior                                                                        |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 通常導入      | currentUser/日本語、既定LOCALAPPDATA/CosmoArtsStore/StellaRecord。禁止directory検証、CheckIfAppIsRunning、WebView2確認 | 本体/shortcut/uninstaller/アプリ一覧登録。既存の保存先と設定を保持し、不足するDB参照先だけ初期化 |
+| /UPDATE       | 既存本体の通常削除をskip。利用者データと設定を保持                                                                     | InstallLocationは現配置先へ更新。保存済みDB/archive参照先は保持し、有効な自動起動を登録          |
+| 再実行UI      | 同版再導入、upgrade/downgradeで既存本体削除/継続を選ぶ                                                                 | 既存uninstallerへ必ず/UPDATEを渡し、データ・設定を保持する                                       |
+| 通常uninstall | 実行中確認、本体/同梱file/対象shortcut/アプリ一覧登録/Runを削除                                                        | Data全体、bundle data、Stella/Polaris設定key、外部DbPath/ArchivePathを保持                       |
+| 失敗/再試行   | 必須file/registry/shortcut更新・削除失敗で中断                                                                         | 全rollbackではない。必須削除完了前の失敗では再試行用uninstaller/後段登録を保持                   |
 
-hooks.nsiから強制終了せずtemplateの起動中確認へ委ねる。通常app終了時のworker joinとは別。InstallLocationとDbPath=INSTDIR/Data/db/stellarecord.dbはinstallで無条件writeする。更新後の外部DB file保持と実効参照先保持は別である。
+hooks.nsiから強制終了せずtemplateの起動中確認へ委ねる。通常app終了時のworker joinとは別。InstallLocationは本体配置先として更新するが、保存済みDbPathは上書きしない。DbPath未設定時は以前のInstallLocationがあればその既定DB、なければ今回の配置先の既定DBを初期値にする。配置先変更時にArchivePathが未設定なら、以前のInstallLocation/Data/archiveを参照先として保存する。既存データを自動で移動しない。
 
-通常uninstallでarchiveが残ってもArchivePath等のStella keyは消える。保存物ごとの範囲は[Deletion and Retention](database.md#deletion-and-retention)を参照する。
+通常uninstallではDB・archive・運用ログ・WebView・bundle dataとStella設定keyを残し、Windowsのアプリ一覧登録とRunだけを解除する。再インストール時はEnableStartupが有効なら現配置先をRunへ登録する。保存物ごとの範囲は[Deletion and Retention](database.md#deletion-and-retention)を参照する。
 
 ## Current Distribution Constraints
 

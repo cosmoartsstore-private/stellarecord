@@ -66,9 +66,9 @@ StellaRecord は、指定したフォルダの VRChat ログを `.tar.zst` と S
 
 NSIS インストーラーを実行します。既定の配置は `%LOCALAPPDATA%\CosmoArtsStore\StellaRecord` です。current-user install とし、Program Files と Windows directory 配下は選択できません。
 
-更新はインストーラーを再実行します。`/UPDATE` は通常データ削除を通りませんが、`DbPath` はインストール先の既定DBへ再設定されます。外部DBのfile保持と参照先設定の保持は別です。通常終了時に取込の自動取消し・完了待ちを行う独自処理はありません。
+更新・再インストールはインストーラーを再実行します。保存済みのDB・アーカイブの参照先と利用者設定を引き継ぎ、自動起動が有効なら現在の配置先を登録します。通常終了時に取込の自動取消し・完了待ちを行う独自処理はありません。
 
-通常のアンインストールではアプリ本体、インストール先の `Data/db`・`Data/logs`・`Data/EBWebView`、bundle data、関連registry登録を削除し、`Data/archive` を残します。外部の `ArchivePath` / `DbPath` を探索して削除しませんが、保存先を記録したStellaRecord registryは削除します。登録app情報と設定を残す場合は事前に保全してください。[保存寿命](docs/database.md#deletion-and-retention)と[導入・更新・削除](docs/tech-stack.md#installation-lifecycle)に詳細があります。
+通常のアンインストールではアプリ本体・同梱file・ショートカット・Windowsのアプリ一覧登録・自動起動登録を削除します。DBと登録app情報、アーカイブ、運用ログ、WebViewデータ、保存先を含むStellaRecord設定は残します。外部の `ArchivePath` / `DbPath` も削除せず、再インストール時に同じデータを参照できます。[保存寿命](docs/database.md#deletion-and-retention)と[導入・更新・削除](docs/tech-stack.md#installation-lifecycle)に詳細があります。
 
 ## Build and Test
 
@@ -111,7 +111,7 @@ CIはRustをWindows、FrontendをUbuntuで検証し、両jobでNode.js 24とnpm�
 
 archive と DB の明示保存先は registry の `ArchivePath` / `DbPath` を優先し、未指定時は `InstallLocation` 配下を使います。読込元は `SourceLogPath` を優先します。現在の exe の位置から保存先を推測しません。archiveは本文の保存物、解析行は再生成できるデータ、`apps`は利用者が付与した情報です。元ログ削除は明示確認した読込元のfileだけを変更し、登録解除はEXE本体を削除しません。[Storage and Ownership](docs/database.md#storage-and-ownership)に詳細があります。
 
-専用の全データバックアップ・復元 UI はありません。手動移行ではアプリを終了し、実効保存先の archive と DB directory をコピーします。registry と localStorage はこのコピーに含まれません。通常アンインストール後に残るアーカイブから解析 DB を再構築できますが、ランチャー登録はログから再生成できません。
+専用の全データバックアップ・復元 UI はありません。手動移行ではアプリを終了し、実効保存先の archive と DB directory をコピーします。registry と localStorage はこのコピーに含まれません。解析 DB をアーカイブから再構築する場合も、ランチャー登録はログから再生成できません。
 
 ログビューアの本文読取りが途中で失敗した場合は、取得済みの行と完了イベントを返して停止します。画面上の完了だけではログ末尾まで読めたことを保証しません。取消し・部分失敗・元ログ削除の条件は [Specification](docs/spec.md) を参照してください。
 

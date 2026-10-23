@@ -342,7 +342,8 @@ Function PageLeaveReinstall
     ${Else}
       ReadRegStr $4 SHCTX "${MANUPRODUCTKEY}" ""
       ReadRegStr $R1 SHCTX "${UNINSTKEY}" "UninstallString"
-      ${IfThen} $UpdateMode = 1 ${|} StrCpy $R1 "$R1 /UPDATE" ${|} ; append /UPDATE
+      ; 再導入に伴う削除では、既存uninstallerにもデータ・設定の保持を指定する。
+      StrCpy $R1 "$R1 /UPDATE"
       ${IfThen} $PassiveMode = 1 ${|} StrCpy $R1 "$R1 /P" ${|} ; append /P
       StrCpy $R1 "$R1 _?=$4" ; append uninstall directory
       ExecWait '$R1' $0
@@ -410,6 +411,7 @@ FunctionEnd
 
 ; アンインストーラーの画面
 ; 1. 削除の確認
+!define MUI_UNCONFIRMPAGE_TEXT_TOP "${PRODUCTNAME} のアプリ本体、ショートカット、自動起動登録を削除します。$\r$\nDB、アーカイブ、ログ、設定は残ります。"
 !define MUI_PAGE_CUSTOMFUNCTION_PRE un.SkipIfPassive
 !insertmacro MUI_UNPAGE_CONFIRM
 
@@ -834,16 +836,49 @@ Section Install
     !insertmacro NSIS_HOOK_POSTINSTALL
   !endif
 
-  ; 追加: 共通命名規則に基づくregistry位置への書き込み
+  ; 再導入で保存済みDBの参照先を変更しない。配置先を変える場合は旧既定のarchiveも保持する。
+  ReadRegStr $R4 HKCU "Software\CosmoArtsStore\StellaRecord" "InstallLocation"
+  ReadRegStr $R5 HKCU "Software\CosmoArtsStore\StellaRecord" "ArchivePath"
+  ${If} $R4 != ""
+  ${AndIf} $R4 != $INSTDIR
+  ${AndIf} $R5 == ""
+    ClearErrors
+    WriteRegStr HKCU "Software\CosmoArtsStore\StellaRecord" "ArchivePath" "$R4\Data\archive"
+    ${If} ${Errors}
+      Abort "保存済みアーカイブの参照先を引き継げませんでした。アクセス権を確認してから再実行してください。"
+    ${EndIf}
+  ${EndIf}
+
+  ReadRegStr $R5 HKCU "Software\CosmoArtsStore\StellaRecord" "DbPath"
+  ${If} $R5 == ""
+    ${If} $R4 != ""
+      StrCpy $R5 "$R4\Data\db\stellarecord.db"
+    ${Else}
+      StrCpy $R5 "$INSTDIR\Data\db\stellarecord.db"
+    ${EndIf}
+    ClearErrors
+    WriteRegStr HKCU "Software\CosmoArtsStore\StellaRecord" "DbPath" "$R5"
+    ${If} ${Errors}
+      Abort "DBの参照先を保存できませんでした。アクセス権を確認してから再実行してください。"
+    ${EndIf}
+  ${EndIf}
+
+  ; 本体の配置情報だけを更新し、起動時取込・読込元・警告ライン等の設定は保持する。
   ClearErrors
   WriteRegStr HKCU "Software\CosmoArtsStore\StellaRecord" "InstallLocation" "$INSTDIR"
   ${If} ${Errors}
     Abort "登録情報を保存できませんでした。アクセス権を確認してから再実行してください。"
   ${EndIf}
+  ; 通常削除で解除したRun登録は、保持した利用者設定に従って現配置先へ戻す。
+  ReadRegDWORD $R4 HKCU "Software\CosmoArtsStore\StellaRecord" "EnableStartup"
+  ; 初回導入ではこの設定値がないため、読取時のerror flagを後段へ残さない。
   ClearErrors
-  WriteRegStr HKCU "Software\CosmoArtsStore\StellaRecord" "DbPath" "$INSTDIR\Data\db\stellarecord.db"
-  ${If} ${Errors}
-    Abort "登録情報を保存できませんでした。アクセス権を確認してから再実行してください。"
+  ${If} $R4 = 1
+    ClearErrors
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCTNAME}" '"$INSTDIR\${MAINBINARYNAME}.exe"'
+    ${If} ${Errors}
+      Abort "自動起動を登録できませんでした。アクセス権を確認してから再実行してください。"
+    ${EndIf}
   ${EndIf}
 
   ; passive mode ではこの画面を自動で閉じる。
@@ -1020,36 +1055,6 @@ Section Uninstall
   ${EndIf}
 
 
-  ; 必須の削除を先に完了し、失敗時は登録情報とuninstallerを保持する。
-  ${If} $UpdateMode <> 1
-    SetShellVarContext current
-  ClearErrors
-    RmDir /r "$INSTDIR\Data\db"
-  ${If} ${Errors}
-    Abort "削除対象を削除できませんでした。アプリを終了し、アクセス権を確認してから再実行してください。"
-  ${EndIf}
-  ClearErrors
-    RmDir /r "$INSTDIR\Data\logs"
-  ${If} ${Errors}
-    Abort "削除対象を削除できませんでした。アプリを終了し、アクセス権を確認してから再実行してください。"
-  ${EndIf}
-  ClearErrors
-    RmDir /r "$INSTDIR\Data\EBWebView"
-  ${If} ${Errors}
-    Abort "削除対象を削除できませんでした。アプリを終了し、アクセス権を確認してから再実行してください。"
-  ${EndIf}
-  ClearErrors
-    RmDir /r "$APPDATA\${BUNDLEID}"
-  ${If} ${Errors}
-    Abort "削除対象を削除できませんでした。アプリを終了し、アクセス権を確認してから再実行してください。"
-  ${EndIf}
-  ClearErrors
-    RmDir /r "$LOCALAPPDATA\${BUNDLEID}"
-  ${If} ${Errors}
-    Abort "削除対象を削除できませんでした。アプリを終了し、アクセス権を確認してから再実行してください。"
-  ${EndIf}
-  ${EndIf}
-
   ; Windows のアプリ一覧への登録を削除する。
   !if "${INSTALLMODE}" == "both"
     ClearErrors
@@ -1075,28 +1080,8 @@ Section Uninstall
     !insertmacro VerifyUninstallRegistryDeletion HKCU "Software\Microsoft\Windows\CurrentVersion\Run" value "${PRODUCTNAME}"
   ${EndIf}
 
-  ; 再生成できないデータを持つ Data\archive は保持する。
-  ${If} $UpdateMode <> 1
-    ClearErrors
-    DeleteRegKey SHCTX "${MANUPRODUCTKEY}"
-    !insertmacro VerifyUninstallRegistryDeletion SHCTX "${MANUPRODUCTKEY}" key ""
-    DeleteRegKey /ifempty SHCTX "${MANUKEY}"
-    ClearErrors
-    DeleteRegValue HKCU "${MANUPRODUCTKEY}" "Installer Language"
-    !insertmacro VerifyUninstallRegistryDeletion HKCU "${MANUPRODUCTKEY}" value "Installer Language"
-    DeleteRegKey /ifempty HKCU "${MANUPRODUCTKEY}"
-    DeleteRegKey /ifempty HKCU "${MANUKEY}"
-    ClearErrors
-    DeleteRegKey HKCU "Software\CosmoArtsStore\StellaRecord"
-    !insertmacro VerifyUninstallRegistryDeletion HKCU "Software\CosmoArtsStore\StellaRecord" key ""
-    SetShellVarContext current
-    ; Data 配下の削除対象 directory
-    ; 再生成できない .tar.zst を保持するため、Data\archive は削除しない。
-    ; archive を保持し、Data と $INSTDIR は空の場合だけ削除する。
-    RmDir "$INSTDIR\Data"
-    RmDir "$INSTDIR"
-  ${EndIf}
-
+  ; Data全体・bundle data・製品registryは、再導入で再利用するデータと設定として保持する。
+  ; ${MANUPRODUCTKEY}は利用者設定と同じkeyであるため、installer情報も含めて削除しない。
 
   ; 再試行用の実行ファイルは必須削除と登録解除が完了してから削除する。
   ClearErrors
