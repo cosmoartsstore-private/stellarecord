@@ -91,6 +91,37 @@ pub fn launch_external_process(path: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// 実行ファイルの親フォルダを開き、そのファイルをエクスプローラーで選択する。
+///
+/// # Errors
+/// 対象ファイル、COM 初期化、または Shell 操作に失敗した場合にエラーを返す。
+pub fn show_file_in_folder(path: &Path) -> Result<(), String> {
+    use windows::core::PCWSTR;
+    use windows::Win32::System::Com::{CoInitializeEx, CoTaskMemFree, CoUninitialize, COINIT_APARTMENTTHREADED};
+    use windows::Win32::UI::Shell::{SHOpenFolderAndSelectItems, SHParseDisplayName};
+
+    if !path.is_file() {
+        return Err(message!("Platform.showFileInFolder.fileMissing").to_string());
+    }
+    let hr = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+    if hr.is_err() {
+        return Err(utils::command_err(message!("Platform.showFileInFolder.initializeFailed"), hr));
+    }
+
+    let result = (|| {
+        let wide = utils::to_wide(path);
+        let mut item_id_list = std::ptr::null_mut();
+        unsafe { SHParseDisplayName(PCWSTR(wide.as_ptr()), None, &raw mut item_id_list, 0, None) }.map_err(|err| utils::command_err(message!("Platform.showFileInFolder.resolveFailed"), err))?;
+        // 選択配列を省略すると、絶対 PIDL が示すファイルを親フォルダ内で選択する。
+        let result = unsafe { SHOpenFolderAndSelectItems(item_id_list, None, 0) }.map_err(|err| utils::command_err(message!("Platform.showFileInFolder.openFailed"), err));
+        unsafe { CoTaskMemFree(Some(item_id_list.cast())) };
+        result
+    })();
+
+    unsafe { CoUninitialize() };
+    result
+}
+
 /// Windows スタートアップ一覧への登録・解除を行う。
 ///
 /// # Errors
@@ -392,6 +423,57 @@ pub fn pick_exe_file_dialog() -> Result<Option<String>, String> {
         unsafe { windows::Win32::System::Com::CoTaskMemFree(Some(display_name.0.cast())) };
 
         Ok(Some(path))
+    })();
+
+    unsafe { CoUninitialize() };
+    result
+}
+
+/// ログ読込元を選択する。実在するfilesystemフォルダだけを受け入れる。
+/// UI スレッドから呼び出し、アクティブなアプリ画面を所有者にする。
+///
+/// # Errors
+/// COM 初期化、ダイアログ操作、または選択結果の取得に失敗した場合にエラーを返す。
+pub fn pick_log_source_directory_dialog(current: Option<&Path>) -> Result<Option<String>, String> {
+    use std::os::windows::ffi::OsStringExt;
+
+    use windows::core::{HRESULT, HSTRING, PCWSTR};
+    use windows::Win32::Foundation::ERROR_CANCELLED;
+    use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED};
+    use windows::Win32::UI::Input::KeyboardAndMouse::GetActiveWindow;
+    use windows::Win32::UI::Shell::{FileOpenDialog, IFileOpenDialog, IShellItem, SHCreateItemFromParsingName, FOS_FORCEFILESYSTEM, FOS_PATHMUSTEXIST, FOS_PICKFOLDERS, SIGDN_FILESYSPATH};
+
+    let owner = unsafe { GetActiveWindow() };
+    let hr = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+    if hr.is_err() {
+        return Err(format!(message!("Platform.pickLogSourceDirectoryDialog.initializeFailed"), hr = hr));
+    }
+
+    let result = (|| -> Result<Option<String>, String> {
+        let dialog: IFileOpenDialog = unsafe { CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER) }.map_err(|err| utils::command_err(message!("Platform.pickLogSourceDirectoryDialog.createFailed"), err))?;
+        unsafe {
+            let options = dialog.GetOptions().map_err(|err| utils::command_err(message!("Platform.pickLogSourceDirectoryDialog.optionsFailed"), err))?;
+            dialog.SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST).map_err(|err| utils::command_err(message!("Platform.pickLogSourceDirectoryDialog.optionsFailed"), err))?;
+            dialog.SetTitle(&HSTRING::from(message!("Platform.pickLogSourceDirectoryDialog.title"))).map_err(|err| utils::command_err(message!("Platform.pickLogSourceDirectoryDialog.optionsFailed"), err))?;
+            if let Some(current) = current.filter(|path| path.is_dir()) {
+                let wide = utils::to_wide(current);
+                let folder: IShellItem = SHCreateItemFromParsingName(PCWSTR(wide.as_ptr()), None).map_err(|err| utils::command_err(message!("Platform.pickLogSourceDirectoryDialog.folderFailed"), err))?;
+                dialog.SetFolder(&folder).map_err(|err| utils::command_err(message!("Platform.pickLogSourceDirectoryDialog.folderFailed"), err))?;
+            }
+            // 所有者を指定し、選択中の前面表示とメイン画面の操作抑止を Windows に委ねる。
+            if let Err(err) = dialog.Show(owner) {
+                if err.code() == HRESULT::from_win32(ERROR_CANCELLED.0) {
+                    return Ok(None);
+                }
+                return Err(utils::command_err(message!("Platform.pickLogSourceDirectoryDialog.showFailed"), err));
+            }
+            let item = dialog.GetResult().map_err(|err| utils::command_err(message!("Platform.pickLogSourceDirectoryDialog.resultFailed"), err))?;
+            let display_name = item.GetDisplayName(SIGDN_FILESYSPATH).map_err(|err| utils::command_err(message!("Platform.pickLogSourceDirectoryDialog.resultFailed"), err))?;
+            let len = (0..).take_while(|&index| *display_name.0.add(index) != 0).count();
+            let path = std::ffi::OsString::from_wide(std::slice::from_raw_parts(display_name.0, len)).to_string_lossy().into_owned();
+            CoTaskMemFree(Some(display_name.0.cast()));
+            Ok(Some(path))
+        }
     })();
 
     unsafe { CoUninitialize() };

@@ -3,7 +3,7 @@ import type { MouseEvent } from 'react';
 
 /**
  * ファイル名のSet管理フック — Shift範囲選択・Ctrl個別トグル・ドラッグ選択に対応
- * インポートモードとビューアモードの両方で共用する
+ * バッチ取り込みの対象ファイル選択に使用する
  */
 export function useArchiveSelection(archiveFiles: string[]) {
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());

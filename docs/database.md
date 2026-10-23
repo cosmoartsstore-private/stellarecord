@@ -4,14 +4,14 @@ SQLiteのschemaと、ログ本文・設定・運用データの保存契約を�
 
 ## Document Control
 
-| Field | Content |
-| --- | --- |
-| Application | StellaRecord |
-| Scope | 保存先、形式、識別、transaction、初期化、削除、保全。操作条件はspec、実行主体はarchitectureを参照する |
-| Audience | データを変更・参照する開発者、backupや削除範囲を確認する人 |
-| Authority | `src-tauri/src/analyze/db.rs`（MAIN_SCHEMA / MAIN_VIEWS）、`analyze/mod.rs`、`commands/archive.rs`、`config.rs`、`utils.rs`（同じsrc配下）、`src-tauri/windows/installer.nsi` |
-| Related documents | [README](../README.md)、[Specification](spec.md)、[Architecture](architecture.md)、[Tech Stack](tech-stack.md)、[Operation Preview](manual.html) |
-| Source review date | 2026-10-22（sourceとの静的照合日。実行試験日ではない） |
+| Field              | Content                                                                                                                                                                       |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Application        | StellaRecord                                                                                                                                                                  |
+| Scope              | 保存先、形式、識別、transaction、初期化、削除、保全。操作条件はspec、実行主体はarchitectureを参照する                                                                         |
+| Audience           | データを変更・参照する開発者、backupや削除範囲を確認する人                                                                                                                    |
+| Authority          | `src-tauri/src/analyze/db.rs`（MAIN_SCHEMA / MAIN_VIEWS）、`analyze/mod.rs`、`commands/archive.rs`、`config.rs`、`utils.rs`（同じsrc配下）、`src-tauri/windows/installer.nsi` |
+| Related documents  | [README](../README.md)、[Specification](spec.md)、[Architecture](architecture.md)、[Tech Stack](tech-stack.md)、[Operation Preview](manual.html)                              |
+| Source review date | 2026-10-23（sourceとの静的照合日。実行試験日ではない）                                                                                                                        |
 
 ## Table of Contents
 
@@ -28,24 +28,24 @@ SQLiteのschemaと、ログ本文・設定・運用データの保存契約を�
 
 ## Storage and Ownership
 
-| Resource | Owner | Location and Format | Identity | Write unit | Retention and deletion |
-| --- | --- | --- | --- | --- | --- |
-| Polaris元ログ | Polarisが保存、Stellaが読取り・明示削除 | PolarisのInstallLocation/Data/archive/output_log_*.txt | filenameと本文bytes | file単位 | 同期では保持。一致した元ログの明示削除だけが削除する |
-| 圧縮archive | Stella archive command | 実効archive directoryのoutput_log_*.txt.tar.zst | 外名と先頭entry名/本文 | 1ログ1entry、一時fileから配置/置換 | 自動世代削除なし。通常uninstallで保持 |
-| SQLite / WAL / SHM | 解析とapps登録が書込み、preview等が読取り | 実効DB path、SQLite 3 | log_name/本文指紋、tableのkey | 解析outer transaction/file savepoint、appsは独立write | 解析部分のみarchiveから再生成可能。既定DB directoryは通常uninstallで削除 |
-| Stella registry | installer/config/settings | HKCU/Software/CosmoArtsStore/StellaRecord | 下記value名 | value単位、管理設定は順次write | 通常uninstallでkey削除。archiveが残っても保存先情報は残らない |
-| Polaris共有設定 | PolarisとStella settings | HKCU/Software/CosmoArtsStore/Polaris | ArchivePath、CapacityThresholdBytes | value単位 | Stellaの通常uninstallはこのkeyを削除しない |
-| Windows Run | settings/platform、installer | HKCUのRun keyのStellaRecord | value名 | quoted実行pathの登録/削除 | サインイン時起動。通常uninstallで削除 |
-| テーマ | Frontend theme model | localStorage stella-record-theme | light/dark/midnight | 変更ごと | WebView profile内。DB/archive copyの対象外 |
-| 運用ログ | utils logger | InstallLocation/Data/logs/info-YYYY-MM.log | 月次filename | WARN/ERRORをappend | 自動世代削除なし。既定logsは通常uninstall対象。本文/設定のbackupではない |
-| WebView data | WebView2 runtime | InstallLocation/Data/EBWebView | profile | runtime管理 | 固定profileとbundle data pathsを通常uninstallで削除 |
-| 一時状態 | React hook/view、Rust worker | メモリ、archive生成中の一時file | 世代/session、running/cancel | worker/画面の寿命 | job継続checkpointなし。bakはarchive置換用の短期退避 |
+| Resource           | Owner                                     | Location and Format                                                               | Identity                            | Write unit                                            | Retention and deletion                                                   |
+| ------------------ | ----------------------------------------- | --------------------------------------------------------------------------------- | ----------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------ |
+| 元ログ             | 指定した読込元をStellaが読取り・明示削除  | SourceLogPath、未指定時はPolarisのInstallLocation/Data/archive/`output_log_*.txt` | filenameと本文bytes                 | file単位                                              | 同期では保持。一致した元ログの明示削除だけが削除する                     |
+| 圧縮archive        | Stella archive command                    | 実効archive directoryの`output_log_*.txt.tar.zst`                                 | 外名と先頭entry名/本文              | 1ログ1entry、一時fileから配置/置換                    | 自動世代削除なし。通常uninstallで保持                                    |
+| SQLite / WAL / SHM | 解析とapps登録が書込み、preview等が読取り | 実効DB path、SQLite 3                                                             | log_name/本文指紋、tableのkey       | 解析outer transaction/file savepoint、appsは独立write | 解析部分のみarchiveから再生成可能。既定DB directoryは通常uninstallで削除 |
+| Stella registry    | installer/config/settings                 | HKCU/Software/CosmoArtsStore/StellaRecord                                         | 下記value名                         | value単位、管理設定は順次write                        | 通常uninstallでkey削除。archiveが残っても保存先情報は残らない            |
+| Polaris共有設定    | PolarisとStella settings                  | HKCU/Software/CosmoArtsStore/Polaris                                              | ArchivePath、CapacityThresholdBytes | value単位                                             | Stellaの通常uninstallはこのkeyを削除しない                               |
+| Windows Run        | settings/platform、installer              | HKCUのRun keyのStellaRecord                                                       | value名                             | quoted実行pathの登録/削除                             | サインイン時起動。通常uninstallで削除                                    |
+| テーマ             | Frontend theme model                      | localStorage stella-record-theme                                                  | light/dark                          | 変更ごと                                              | WebView profile内。DB/archive copyの対象外                               |
+| 運用ログ           | utils logger                              | InstallLocation/Data/logs/info-YYYY-MM.log                                        | 月次filename                        | WARN/ERRORをappend                                    | 自動世代削除なし。既定logsは通常uninstall対象。本文/設定のbackupではない |
+| WebView data       | WebView2 runtime                          | InstallLocation/Data/EBWebView                                                    | profile                             | runtime管理                                           | 固定profileとbundle data pathsを通常uninstallで削除                      |
+| 一時状態           | React hook/view、Rust worker              | メモリ、archive生成中の一時file                                                   | 世代/session、running/cancel        | worker/画面の寿命                                     | job継続checkpointなし。生成完了・検証後に一時fileをrename                |
 
 ### Location Resolution
 
 Stellaのarchiveは非空ArchivePath、DBは非空DbPathを優先し、未指定時はStellaのInstallLocation/Data/archiveとInstallLocation/Data/db/stellarecord.dbを使う。正本は`src-tauri/src/config.rs`のget_effective_archive_dir/get_effective_db_path。現在のexeの位置から推測しない。overrideもInstallLocationもなければ保存先を解決できず、対応する操作が失敗する。
 
-Polaris入力はPolarisのInstallLocation/Data/archiveを組み立て、Polaris ArchivePathをfallbackにしない。get_db_pathは親directoryを作成し得る。previewが読取り専用画面であることは、SQLite read-only flagやfilesystem無変更を意味しない。
+入力はStella registryの非空SourceLogPathを優先し、未指定時はPolarisのInstallLocation/Data/archiveを組み立てる。Polaris ArchivePathは入力元のfallbackにしない。読込元は設定画面・初回取込確認から変更できる。get_db_pathは親directoryを作成し得る。previewが読取り専用画面であることは、SQLite read-only flagやfilesystem無変更を意味しない。
 
 WebViewはInstallLocationを取得できる場合に上記profileを指定する。取得できない場合、app側で同じ固定pathを指定する処理はない。
 
@@ -107,23 +107,24 @@ SQLite はストレージクラスのみを持ち、宣言型は親和性ヒン�
 
 ### Windows Registry
 
-| Key                                                  | Value Name                   | Type      | Description                          |
-| ---------------------------------------------------- | ---------------------------- | --------- | ------------------------------------ |
-| `HKCU\Software\CosmoArtsStore\StellaRecord`          | `InstallLocation`            | REG_SZ    | NSIS が書き込むインストール先        |
-| 同上                                                 | `ArchivePath`                | REG_SZ    | アーカイブストア（空ならデフォルト） |
-| 同上                                                 | `DbPath`                     | REG_SZ    | DB ファイル（空ならデフォルト）      |
-| 同上                                                 | `EnableStartup`              | REG_DWORD | 自動起動 ON/OFF                      |
-| 同上                                                 | `StartupPreferenceSet`       | REG_DWORD | Windows自動起動を選択済みか          |
-| 同上                                                 | `StartupImportEnabled`       | REG_DWORD | 起動時取込の許可                     |
-| 同上                                                 | `StartupImportPreferenceSet` | REG_DWORD | 起動時取込の許可を選択済みか         |
-| `HKCU\Software\CosmoArtsStore\Polaris`               | `CapacityThresholdBytes`     | REG_QWORD | アーカイブ警告ライン                 |
-| `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` | `StellaRecord`               | REG_SZ    | 自動起動コマンド                     |
+| Key                                                  | Value Name                   | Type      | Description                               |
+| ---------------------------------------------------- | ---------------------------- | --------- | ----------------------------------------- |
+| `HKCU\Software\CosmoArtsStore\StellaRecord`          | `InstallLocation`            | REG_SZ    | NSIS が書き込むインストール先             |
+| 同上                                                 | `ArchivePath`                | REG_SZ    | アーカイブストア（空ならデフォルト）      |
+| 同上                                                 | `DbPath`                     | REG_SZ    | DB ファイル（空ならデフォルト）           |
+| 同上                                                 | `SourceLogPath`              | REG_SZ    | ログ読込元（空ならPolarisの既定フォルダ） |
+| 同上                                                 | `EnableStartup`              | REG_DWORD | 自動起動 ON/OFF                           |
+| 同上                                                 | `StartupPreferenceSet`       | REG_DWORD | Windows自動起動を選択済みか               |
+| 同上                                                 | `StartupImportEnabled`       | REG_DWORD | 起動時取込の許可                          |
+| 同上                                                 | `StartupImportPreferenceSet` | REG_DWORD | 起動時取込の許可を選択済みか              |
+| `HKCU\Software\CosmoArtsStore\Polaris`               | `CapacityThresholdBytes`     | REG_QWORD | アーカイブ警告ライン                      |
+| `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` | `StellaRecord`               | REG_SZ    | 自動起動コマンド                          |
 
 ### LocalStorage
 
-| Key                   | Value                             | Description |
-| --------------------- | --------------------------------- | ----------- |
-| `stella-record-theme` | `"light" \| "dark" \| "midnight"` | UI テーマ   |
+| Key                   | Value               | Description |
+| --------------------- | ------------------- | ----------- |
+| `stella-record-theme` | `"light" \| "dark"` | UI テーマ   |
 
 テーマ以外のactive section、list/card、選択、filter、zoom、進捗はメモリのみ。Windows Runの実在値、EnableStartup、起動時取込の許可は別の値である。取込許可の既定はenabled=false、preference_set=false。
 
@@ -254,32 +255,34 @@ find_usersは複数sessionに共有する最新表示名、appsはログと独�
 
 ログファイル単位のセッション情報。1 ログファイル = 1 セッション。
 
-| Column         | Type     | Nullable | Default       | Description                                                 |
-| -------------- | -------- | -------- | ------------- | ----------------------------------------------------------- |
-| `id`           | INTEGER  | NO       | AUTOINCREMENT | プライマリキー                                              |
-| `log_name`     | TEXT     | NO       | -             | 元ログファイル名 (例: `output_log_2025-10-21_00-59-15.txt`) |
-| `account_id`   | TEXT     | YES      | NULL          | 自分の VRChat ID (`usr_xxx`)                                |
-| `account_name` | TEXT     | YES      | NULL          | 自分の表示名                                                |
-| `start_time`   | DATETIME | YES      | NULL          | セッション開始時刻                                          |
-| `end_time`     | DATETIME | YES      | NULL          | セッション終了時刻                                          |
+| Column         | Type     | Nullable | Default       | Description                                                  |
+| -------------- | -------- | -------- | ------------- | ------------------------------------------------------------ |
+| `id`           | INTEGER  | NO       | AUTOINCREMENT | プライマリキー                                               |
+| `log_name`     | TEXT     | NO       | -             | 元ログファイル名 (例: `output_log_2025-10-21_00-59-15.txt`)  |
+| `account_id`   | TEXT     | YES      | NULL          | ログ内の自己アカウントID。複数アカウントを検出した場合はNULL |
+| `account_name` | TEXT     | YES      | NULL          | 自己表示名。複数アカウントを検出した場合はNULL               |
+| `start_time`   | DATETIME | YES      | NULL          | セッション開始時刻                                           |
+| `end_time`     | DATETIME | YES      | NULL          | セッション終了時刻                                           |
 
 **Constraints**
 
 - `PRIMARY KEY (id)`
-- `UNIQUE (log_name)` — 再取り込み防止
+- `UNIQUE (log_name)` — 再取り込み時に同じログを識別
+
+認証切り替え時に旧訪問を閉じ、各訪問の認証情報・local初期化表示名・入室ユーザーを対応付けて`with_users.is_self`を確定する。1ログに複数アカウントが含まれる場合、sessionsを単一アカウントへ紐付けず、訪問単位のis_selfを参照する。
 
 ---
 
 #### imported_logs
 
-取り込み済みログの展開後本文を識別する内部テーブル。同名アーカイブが置き換わった場合でも、本文または解析版が変化したときにセッションと関連データを再構築する。現在の `CURRENT_PARSER_VERSION` は2で、DDLの既定値1は旧取込行の識別に使用する。
+取り込み済みログの展開後本文を識別する内部テーブル。同名アーカイブが置き換わった場合でも、本文または解析版が変化したときにセッションと関連データを再構築する。現在の `CURRENT_PARSER_VERSION` は3で、DDLの既定値1は旧取込行の識別に使用する。
 
 | Column           | Type    | Nullable                 | Default | Description                      |
 | ---------------- | ------- | ------------------------ | ------- | -------------------------------- |
 | `log_name`       | TEXT    | YES（DDLにNOT NULLなし） | -       | 対応する `sessions.log_name`     |
 | `content_sha256` | BLOB    | NO                       | -       | 展開後本文の SHA-256（32バイト） |
 | `content_size`   | INTEGER | NO                       | -       | 展開後本文のバイト長             |
-| `parser_version` | INTEGER | NO                       | 1       | 解析版（現在は2）                |
+| `parser_version` | INTEGER | NO                       | 1       | 解析版（現在は3）                |
 
 **Constraints**
 
@@ -542,17 +545,17 @@ FROM visits v
 ORDER BY v.join_time DESC;
 ```
 
-| Column               | Type     | Description                                          |
-| -------------------- | -------- | ---------------------------------------------------- |
-| `visit_id`           | INTEGER  | `visits.id`                                          |
-| `world_name`         | TEXT     | ワールド名                                           |
-| `instance_id`        | TEXT     | インスタンス ID                                      |
-| `instance_type`      | TEXT     | 公開区分                                             |
-| `region`             | TEXT     | リージョン                                           |
-| `join_time`          | DATETIME | 入室時刻                                             |
-| `leave_time`         | DATETIME | 退室時刻                                             |
+| Column               | Type     | Description                                                 |
+| -------------------- | -------- | ----------------------------------------------------------- |
+| `visit_id`           | INTEGER  | `visits.id`                                                 |
+| `world_name`         | TEXT     | ワールド名                                                  |
+| `instance_id`        | TEXT     | インスタンス ID                                             |
+| `instance_type`      | TEXT     | 公開区分                                                    |
+| `region`             | TEXT     | リージョン                                                  |
+| `join_time`          | DATETIME | 入室時刻                                                    |
+| `leave_time`         | DATETIME | 退室時刻                                                    |
 | `duration_sec`       | INTEGER  | 滞在秒数 (`leave_time` が NULL の場合は現在のlocaltimeまで) |
-| `other_player_count` | INTEGER  | 自分を除いた同席プレイヤー数                         |
+| `other_player_count` | INTEGER  | 自分を除いた同席プレイヤー数                                |
 
 ---
 
@@ -651,7 +654,7 @@ viewは非実体化で照会時にJOIN/集計する。visit_summaryのleave_time
 
 ### Import Identity
 
-archive外名から.tar.zstを除いたlog_nameと、展開した先頭entry本文のSHA-256（32 bytes）/本文長/CURRENT_PARSER_VERSION=2で判定する。tar時刻や圧縮bytes自体ではない。同名別内容は併存せず置換する。
+archive外名から.tar.zstを除いたlog_nameと、展開した先頭entry本文のSHA-256（32 bytes）/本文長/CURRENT_PARSER_VERSION=3で判定する。tar時刻や圧縮bytes自体ではない。同名別内容は併存せず置換する。先頭entryが通常ファイルでない場合、または本文が宣言サイズより短い場合はファイル単位の取り込み失敗とし、既存の解析結果を保持する。
 
 file savepoint開始後に指紋を計算する。一致ならskip、不一致なら旧session所有のscreenshots/with_users/visits/notifications/osc/subscription/imported_logs/sessionを削除し、解析・指紋登録を行う。file失敗時はsavepointをrollbackし旧確定データを戻す。共有find_users/appsは巻き添え削除しない。
 
@@ -659,25 +662,27 @@ file savepoint開始後に指紋を計算する。一致ならskip、不一致�
 
 run_diff_import/run_enhanced_import_batchはDB接続とinit_main_dbの後にouter transactionを開始する。schema初期化/互換処理と先行archive同期はouter transactionの外にある。
 
-| Mode and result | Database result | Other retained effects |
-| --- | --- | --- |
-| 手動batch全成功 | 全選択処理後に取消しを最終確認してouter commit | 既存archiveを変更しない |
-| 手動batchの通常file失敗 | 当該savepointとouter transactionをrollback | 起動時同期等の既存archiveは保持 |
-| 差分の通常file失敗 | 当該savepointのみrollback、後続処理後に成功分commit | archive更新は巻き戻さない |
-| 両方式の取消し | 今回のouter transaction全体をrollback | schema初期化、先行archive、元ログ削除は含めない |
-| outer/commit失敗 | 成功と扱わず、未確定更新はrollback対象 | 別資源まで戻す契約ではない |
+| Mode and result         | Database result                                     | Other retained effects                          |
+| ----------------------- | --------------------------------------------------- | ----------------------------------------------- |
+| 手動batch全成功         | 全選択処理後に取消しを最終確認してouter commit      | 既存archiveを変更しない                         |
+| 手動batchの通常file失敗 | 当該savepointとouter transactionをrollback          | 起動時同期等の既存archiveは保持                 |
+| 差分の通常file失敗      | 当該savepointのみrollback、後続処理後に成功分commit | archive更新は巻き戻さない                       |
+| 両方式の取消し          | 今回のouter transaction全体をrollback               | schema初期化、先行archive、元ログ削除は含めない |
+| outer/commit失敗        | 成功と扱わず、未確定更新はrollback対象              | 別資源まで戻す契約ではない                      |
 
 fileごとの完了進捗はouter commit前に送る。表示と永続化確定は同義ではない。appsは別接続/別writeであり、取込running flagが全writerを直列化するわけではない。
 
 ### Archive Replacement
 
-新規または厳密な追記だけを同期対象とする。同サイズ別内容・縮小・非prefixは旧archive保持。tar.finish→zstd.finish→sync_all後に一時fileを配置する。置換では旧targetを.bakへ退避し、配置失敗時に復元を試みる。復元失敗/成功後bak削除失敗はwarnを残す。
+新規または厳密な追記だけを同期対象とする。同サイズ別内容・縮小・非prefixは旧archive保持。圧縮開始時点の元ログサイズに読取範囲を固定し、tar.finish→zstd.finish→sync_allを明示的に完了する。置換では生成済み本文が既存entryと同名で、既存本文全体をprefixとして保持していることを再確認し、同一directory内のrenameで置き換える。検証・配置に失敗した場合は旧archiveを保持し、一時fileを破棄する。
 
-bakは全データbackupではない。複数archive同期の単一transaction/一括rollbackや同期中cancel確認はなく、途中失敗の先行成功fileは残る。
+旧名を先に退避する処理はなく、正規名が一時的に欠落する区間を作らない。複数archive同期の単一transaction/一括rollbackや同期中cancel確認はなく、途中失敗の先行成功fileは残る。
 
 ### Settings Writes
 
 管理設定はPolaris設定→Run→Stella設定の順に保存する。途中失敗時はStella→Run→Polarisの順に開始前値の復元を試み、復元失敗もerrorに含める。全registry書込みはatomicではない。
+
+Windows自動起動を切り替える場合は保存済みの警告ラインを保持し、編集中の警告ラインを同時に保存しない。警告ラインは専用の「保存」で確定する。読込元変更は実在する絶対パスとread_dir成功を確認し、SourceLogPathだけを保存する。取消しでは変更しない。
 
 取込許可はStartupImportEnabled→StartupImportPreferenceSetの順に保存し、独自transaction/rollbackはない。tableの競合処理は[Idempotency](#idempotency)を参照する。
 
@@ -705,16 +710,16 @@ bakは全データbackupではない。複数archive同期の単一transaction/�
 
 ## Deletion and Retention
 
-| Operation | Original input | Derived data | User-added data | Settings | Partial failure and recovery |
-| --- | --- | --- | --- | --- | --- |
-| 起動時同期/解析 | Polaris元ログ保持 | archiveをfile単位生成/置換、解析は上記方式 | apps保持 | 保持 | 同期の先行成功は残る。解析とは別に再試行 |
-| 手動「復元」 | 原本/archive保持 | 選択archiveから解析DB再構築 | apps保持 | 保持 | 全選択成功時commit、取消し/通常file失敗は今回全rollback |
-| 元ログ削除 | Polaris元ログの選択対象を削除 | archive/DB保持 | apps保持 | 保持 | entry名/size/本文bytesを直前に再確認し逐次削除。既削除分undoなし |
-| 登録解除 | EXE/対象appデータ保持 | 解析行保持 | 該当apps行のみ削除 | 保持 | 復元APIなし。再登録する |
-| /UPDATE | 原本/外部archive保持 | 通常Data削除をskip | DB fileの通常削除なし | Run/Stella keyの通常削除skip。ただしInstallLocation/DbPath再write | DbPathはINSTDIR/Data/db/stellarecord.dbへ再設定。外部DBが残っても参照先は変わり得る |
-| 通常uninstall・固定Data | Polaris元ログ/Data/archive保持 | INSTDIR/Data/db/logs/EBWebView、bundle data paths削除 | 固定DB内appsも削除 | Stella/Run/installer登録削除、Polaris共有key保持 | 必須削除失敗で中断。先行成功をrollbackしない |
-| 通常uninstall・外部override | 外部ArchivePath保持 | 外部DbPathを探索削除しない | 外部DB内apps保持 | override情報を含むStella key削除 | fileと保存先設定の保持を区別。実効pathを保全時に記録 |
-| 手動backup/restore | 停止後archive copy | 停止後DB directory copy | appsはDBに含む | registry/localStorageは別 | 稼働中3file順次copyをsnapshotと扱わない |
+| Operation                    | Original input                 | Derived data                                          | User-added data       | Settings                                                          | Partial failure and recovery                                                                                               |
+| ---------------------------- | ------------------------------ | ----------------------------------------------------- | --------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| 起動時同期/解析              | 読込元ログ保持                 | archiveをfile単位生成/置換、解析は上記方式            | apps保持              | 保持                                                              | 同期の先行成功は残る。解析とは別に再試行                                                                                   |
+| 手動「アーカイブの取り込み」 | 原本/archive保持               | 選択archiveから解析DB再構築                           | apps保持              | 保持                                                              | 全選択成功時commit、取消し/通常file失敗は今回全rollback                                                                    |
+| 元ログ削除                   | 確認した読込元の選択対象を削除 | archive/DB保持                                        | apps保持              | 保持                                                              | 候補取得時の読込元を再確認。entry名/size/本文bytesの照合から削除まで同じhandleを保持し、追記・置換を防ぐ。既削除分undoなし |
+| 登録解除                     | EXE/対象appデータ保持          | 解析行保持                                            | 該当apps行のみ削除    | 保持                                                              | 復元APIなし。再登録する                                                                                                    |
+| /UPDATE                      | 原本/外部archive保持           | 通常Data削除をskip                                    | DB fileの通常削除なし | Run/Stella keyの通常削除skip。ただしInstallLocation/DbPath再write | DbPathはINSTDIR/Data/db/stellarecord.dbへ再設定。外部DBが残っても参照先は変わり得る                                        |
+| 通常uninstall・固定Data      | Polaris元ログ/Data/archive保持 | INSTDIR/Data/db/logs/EBWebView、bundle data paths削除 | 固定DB内appsも削除    | Stella/Run/installer登録削除、Polaris共有key保持                  | 必須削除失敗で中断。先行成功をrollbackしない                                                                               |
+| 通常uninstall・外部override  | 外部ArchivePath保持            | 外部DbPathを探索削除しない                            | 外部DB内apps保持      | override情報を含むStella key削除                                  | fileと保存先設定の保持を区別。実効pathを保全時に記録                                                                       |
+| 手動backup/restore           | 停止後archive copy             | 停止後DB directory copy                               | appsはDBに含む        | registry/localStorageは別                                         | 稼働中3file順次copyをsnapshotと扱わない                                                                                    |
 
 installer再実行UIで既存app削除を選ぶ経路と/UPDATEは異なる。[Installation Lifecycle](tech-stack.md#installation-lifecycle)を参照する。通常uninstallでは残るarchiveを保護し、Data/install directoryは空の場合だけ削除する。
 

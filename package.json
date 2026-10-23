@@ -16,7 +16,7 @@
     "test:coverage": "vitest run --coverage",
     "fmt:check": "cargo fmt --manifest-path src-tauri/Cargo.toml --all --check",
     "clippy": "cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
-    "test:rust": "cargo test --locked --workspace --all-targets",
+    "test:rust": "cargo test --locked --workspace --all-targets -- --test-threads=1",
     "verify": "npm run format:check && npm run stylelint && npm run lint && npm run test:coverage && npm run build && npm run clippy && npm run test:rust",
     "tauri": "tauri"
   },
@@ -38,6 +38,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "@vitest/coverage-v8": "^4.1.7",
+    "esbuild": "0.28.1",
     "eslint": "^9.39.1",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react": "^7.37.5",

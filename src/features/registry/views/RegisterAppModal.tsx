@@ -61,15 +61,15 @@ export function RegisterAppModal({ onClose, onConfirm }: RegisterAppModalProps) 
         <h3 id="register-app-title" tabIndex={-1} autoFocus>{getMsg('RegisterApp.title')}</h3>
         <p id="register-app-description">{getMsg('RegisterApp.description')}</p>
         <div className={styles.registerForm}>
-          <label className={styles.formField}>
-            <span>{getMsg('RegisterApp.executableLabel')}</span>
+          <div className={styles.formField}>
+            <label htmlFor="register-app-executable">{getMsg('RegisterApp.executableLabel')}</label>
             <div className={styles.filePickerRow}>
-              <input type="text" className={styles.formInput} value={path} readOnly placeholder={getMsg('RegisterApp.executablePlaceholder')} />
+              <input id="register-app-executable" type="text" className={styles.formInput} value={path} readOnly placeholder={getMsg('RegisterApp.executablePlaceholder')} />
               <button type="button" className={shared.btn} onClick={() => {
                   void handlePickFile();
                 }}>{getMsg('RegisterApp.browse')}</button>
             </div>
-          </label>
+          </div>
           <label className={styles.formField}>
             <span>{getMsg('RegisterApp.nameLabel')}</span>
             <input type="text" className={styles.formInput} value={name} onChange={(e) => {

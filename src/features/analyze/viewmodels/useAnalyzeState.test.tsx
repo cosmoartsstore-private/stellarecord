@@ -86,7 +86,7 @@ describe('解析と容量表示', () => {
     const { result } = renderHook(() => useAnalyzeState(addToast));
     act(() => { result.current.setAnalyzeRunning(true); });
     await act(async () => { await result.current.handleCancelSync(); });
-    expect(addToast).toHaveBeenLastCalledWith('解析の中断を要求しました');
+    expect(addToast).toHaveBeenLastCalledWith('取り込みの停止を要求しました');
     expect(result.current.analyzeRunning).toBe(true);
     vi.mocked(cancelAnalyze).mockRejectedValueOnce(new Error('送信拒否'));
     await act(async () => { await result.current.handleCancelSync(); });

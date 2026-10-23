@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import '../App.css';
 import '../App.light.css';
 import '../App.dark.css';
-import '../App.midnight.css';
 import styles from './App.module.css';
 import { useAppModals } from './useAppModals';
 import { ToastContainer } from './ToastContainer';
@@ -17,12 +16,13 @@ import { PolarisCleanupModal } from '../features/analyze/views/PolarisCleanupMod
 import { useAnalyzeState } from '../features/analyze/viewmodels/useAnalyzeState';
 import { useDatabaseState } from '../features/database/viewmodels/useDatabaseState';
 import { DatabaseSection } from '../features/database/views/DatabaseSection';
-import { launchExternalApp, openFolder, registerApp, unregisterApp } from '../features/registry/services/registryService';
+import { launchExternalApp, showAppInFolder, registerApp, unregisterApp } from '../features/registry/services/registryService';
 import type { AppCard, LauncherViewMode } from '../features/registry/models/types';
 import { useRegistryState } from '../features/registry/viewmodels/useRegistryState';
 import { RegistrySection } from '../features/registry/views/RegistrySection';
 import { RegisterAppModal } from '../features/registry/views/RegisterAppModal';
-import { readInitialTheme, saveTheme, type ThemeMode } from '../features/settings/models/theme';
+import { UnregisterAppModal } from '../features/registry/views/UnregisterAppModal';
+import { readInitialTheme, saveTheme, themeModes, type ThemeMode } from '../features/settings/models/theme';
 import { useSettingsState } from '../features/settings/viewmodels/useSettingsState';
 import { useStartupImportSettings } from '../features/settings/viewmodels/useStartupImportSettings';
 import { SettingsControls } from '../features/settings/views/SettingsControls';
@@ -39,10 +39,14 @@ type SectionId = 'registry' | 'analyze' | 'database';
 
 function App() {
   const [themeMode, setThemeMode] = useState<ThemeMode>(readInitialTheme);
+  const nextThemeMode = themeModes[(themeModes.indexOf(themeMode) + 1) % themeModes.length];
+  const themeSwitchLabel = getMsg('App.switchTheme', { theme: getMsg(`SettingsControls.${nextThemeMode}Theme`) });
   const [activeSection, setActiveSection] = useState<SectionId>('registry');
   const [launcherViewMode, setLauncherViewMode] = useState<LauncherViewMode>('list');
 
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
+  const [appToUnregister, setAppToUnregister] = useState<AppCard | null>(null);
+  const [isUnregistering, setIsUnregistering] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const startupImportInitialCheckCompletedRef = useRef(false);
   const startupImportSettingsErrorShownRef = useRef(false);
@@ -50,7 +54,7 @@ function App() {
   const { toasts, addToast } = useToasts();
   const { registryApps, isReloading, reloadRegistry, refreshRegistry } = useRegistryState();
   const { archiveLimitDraft, isStartupEnabledDraft, setArchiveLimitDraft, toggleStartup, saveArchiveLimit } = useSettingsState();
-  const { startupImportSettings, startupImportSettingsError, isStartupImportSettingsLoading, isStartupImportPreferenceSaving, saveStartupImportPreference } = useStartupImportSettings();
+  const { startupImportSettings, startupImportSettingsError, isStartupImportSettingsLoading, isStartupImportPreferenceSaving, isChangingSourceLogDirectory, saveStartupImportPreference, changeSourceLogDirectory } = useStartupImportSettings();
   const { analyzeRunning: isAnalyzeRunning, analyzeProgress, analyzeStatus, storageStatus, pollStorage, setAnalyzeRunning, handleCancelSync } = useAnalyzeState(addToast);
   const { dbTables, currentTable, tableData, isDbLoading, currentPage, totalPages, pageSize, loadTableData, goToPage, sortState, toggleSort, loadDatabaseCatalog } = useDatabaseState(addToast);
   const { archiveFiles, logViewerData, isLogViewerLoading, isLogViewerLoaded, externalFiles, openEnhancedSync, openLogViewerSelection, executeEnhancedSync, openSelectedLogViewer, closeLogViewer, runStartupImport, selectExternalLogFiles, clearExternalLogFiles } = useArchiveState();
@@ -77,11 +81,10 @@ function App() {
     }
   };
 
-  /** アプリの実行ファイルが格納されたフォルダを開く */
+  /** アプリの実行ファイルを選択した状態で、格納先のフォルダを開く。 */
   const handleOpenFolder = async (app: AppCard) => {
     try {
-      const dir = app.path.substring(0, app.path.lastIndexOf('\\'));
-      await openFolder(dir);
+      await showAppInFolder(app.path);
     } catch (error) {
       addErrorToast(addToast, getMsg('Operations.openApplicationFolder'), getMsg('App.folderOpenFailed'), error);
     }
@@ -101,12 +104,17 @@ function App() {
 
   /** サードパーティアプリの登録を解除する */
   const handleUnregisterApp = async (app: AppCard) => {
+    if (isUnregistering) return;
+    setIsUnregistering(true);
     try {
       await unregisterApp(app.path);
+      setAppToUnregister(null);
       addToast(getMsg('App.applicationUnregistered', { name: app.name }));
       await refreshRegistry();
     } catch (error) {
       addErrorToast(addToast, getMsg('Operations.unregisterApplication'), getMsg('App.applicationUnregistrationFailed', { name: app.name }), error);
+    } finally {
+      setIsUnregistering(false);
     }
   };
 
@@ -171,8 +179,18 @@ function App() {
     }
   };
 
+  /** 読込元を選択して保存する。反映は次回の取り込み開始時から行う。 */
+  const handleChangeSourceLogDirectory = async () => {
+    try {
+      const path = await changeSourceLogDirectory();
+      if (path !== null) addToast(getMsg('App.sourceLogDirectoryChanged'));
+    } catch (error) {
+      addErrorToast(addToast, getMsg('Operations.changeSourceLogDirectory'), getMsg('App.sourceLogDirectoryChangeFailed'), error);
+    }
+  };
+
   /**
-   * 設定画面で選択されたテーマへ切り替える
+   * 設定画面とナビゲーションから選択されたテーマへ切り替える
    * 切替時にCSSトランジションを一時無効化し、中間状態のちらつきを防ぐ
    */
   const handleThemeChange = (nextThemeMode: ThemeMode) => {
@@ -220,7 +238,7 @@ function App() {
             }} onOpenFolder={(app) => {
               void handleOpenFolder(app);
             }} onUnregisterApp={(app) => {
-              void handleUnregisterApp(app);
+              setAppToUnregister(app);
             }} onRegisterApp={() => {
               setIsRegisterModalOpen(true);
             }} onReload={() => {
@@ -258,15 +276,7 @@ function App() {
     <div className={`stella-record-root ${styles.mainWrapper} ${styles.root} ${themeMode}-theme`}>
       <nav className={styles.topNavigation} aria-label={getMsg('App.mainNavigation')}>
         <div className={styles.navBrand}>
-          <img src={themeMode === 'light' ? logoLightSrc : logoDarkSrc} alt={appDisplayName} className={
-              styles[
-                themeMode === 'midnight'
-                  ? 'navLogoMidnight'
-                  : themeMode === 'dark'
-                    ? 'navLogoDark'
-                    : 'navLogoLight'
-              ]
-            } />
+          <img src={themeMode === 'light' ? logoLightSrc : logoDarkSrc} alt={appDisplayName} className={themeMode === 'dark' ? styles.navLogoDark : styles.navLogoLight} />
         </div>
 
         <div className={styles.pillNav}>
@@ -280,44 +290,71 @@ function App() {
           ))}
         </div>
 
-        <button type="button" className={styles.navSettingsButton} onClick={() => { setIsSettingsModalOpen(true); }}><StellaIcon name={stellaIconNames.settings} />{getMsg('common.settings')}</button>
+        <div className={styles.navActions}>
+          <button type="button" className={styles.navSettingsButton} onClick={() => { handleThemeChange(nextThemeMode); }} aria-label={themeSwitchLabel} title={themeSwitchLabel}><StellaIcon name={themeMode === 'light' ? stellaIconNames.sun : stellaIconNames.moon} aria-hidden="true" /></button>
+          <button type="button" className={styles.navSettingsButton} onClick={() => { setIsSettingsModalOpen(true); }} aria-label={getMsg('common.settings')} title={getMsg('common.settings')}><StellaIcon name={stellaIconNames.settings} aria-hidden="true" /></button>
+        </div>
       </nav>
 
       <main className={styles.contentArea}>{renderSection()}</main>
 
       {modals.isArchiveSelectorVisible && (
-        <ArchiveSelectorModal archiveFiles={archiveFiles} selectedFiles={batchSelectedFiles} onClose={modals.closeArchiveSelector} onSelectAll={handleBatchSelectAll} onFileAction={handleBatchFileAction} onConfirm={() => {
-            void modals.handleConfirmImport();
-          }} />
+        <ArchiveSelectorModal
+          archiveFiles={archiveFiles}
+          selectedFiles={batchSelectedFiles}
+          onClose={modals.closeArchiveSelector}
+          onSelectAll={handleBatchSelectAll}
+          onFileAction={handleBatchFileAction}
+          onConfirm={() => { void modals.handleConfirmImport(); }}
+        />
       )}
 
-      {modals.isLogViewerModalVisible && logViewerData && (
-        <LogViewerModal logViewerData={logViewerData} archiveFiles={archiveFiles} externalFiles={externalFiles} isLoading={isLogViewerLoading} isLoaded={isLogViewerLoaded} onNavigateToFile={modals.handleViewerNavigateToFile} onPickExternalFiles={() => {
-            void modals.handleSelectExternalFiles();
-          }} onClearExternalFiles={() => {
-            void modals.handleClearExternalFiles();
-          }} onClose={modals.closeLogViewerModal} />
+      {modals.isLogViewerModalVisible && (
+        <LogViewerModal
+          logViewerData={logViewerData}
+          archiveFiles={archiveFiles}
+          externalFiles={externalFiles}
+          isLoading={isLogViewerLoading}
+          isLoaded={isLogViewerLoaded}
+          onNavigateToFile={modals.handleViewerNavigateToFile}
+          onPickExternalFiles={() => { void modals.handleSelectExternalFiles(); }}
+          onClearExternalFiles={() => { void modals.handleClearExternalFiles(); }}
+          onClose={modals.closeLogViewerModal}
+        />
       )}
 
       {modals.isCleanupModalOpen && (
-        <PolarisCleanupModal logs={modals.deletableLogs} onClose={modals.closeCleanupModal} onConfirm={(fileNames) => {
-            void modals.handleConfirmCleanup(fileNames);
-          }} />
+        <PolarisCleanupModal
+          logs={modals.deletableLogs}
+          sourceLogPath={modals.cleanupSourceLogPath}
+          onClose={modals.closeCleanupModal}
+          onConfirm={(fileNames) => { void modals.handleConfirmCleanup(fileNames); }}
+        />
       )}
 
       {isRegisterModalOpen && (
-        <RegisterAppModal onClose={() => {
-            setIsRegisterModalOpen(false);
-          }} onConfirm={(path, name, description) => {
-            void handleRegisterApp(path, name, description);
-          }} />
+        <RegisterAppModal
+          onClose={() => { setIsRegisterModalOpen(false); }}
+          onConfirm={(path, name, description) => { void handleRegisterApp(path, name, description); }}
+        />
+      )}
+
+      {appToUnregister && (
+        <UnregisterAppModal
+          app={appToUnregister}
+          isSubmitting={isUnregistering}
+          onClose={() => { setAppToUnregister(null); }}
+          onConfirm={() => { void handleUnregisterApp(appToUnregister); }}
+        />
       )}
 
       {isSettingsModalOpen && (
-        <SettingsModal onClose={() => {
-            setIsSettingsModalOpen(false);
-          }}>
-          <SettingsControls themeMode={themeMode} archiveLimitDraft={archiveLimitDraft} isStartupEnabledDraft={isStartupEnabledDraft} isStartupImportEnabled={startupImportSettings?.enabled ?? false} isStartupImportLoading={ isStartupImportSettingsLoading || isStartupImportPreferenceSaving } logArchivePath={startupImportSettings?.log_archive_path ?? ''} databasePath={startupImportSettings?.database_path ?? ''} isDataLocationLoading={isStartupImportSettingsLoading} onThemeModeChange={handleThemeChange} onArchiveLimitDraftChange={setArchiveLimitDraft} onSaveArchiveLimit={() => {
+        <SettingsModal
+          onClose={() => { setIsSettingsModalOpen(false); }}
+        >
+          <SettingsControls themeMode={themeMode} archiveLimitDraft={archiveLimitDraft} isStartupEnabledDraft={isStartupEnabledDraft} isStartupImportEnabled={startupImportSettings?.enabled ?? false} isStartupImportLoading={ isStartupImportSettingsLoading || isStartupImportPreferenceSaving } sourceLogPath={startupImportSettings?.source_log_path ?? ''} logArchivePath={startupImportSettings?.log_archive_path ?? ''} databasePath={startupImportSettings?.database_path ?? ''} isDataLocationLoading={isStartupImportSettingsLoading} isSourceLogChangeDisabled={isChangingSourceLogDirectory || isStartupImportPreferenceSaving || startupImportSettings === null} onChangeSourceLogDirectory={() => {
+              void handleChangeSourceLogDirectory();
+            }} onThemeModeChange={handleThemeChange} onArchiveLimitDraftChange={setArchiveLimitDraft} onSaveArchiveLimit={() => {
               void handleSaveArchiveLimit();
             }} onToggleStartup={() => {
               void handleToggleStartup();
@@ -328,11 +365,15 @@ function App() {
       )}
 
       {startupImportSettings && !startupImportSettings.preference_set && (
-        <StartupImportConsentDialog logArchivePath={startupImportSettings.log_archive_path} databasePath={startupImportSettings.database_path} isSaving={isStartupImportPreferenceSaving} onAllow={() => {
-            void handleStartupImportConsent(true);
-          }} onDecline={() => {
-            void handleStartupImportConsent(false);
-          }} />
+        <StartupImportConsentDialog
+          sourceLogPath={startupImportSettings.source_log_path}
+          logArchivePath={startupImportSettings.log_archive_path}
+          databasePath={startupImportSettings.database_path}
+          isSaving={isStartupImportPreferenceSaving || isChangingSourceLogDirectory}
+          onChangeSourceLogDirectory={() => { void handleChangeSourceLogDirectory(); }}
+          onAllow={() => { void handleStartupImportConsent(true); }}
+          onDecline={() => { void handleStartupImportConsent(false); }}
+        />
       )}
 
       <CreditButton />

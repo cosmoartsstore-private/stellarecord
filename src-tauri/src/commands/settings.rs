@@ -7,11 +7,12 @@ use super::{ManagementSettings, ONE_MB_BYTES, STELLA_RECORD_RUN_VALUE};
 
 use crate::constants::MAX_ARCHIVE_LIMIT_MB;
 
-/// 起動時ログ取り込みの許可状態と、画面に表示する保存先。
+/// 起動時ログ取り込みの許可状態と、画面に表示する読込元・保存先。
 #[derive(serde::Serialize)]
 pub struct StartupImportSettings {
     pub enabled: bool,
     pub preference_set: bool,
+    pub source_log_path: String,
     pub log_archive_path: String,
     pub database_path: String,
 }
@@ -27,7 +28,31 @@ pub fn get_startup_import_settings() -> Result<StartupImportSettings, String> {
     let log_archive_path = stella.get_effective_archive_dir().ok_or_else(|| message!("Commands.Settings.getStartupImportSettings.logDestinationSaveReadFailed").to_string())?;
     let database_path = stella.get_effective_db_path().ok_or_else(|| message!("Commands.Settings.getStartupImportSettings.databaseDestinationSaveReadFailed").to_string())?;
 
-    Ok(StartupImportSettings { enabled: preference.enabled, preference_set: preference.preference_set, log_archive_path: log_archive_path.display().to_string(), database_path: database_path.display().to_string() })
+    // Polaris が未導入でも、設定画面から別の読込元を選択できるようにする。
+    let source_log_path = config::load_source_log_dir().map(|path| path.display().to_string()).unwrap_or_default();
+    Ok(StartupImportSettings { enabled: preference.enabled, preference_set: preference.preference_set, source_log_path, log_archive_path: log_archive_path.display().to_string(), database_path: database_path.display().to_string() })
+}
+
+/// フォルダを選択して読込元を保存する。キャンセル時は現在の設定を保持する。
+///
+/// # Errors
+/// フォルダ選択、読み取り確認、または設定保存に失敗した場合にエラーを返す。
+#[tauri::command]
+pub fn change_source_log_directory() -> Result<Option<String>, String> {
+    // ダイアログの所有者を UI スレッドから取得するため、同期 command のまま実行する。
+    let current = config::load_source_log_dir();
+    platform::pick_log_source_directory_dialog(current.as_deref())?.map(save_source_log_directory).transpose()
+}
+
+/// 選択フォルダの読み取りを確認してから、単独のregistry値として保存する。
+pub(super) fn save_source_log_directory(path: String) -> Result<String, String> {
+    let directory = std::path::Path::new(&path);
+    if !directory.is_absolute() || !directory.is_dir() {
+        return Err(message!("Commands.Settings.saveSourceLogDirectory.invalid").to_string());
+    }
+    std::fs::read_dir(directory).map_err(|err| crate::utils::command_read_err(directory, err))?;
+    config::save_source_log_path(&path)?;
+    Ok(path)
 }
 
 /// 起動時ログ取り込みについてユーザーが選択した許可状態を保存する。

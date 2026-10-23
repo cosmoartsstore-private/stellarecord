@@ -260,4 +260,18 @@ mod tests {
         let loc = parse_location("");
         assert!(loc.instance_id.is_none());
     }
+
+    #[test]
+    fn parse_location_keeps_region_in_first_suffix_and_after_unknown_metadata() {
+        for location in ["wrld_abc:123~region(jp)", "wrld_abc:123~nonce(token)~region(jp)"] {
+            let parsed = parse_location(location);
+            assert_eq!(parsed.instance_id.as_deref(), Some("123"));
+            assert_eq!(parsed.region.as_deref(), Some("jp"));
+            assert!(parsed.access_type.is_none());
+        }
+        let parsed = parse_location("wrld_abc:123~region(eu)~friends(usr_owner)");
+        assert_eq!(parsed.region.as_deref(), Some("eu"));
+        assert_eq!(parsed.access_type.as_deref(), Some("friends"));
+        assert_eq!(parsed.instance_owner.as_deref(), Some("usr_owner"));
+    }
 }

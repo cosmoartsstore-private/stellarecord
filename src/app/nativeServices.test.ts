@@ -18,8 +18,10 @@ describe('Frontendからnativeへの契約', () => {
     await expect(settings.loadManagementSettings()).resolves.toEqual(loaded);
     await settings.saveManagementSettings(true, 1200);
     await settings.loadStartupImportSettings();
+    vi.mocked(invoke).mockResolvedValueOnce(null);
+    await expect(settings.changeSourceLogDirectory()).resolves.toBeNull();
     await settings.saveStartupImportPreference(false);
-    expect(vi.mocked(invoke).mock.calls).toEqual([['get_management_settings'], ['save_management_settings', { startupEnabled: true, archiveLimitMb: 1200 }], ['get_startup_import_settings'], ['save_startup_import_preference', { enabled: false }]]);
+    expect(vi.mocked(invoke).mock.calls).toEqual([['get_management_settings'], ['save_management_settings', { startupEnabled: true, archiveLimitMb: 1200 }], ['get_startup_import_settings'], ['change_source_log_directory'], ['save_startup_import_preference', { enabled: false }]]);
   });
 
   it('アーカイブと外部ログを別command・別引数で読み込み、session識別子を保持する', async () => {
@@ -51,14 +53,14 @@ describe('Frontendからnativeへの契約', () => {
     expect(vi.mocked(invoke).mock.calls).toEqual([['read_registry_catalog'], ['pick_exe_file'], ['extract_exe_display_name', { path: 'C:/Apps/Alpha.exe' }], ['register_app', { path: 'C:/Apps/Alpha.exe', name: 'Alpha', description: '画像管理' }], ['unregister_app', { path: 'C:/Apps/Alpha.exe' }], ['launch_external_app', { appPath: 'C:/Apps/Alpha.exe' }], ['open_folder', { path: 'C:/Apps' }]]);
   });
 
-  it('容量取得・中断・元ログ削除を区別し、削除するファイル一覧だけを渡す', async () => {
+  it('容量取得・中断・元ログの削除を区別し、候補取得時の読込元と選択ファイルを渡す', async () => {
     vi.mocked(invoke).mockResolvedValueOnce([1024, 2048]);
     await expect(analyze.loadStorageStatus()).resolves.toEqual([1024, 2048]);
     await analyze.cancelAnalyze();
     await analyze.getDeletableSourceLogs();
     vi.mocked(invoke).mockResolvedValueOnce(2);
-    await expect(analyze.deleteSourceLogs(['output_log_a.txt', 'output_log_b.txt'])).resolves.toBe(2);
-    expect(vi.mocked(invoke).mock.calls).toEqual([['get_storage_status'], ['cancel_analyze'], ['get_deletable_source_logs'], ['delete_source_logs', { fileNames: ['output_log_a.txt', 'output_log_b.txt'] }]]);
+    await expect(analyze.deleteSourceLogs('D:/Logs', ['output_log_a.txt', 'output_log_b.txt'])).resolves.toBe(2);
+    expect(vi.mocked(invoke).mock.calls).toEqual([['get_storage_status'], ['cancel_analyze'], ['get_deletable_source_logs'], ['delete_source_logs', { sourceLogPath: 'D:/Logs', fileNames: ['output_log_a.txt', 'output_log_b.txt'] }]]);
   });
 
   it('解析進捗はpayloadだけを通知し、完了購読と解除関数を保持する', async () => {

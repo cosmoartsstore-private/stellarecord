@@ -45,7 +45,7 @@ describe('DatabaseSection', () => {
     act(() => { screen.getByRole<HTMLButtonElement>('button', { name: '次のページ' }).click(); });
     expect(input.onGoToPage).toHaveBeenCalledTimes(2);
     rerender(<DatabaseSection {...input} currentPage={1} isDbLoading />);
-    expect(screen.getByText('読み込み中...')).toBeTruthy();
+    expect(screen.getByText('読み込み中…')).toBeTruthy();
     expect(screen.queryByRole('table')).toBeNull();
     for (const name of ['前のページ', '次のページ']) act(() => { screen.getByRole<HTMLButtonElement>('button', { name }).click(); });
     expect(input.onGoToPage).toHaveBeenCalledTimes(2);
@@ -66,12 +66,12 @@ describe('DatabaseSection', () => {
   it('未選択・空テーブル・カタログ欠落を区別し、空データからページ操作を出さない', () => {
     const input = props();
     const { rerender } = render(<DatabaseSection {...input} dbTables={[]} currentTable="" tableData={emptyTableData} />);
-    expect(screen.getByText('表示できるテーブルがまだありません')).toBeTruthy();
+    expect(screen.getByText('表示できるテーブルはありません')).toBeTruthy();
     expect(screen.getByText('テーブルを選択してください')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'DB プレビュー' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'DBプレビュー', level: 3 })).toBeTruthy();
     expect(screen.queryByRole('button', { name: '次のページ' })).toBeNull();
     rerender(<DatabaseSection {...input} tableData={{ ...input.tableData, label: '独自ラベル', rows: [], total_rows: 0 }} />);
-    expect(screen.getByText('データが存在しません')).toBeTruthy();
+    expect(screen.getByText('データはありません')).toBeTruthy();
     expect(screen.getByRole('heading', { name: '独自ラベル' })).toBeTruthy();
     expect(screen.getByText('0 件')).toBeTruthy();
   });

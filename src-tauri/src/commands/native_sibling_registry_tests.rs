@@ -1,4 +1,4 @@
-/// 姉妹アプリが実DBへ登録した行を、StellaRecordの通常catalog入口で再読込する。
+/// 姉妹アプリが実DBへ登録した行を、StellaRecordの通常catalog入口で再読み込みする。
 #[test]
 fn command_sibling_registration_uses_current_schema_and_catalog() -> NativeCommandTestResult {
     native_command_test("command_sibling_registration_uses_current_schema_and_catalog", |directory, _| {

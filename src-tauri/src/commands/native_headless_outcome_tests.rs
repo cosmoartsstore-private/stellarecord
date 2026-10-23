@@ -1,4 +1,4 @@
-/// resource.libを含む所有PEから、抽出画像と実登録DBの再読込までを接続する。
+/// resource.libを含む所有PEから、抽出画像と実登録DBの再読み込みまでを接続する。
 #[test]
 fn command_owned_icon_png_decodes_and_round_trips_through_catalog() -> NativeCommandTestResult {
     native_command_test("command_owned_icon_png_decodes_and_round_trips_through_catalog", |directory, _| {
@@ -64,13 +64,13 @@ fn verify_cleanup_batch_failure_and_retry(changed: bool, directory: &tempfile::T
         fs::write(source.join(names[1]), b"changed after selection")?;
         None
     } else {
-        // 読取りを許可しDELETE共有だけを拒否し、内容照合の後にremove_fileを失敗させる。
+        // DELETE共有を拒否する保持中のファイルを削除せず、後で同じ選択を再試行する。
         Some(fs::OpenOptions::new().read(true).share_mode(3).open(source.join(names[1]))?)
     };
     let selection = names.map(ToString::to_string).to_vec();
-    let error = archive::delete_source_logs(selection.clone()).err().ok_or("後続対象の故障が成功扱いです")?;
+    let error = archive::delete_source_logs(source.display().to_string(), selection.clone()).err().ok_or("後続対象の故障が成功扱いです")?;
     assert!(error.contains(names[1]));
-    assert!(error.contains(if changed { "現在内容がアーカイブと一致しません" } else { "削除に失敗しました" }));
+    assert!(error.contains(if changed { "現在内容がアーカイブと一致しません" } else { "開けませんでした" }));
     assert!(!source.join(names[0]).exists());
     assert_eq!(fs::read(source.join(names[1]))?, if changed { b"changed after selection".as_slice() } else { bodies[1] });
     assert_eq!(fs::read(source.join(names[2]))?, bodies[2]);
@@ -79,8 +79,8 @@ fn verify_cleanup_batch_failure_and_retry(changed: bool, directory: &tempfile::T
     assert_eq!(fs::read(store.join("retained.bin"))?, b"unrelated archive");
     drop(lock);
     if changed { fs::write(source.join(names[1]), bodies[1])?; }
-    assert_eq!(archive::delete_source_logs(selection.clone())?, 2);
-    assert_eq!(archive::delete_source_logs(selection)?, 0);
+    assert_eq!(archive::delete_source_logs(source.display().to_string(), selection.clone())?, 2);
+    assert_eq!(archive::delete_source_logs(source.display().to_string(), selection)?, 0);
     for (index, name) in names.iter().enumerate() {
         assert!(!source.join(name).exists());
         assert_eq!(fs::read(store.join(format!("{name}.tar.zst")))?, archives[index]);

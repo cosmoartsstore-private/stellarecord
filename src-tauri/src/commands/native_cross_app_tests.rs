@@ -1,4 +1,4 @@
-/// Polarisの実監視出力を登録経由で受け取り、圧縮・取込・再読込・viewerまで接続する。
+/// Polarisの実監視出力を登録経由で受け取り、圧縮・取込・再読み込み・viewerまで接続する。
 #[test]
 fn command_cross_app_consumes_polaris_output_and_reopens_saved_results() -> NativeCommandTestResult {
     if let Some(root) = std::env::var_os("STELLA_CROSS_APP_COLD_ROOT") {
@@ -61,7 +61,7 @@ fn command_cross_app_consumes_polaris_output_and_reopens_saved_results() -> Nati
         let second = analyze::run_diff_import(&db, &store, &cancel, |status, _| repeated_progress.push(status))?;
         assert_eq!(second.total_count, 1);
         assert!(second.failed_filenames.is_empty());
-        assert_eq!(repeated_progress.iter().filter(|status| status.starts_with("スキップ（内容変更なし）:")).count(), 1);
+        assert_eq!(repeated_progress.iter().filter(|status| status.starts_with("取り込み済み（変更なし）:")).count(), 1);
         assert!(!repeated_progress.iter().any(|status| status.starts_with("取り込み完了:")));
         let reread = database::get_db_table_data("visit_summary", None, Some("join_time".to_string()), Some("asc".to_string()))?;
         assert_eq!(reread.total_rows, 2);

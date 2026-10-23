@@ -3,6 +3,20 @@ use std::os::windows::process::CommandExt;
 use std::process::Command;
 type NativeCommandTestResult = Result<(), Box<dyn std::error::Error>>;
 
+// Shell・WebView2を使う子processの起動と、別testの所有領域の削除を重ねない。
+static NATIVE_OS_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn native_error_log_text() -> Result<String, Box<dyn std::error::Error>> {
+    let root = utils::get_stellarecord_install_dir().ok_or("fixtureの保存先がありません")?.join("Data/logs");
+    let mut contents = String::new();
+    for entry in fs::read_dir(root)? {
+        let path = entry?.path();
+        if path.is_file() { contents.push_str(&fs::read_to_string(path)?); }
+    }
+    Ok(contents)
+}
+
+
 // unit test executableにも既存のproduction resourceを取り込み、Common Controls v6を有効にする。
 #[cfg(windows)]
 #[link(name = "resource.lib", kind = "static", modifiers = "+verbatim,-bundle")]
@@ -33,6 +47,7 @@ impl Drop for NativeRegistryFixture {
 
 fn native_command_test(name: &str, verify: impl FnOnce(&tempfile::TempDir, &NativeRegistryFixture) -> NativeCommandTestResult) -> NativeCommandTestResult {
     if std::env::var("STELLA_NATIVE_COMMAND_TEST_CHILD").ok().as_deref() != Some(name) {
+        let _lock = NATIVE_OS_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let stdout = tempfile::NamedTempFile::new()?; let stderr = tempfile::NamedTempFile::new()?;
         let mut child = Command::new(std::env::current_exe()?).args(["--exact", &format!("commands::tests::{name}"), "--nocapture"])
             .env("STELLA_NATIVE_COMMAND_TEST_CHILD", name).creation_flags(0x0800_0000)
@@ -64,6 +79,98 @@ fn initialize_native_command_directory(directory: &std::path::Path, registry: &N
     config::save_stellarecord_setting(&config::StellaRecordSetting { archive_path: directory.join("archive").to_string_lossy().into_owned(), db_path: directory.join("db/current.sqlite").to_string_lossy().into_owned(), ..Default::default() })?;
     config::save_polaris_setting(&config::PolarisSetting { archive_path: "保存済み設定".to_string(), capacity_threshold_bytes: 127 * 1_048_576 })?;
     Ok(())
+}
+
+#[test]
+fn command_source_directory_defaults_to_polaris_and_persists_independently() -> NativeCommandTestResult {
+    native_command_test("command_source_directory_defaults_to_polaris_and_persists_independently", |directory, registry| {
+        let default_source = directory.path().join("Polaris").join("Data").join("archive");
+        assert_eq!(get_source_log_dir()?, default_source);
+        let initial = settings::get_startup_import_settings()?;
+        assert_eq!(initial.source_log_path, default_source.display().to_string());
+        let selected = directory.path().join("日本語のログ 保管先"); fs::create_dir(&selected)?;
+        let path = selected.display().to_string();
+        assert_eq!(settings::save_source_log_directory(path.clone())?, path);
+        assert_eq!(get_source_log_dir()?, selected);
+        let preference = settings::get_startup_import_settings()?;
+        assert!(!preference.enabled && !preference.preference_set);
+        assert_eq!(preference.log_archive_path, initial.log_archive_path);
+        assert_eq!(preference.database_path, initial.database_path);
+        settings::save_management_settings(false, 512)?;
+        settings::save_startup_import_preference(true)?;
+        assert_eq!(get_source_log_dir()?, selected);
+        registry.isolated.delete_subkey_all("Software\\CosmoArtsStore\\Polaris")?;
+        assert_eq!(get_source_log_dir()?, selected);
+        assert_eq!(settings::get_startup_import_settings()?.source_log_path, path);
+        Ok(())
+    })
+}
+
+#[test]
+fn command_source_directory_missing_polaris_can_be_selected_and_invalid_choices_preserve_setting() -> NativeCommandTestResult {
+    native_command_test("command_source_directory_missing_polaris_can_be_selected_and_invalid_choices_preserve_setting", |directory, registry| {
+        registry.isolated.delete_subkey_all("Software\\CosmoArtsStore\\Polaris")?;
+        assert!(settings::get_startup_import_settings()?.source_log_path.is_empty());
+        assert!(get_source_log_dir().is_err());
+        let selected = directory.path().join("選択フォルダ"); fs::create_dir(&selected)?;
+        settings::save_source_log_directory(selected.display().to_string())?;
+        let file = directory.path().join("file.txt"); fs::write(&file, b"keep")?;
+        for invalid in [String::new(), "relative".to_string(), directory.path().join("missing").display().to_string(), file.display().to_string()] {
+            assert!(settings::save_source_log_directory(invalid).is_err());
+            assert_eq!(get_source_log_dir()?, selected);
+        }
+        assert_eq!(fs::read(file)?, b"keep");
+        Ok(())
+    })
+}
+
+#[test]
+fn command_cleanup_rejects_candidates_from_previous_source_directory() -> NativeCommandTestResult {
+    native_command_test("command_cleanup_rejects_candidates_from_previous_source_directory", |directory, _| {
+        let first = get_source_log_dir()?; fs::create_dir_all(&first)?;
+        let second = directory.path().join("別の読込元"); fs::create_dir(&second)?;
+        let store = get_archive_store_dir()?; fs::create_dir_all(&store)?;
+        let name = "output_log_2026-10-08_12-00-00.txt";
+        for folder in [&first, &second] { fs::write(folder.join(name), import_log())?; }
+        archive::sync_source_logs_into_archive_store(&first, &store)?;
+        let candidates = archive::get_deletable_source_logs()?;
+        assert_eq!(candidates.source_log_path, first.display().to_string()); assert_eq!(candidates.logs.len(), 1);
+        settings::save_source_log_directory(second.display().to_string())?;
+        let error = archive::delete_source_logs(candidates.source_log_path, vec![name.to_string()]).err().ok_or("変更前の一覧から削除できました")?;
+        assert!(error.contains("ログ読込元が変更されています"));
+        for folder in [&first, &second] { assert_eq!(fs::read_to_string(folder.join(name))?, import_log()); }
+        let current = archive::get_deletable_source_logs()?;
+        assert_eq!(archive::delete_source_logs(current.source_log_path, vec![name.to_string()])?, 1);
+        assert!(first.join(name).exists()); assert!(!second.join(name).exists()); assert!(store.join(format!("{name}.tar.zst")).exists());
+        Ok(())
+    })
+}
+
+#[test]
+fn command_import_startup_uses_selected_folder_without_polaris() -> NativeCommandTestResult {
+    native_command_test("command_import_startup_uses_selected_folder_without_polaris", |directory, registry| {
+        use tauri::Manager;
+        let default_source = get_source_log_dir()?; fs::create_dir_all(&default_source)?;
+        fs::write(default_source.join("output_log_2026-10-08_11-00-00.txt"), import_log())?;
+        let selected = directory.path().join("選択したログ"); fs::create_dir(&selected)?;
+        let name = "output_log_2026-10-08_12-00-00.txt";
+        fs::write(selected.join(name), import_log())?;
+        fs::write(selected.join("unrelated.txt"), b"keep")?;
+        let nested = selected.join("nested"); fs::create_dir(&nested)?; fs::write(nested.join("output_log_2026-10-08_13-00-00.txt"), import_log())?;
+        settings::save_source_log_directory(selected.display().to_string())?;
+        registry.isolated.delete_subkey_all("Software\\CosmoArtsStore\\Polaris")?;
+        settings::save_startup_import_preference(true)?;
+        let (app, events) = native_import_app()?;
+        import::launch_startup_archive_import(app.handle().clone(), app.state())?;
+        let progress = events.finish(&app)?;
+        assert_eq!(progress.last().ok_or("完了進捗がありません")?.progress, "100%");
+        let files = archive::list_archive_files()?; assert_eq!(files.len(), 1); assert_eq!(files[0].name, format!("{name}.tar.zst"));
+        let conn = Connection::open(get_db_path()?)?;
+        assert_eq!(conn.query_row("SELECT count(*) FROM sessions", [], |row| row.get::<_, i64>(0))?, 1);
+        assert_eq!(fs::read_to_string(selected.join(name))?, import_log()); assert_eq!(fs::read(selected.join("unrelated.txt"))?, b"keep");
+        assert!(default_source.join("output_log_2026-10-08_11-00-00.txt").exists());
+        app.cleanup_before_exit(); Ok(())
+    })
 }
 
 #[test]
@@ -142,12 +249,12 @@ fn command_archive_cleanup_deletes_only_exactly_archived_owned_logs() -> NativeC
         fs::write(source.join(first), b"first log\n")?; fs::write(source.join(second), b"second log\n")?; fs::write(source.join("unrelated.txt"), b"keep")?;
         assert_eq!(archive::sync_source_logs_into_archive_store(&source, &store)?, 2);
         let listed = archive::list_archive_files()?; assert_eq!(listed.len(), 2); assert_eq!(listed[0].name, format!("{second}.tar.zst"));
-        let candidates = archive::get_deletable_source_logs()?; assert_eq!(candidates.iter().map(|item| item.file_name.as_str()).collect::<Vec<_>>(), [first, second]);
+        let candidates = archive::get_deletable_source_logs()?; assert_eq!(candidates.logs.iter().map(|item| item.file_name.as_str()).collect::<Vec<_>>(), [first, second]);
         fs::write(source.join(first), b"changed after archive")?;
-        assert!(archive::delete_source_logs(vec![first.to_string()]).is_err()); assert_eq!(fs::read(source.join(first))?, b"changed after archive");
-        assert_eq!(archive::get_deletable_source_logs()?.len(), 1);
-        assert!(archive::delete_source_logs(vec!["../outside.txt".to_string()]).is_err()); assert_eq!(fs::read(source.join("unrelated.txt"))?, b"keep");
-        assert_eq!(archive::delete_source_logs(vec![second.to_string()])?, 1); assert_eq!(archive::delete_source_logs(vec![second.to_string()])?, 0); assert!(!source.join(second).exists());
+        assert!(archive::delete_source_logs(source.display().to_string(), vec![first.to_string()]).is_err()); assert_eq!(fs::read(source.join(first))?, b"changed after archive");
+        assert_eq!(archive::get_deletable_source_logs()?.logs.len(), 1);
+        assert!(archive::delete_source_logs(source.display().to_string(), vec!["../outside.txt".to_string()]).is_err()); assert_eq!(fs::read(source.join("unrelated.txt"))?, b"keep");
+        assert_eq!(archive::delete_source_logs(source.display().to_string(), vec![second.to_string()])?, 1); assert_eq!(archive::delete_source_logs(source.display().to_string(), vec![second.to_string()])?, 0); assert!(!source.join(second).exists());
         assert!(store.join(format!("{second}.tar.zst")).exists());
         let expected_size = listed.iter().map(|item| item.size_bytes).sum::<u64>(); assert_eq!(archive::get_storage_status()?, (expected_size, 127 * 1_048_576));
         assert!(directory.path().join("Polaris/Data/archive").is_dir()); Ok(())
@@ -159,7 +266,7 @@ fn command_archive_paths_report_unavailable_storage_without_deleting_source() ->
     native_command_test("command_archive_paths_report_unavailable_storage_without_deleting_source", |directory, registry| {
         assert!(archive::list_archive_files()?.is_empty()); assert_eq!(archive::get_storage_status()?, (0, 127 * 1_048_576));
         let source = get_source_log_dir()?; fs::create_dir_all(&source)?; fs::write(source.join("output_log_owned.txt"), b"unarchived")?;
-        assert!(archive::delete_source_logs(vec!["output_log_owned.txt".to_string()]).is_err()); assert_eq!(fs::read(source.join("output_log_owned.txt"))?, b"unarchived");
+        assert!(archive::delete_source_logs(source.display().to_string(), vec!["output_log_owned.txt".to_string()]).is_err()); assert_eq!(fs::read(source.join("output_log_owned.txt"))?, b"unarchived");
         let blocked = directory.path().join("blocked"); fs::write(&blocked, b"keep")?; let mut setting = config::load_stellarecord_setting(); setting.archive_path = blocked.to_string_lossy().into_owned(); config::save_stellarecord_setting(&setting)?;
         // 一覧はdirectoryを要求するが、容量計測はfileのmetadataも合計対象とする。
         assert!(archive::list_archive_files().is_err()); assert_eq!(archive::get_storage_status()?, (4, 127 * 1_048_576)); assert_eq!(fs::read(&blocked)?, b"keep");
@@ -294,10 +401,10 @@ fn command_import_empty_selection_emits_terminal_progress_and_releases_run() -> 
     native_command_test("command_import_empty_selection_emits_terminal_progress_and_releases_run", |_, _| {
         use tauri::Manager;
         let (app, events) = native_import_app()?;
-        assert_eq!(import::launch_enhanced_import(app.handle().clone(), Vec::new(), app.state())?, "0件のアーカイブ同期を開始しました。");
-        let progress = events.finish(&app)?; assert_eq!(progress.len(), 2); assert_eq!(progress[0].status, "処理対象ログなし");
+        assert_eq!(import::launch_enhanced_import(app.handle().clone(), Vec::new(), app.state())?, "0 件のログの取り込みを開始しました。");
+        let progress = events.finish(&app)?; assert_eq!(progress.len(), 2); assert_eq!(progress[0].status, "取り込むログはありません");
         assert_eq!(progress[0].progress, "0/0"); assert!(progress[0].is_running);
-        assert_eq!(progress[1].status, "0件のインポートが完了しました。"); assert_eq!(progress[1].progress, "100%"); assert!(!progress[1].is_running);
+        assert_eq!(progress[1].status, "0 件のログの取り込みが完了しました。"); assert_eq!(progress[1].progress, "100%"); assert!(!progress[1].is_running);
         let conn = Connection::open(get_db_path()?)?; assert_eq!(conn.query_row("SELECT count(*) FROM sessions", [], |row| row.get::<_, i64>(0))?, 0);
         app.cleanup_before_exit(); Ok(())
     })
@@ -314,14 +421,14 @@ fn command_import_enhanced_failure_rolls_back_prior_file_and_can_retry() -> Nati
         let (app, events) = native_import_app()?;
         import::launch_enhanced_import(app.handle().clone(), vec![broken.clone(), valid.clone()], app.state())?;
         let progress = events.finish(&app)?; assert!(progress.iter().any(|item| item.status == format!("取り込み完了: {name}")));
-        let last = progress.last().ok_or("失敗進捗がありません")?; assert!(last.status.starts_with("エラー: ")); assert_eq!(last.progress, "0%"); assert!(!last.is_running);
+        let last = progress.last().ok_or("失敗進捗がありません")?; assert!(last.status == "ログを取り込めませんでした。"); assert_eq!(last.progress, "0%"); assert!(!last.is_running);
         assert_eq!(conn.query_row("SELECT count(*) FROM sessions", [], |row| row.get::<_, i64>(0))?, 0);
         assert_eq!(conn.query_row("SELECT name FROM apps", [], |row| row.get::<_, String>(0))?, "維持する登録");
         assert_eq!(fs::read(store.join(&broken))?, b"not a zstd archive"); assert_eq!(fs::read(store.join(&valid))?, original_archive);
         // 破損fixtureだけを作り直し、同じcommandが失敗後に再開できることを確認する。
         fs::remove_file(store.join(&broken))?; create_native_import_archive(broken_name, &import_log().replace("12:", "13:"))?;
         import::launch_enhanced_import(app.handle().clone(), vec![broken, valid], app.state())?; let retried = events.finish(&app)?;
-        assert_eq!(retried.last().ok_or("再試行の完了進捗がありません")?.status, "2件のインポートが完了しました。");
+        assert_eq!(retried.last().ok_or("再試行の完了進捗がありません")?.status, "2 件のログの取り込みが完了しました。");
         assert_eq!(conn.query_row("SELECT count(*) FROM sessions", [], |row| row.get::<_, i64>(0))?, 2);
         assert_eq!(conn.query_row("SELECT count(*) FROM visits", [], |row| row.get::<_, i64>(0))?, 2);
         assert_eq!(fs::read_to_string(get_source_log_dir()?.join(name))?, import_log()); app.cleanup_before_exit(); Ok(())
@@ -359,12 +466,12 @@ fn command_import_startup_syncs_source_then_preserves_success_on_partial_failure
         let source = get_source_log_dir()?; fs::create_dir_all(&source)?; let name = "output_log_2026-10-08_12-00-00.txt"; fs::write(source.join(name), import_log())?;
         settings::save_startup_import_preference(true)?; let (app, events) = native_import_app()?;
         import::launch_startup_archive_import(app.handle().clone(), app.state())?; let progress = events.finish(&app)?;
-        let last = progress.last().ok_or("完了進捗がありません")?; assert_eq!(last.status, "Data 内 zst アーカイブからの取り込みが完了しました。");
+        let last = progress.last().ok_or("完了進捗がありません")?; assert_eq!(last.status, "ログの取り込みが完了しました。");
         assert_eq!(last.progress, "100%"); assert!(!last.is_running); let store = get_archive_store_dir()?; assert!(store.join(format!("{name}.tar.zst")).exists());
         let conn = Connection::open(get_db_path()?)?; assert_eq!(conn.query_row("SELECT count(*) FROM sessions", [], |row| row.get::<_, i64>(0))?, 1);
         let broken_name = "output_log_2026-10-08_13-00-00.txt"; fs::write(store.join(format!("{broken_name}.tar.zst")), b"not a zstd archive")?;
         import::launch_startup_archive_import(app.handle().clone(), app.state())?; let progress = events.finish(&app)?;
-        let last = progress.last().ok_or("部分失敗の進捗がありません")?; assert_eq!(last.status, format!("1件完了、1件失敗（成功分は保存済み）: {broken_name}"));
+        let last = progress.last().ok_or("部分失敗の進捗がありません")?; assert_eq!(last.status, format!("1 件完了、1 件失敗（成功分は保存済み）: {broken_name}"));
         assert_eq!(last.progress, "1/2"); assert!(!last.is_running);
         assert_eq!(conn.query_row("SELECT count(*) FROM sessions", [], |row| row.get::<_, i64>(0))?, 1);
         assert_eq!(conn.query_row("SELECT count(*) FROM visits", [], |row| row.get::<_, i64>(0))?, 1);
@@ -380,7 +487,7 @@ fn command_import_startup_sync_failure_emits_finished_and_preserves_source() -> 
         let blocked = directory.path().join("blocked-store"); fs::write(&blocked, b"keep")?; let mut setting = config::load_stellarecord_setting();
         setting.archive_path = blocked.to_string_lossy().into_owned(); config::save_stellarecord_setting(&setting)?; settings::save_startup_import_preference(true)?;
         let (app, events) = native_import_app()?; import::launch_startup_archive_import(app.handle().clone(), app.state())?; let progress = events.finish(&app)?;
-        let last = progress.last().ok_or("同期失敗の進捗がありません")?; assert!(last.status.starts_with("起動時 Data 同期に失敗しました: "));
+        let last = progress.last().ok_or("同期失敗の進捗がありません")?; assert!(last.status == "ログを圧縮保存できませんでした。");
         assert_eq!(last.progress, "0%"); assert!(!last.is_running); assert!(!get_db_path()?.exists()); assert_eq!(fs::read(blocked)?, b"keep");
         assert_eq!(fs::read_to_string(source.join(name))?, import_log()); app.cleanup_before_exit(); Ok(())
     })
@@ -393,10 +500,10 @@ fn command_import_startup_database_failure_preserves_file_and_allows_retry() -> 
         create_native_import_archive("output_log_2026-10-08_12-00-00.txt", import_log())?; let path = get_db_path()?; fs::write(&path, b"not a database")?;
         settings::save_startup_import_preference(true)?; let (app, events) = native_import_app()?;
         import::launch_startup_archive_import(app.handle().clone(), app.state())?; let progress = events.finish(&app)?;
-        let last = progress.last().ok_or("DB失敗の進捗がありません")?; assert!(last.status.starts_with("エラー: ")); assert_eq!(last.progress, "0%"); assert!(!last.is_running);
+        let last = progress.last().ok_or("DB失敗の進捗がありません")?; assert!(last.status == "ログを取り込めませんでした。"); assert_eq!(last.progress, "0%"); assert!(!last.is_running);
         assert_eq!(fs::read(&path)?, b"not a database"); fs::remove_file(&path)?;
         import::launch_startup_archive_import(app.handle().clone(), app.state())?; let progress = events.finish(&app)?;
-        assert_eq!(progress.last().ok_or("再試行の完了進捗がありません")?.status, "Data 内 zst アーカイブからの取り込みが完了しました。");
+        assert_eq!(progress.last().ok_or("再試行の完了進捗がありません")?.status, "ログの取り込みが完了しました。");
         let conn = Connection::open(path)?; assert_eq!(conn.query_row("SELECT count(*) FROM sessions", [], |row| row.get::<_, i64>(0))?, 1);
         app.cleanup_before_exit(); Ok(())
     })
@@ -416,11 +523,11 @@ fn command_import_enhanced_busy_cancel_rolls_back_then_restarts() -> NativeComma
         let error = import::launch_enhanced_import(app.handle().clone(), vec![first.clone()], app.state()).err().ok_or("同時実行が拒否されませんでした")?;
         assert_eq!(error, "取り込みはすでに実行中です。完了後に再実行してください。"); assert!(app.state::<crate::AnalyzeCancelStatus>().cancel.load(std::sync::atomic::Ordering::SeqCst));
         pause.release.take().ok_or("worker解除channelがありません")?.send(())?; let progress = events.finish(&app)?; drop(pause);
-        let last = progress.last().ok_or("キャンセル進捗がありません")?; assert_eq!(last.status, "キャンセルしました"); assert_eq!(last.progress, "0%"); assert!(!last.is_running);
+        let last = progress.last().ok_or("キャンセル進捗がありません")?; assert_eq!(last.status, "取り込みを停止しました。今回の解析結果は保存していません。"); assert_eq!(last.progress, "0%"); assert!(!last.is_running);
         assert_eq!(conn.query_row("SELECT count(*) FROM sessions", [], |row| row.get::<_, i64>(0))?, 0);
         assert_eq!(conn.query_row("SELECT name FROM apps", [], |row| row.get::<_, String>(0))?, "維持する登録");
         import::launch_enhanced_import(app.handle().clone(), vec![first], app.state())?; let progress = events.finish(&app)?;
-        assert_eq!(progress.last().ok_or("再開の完了進捗がありません")?.status, "1件のインポートが完了しました。");
+        assert_eq!(progress.last().ok_or("再開の完了進捗がありません")?.status, "1 件のログの取り込みが完了しました。");
         assert_eq!(conn.query_row("SELECT count(*) FROM sessions", [], |row| row.get::<_, i64>(0))?, 1);
         assert!(!app.state::<crate::AnalyzeCancelStatus>().cancel.load(std::sync::atomic::Ordering::SeqCst)); app.cleanup_before_exit(); Ok(())
     })
@@ -438,11 +545,11 @@ fn command_import_startup_busy_cancel_rolls_back_and_retries_all_sources() -> Na
         assert_eq!(import::launch_startup_archive_import(app.handle().clone(), app.state()).err().ok_or("同時実行が拒否されませんでした")?, "取り込みはすでに実行中です。完了後に再実行してください。");
         assert!(app.state::<crate::AnalyzeCancelStatus>().cancel.load(std::sync::atomic::Ordering::SeqCst));
         pause.release.take().ok_or("worker解除channelがありません")?.send(())?; let progress = events.finish(&app)?; drop(pause);
-        let last = progress.last().ok_or("キャンセル進捗がありません")?; assert_eq!(last.status, "キャンセルしました"); assert_eq!(last.progress, "0%"); assert!(!last.is_running);
+        let last = progress.last().ok_or("キャンセル進捗がありません")?; assert_eq!(last.status, "取り込みを停止しました。今回の解析結果は保存していません。"); assert_eq!(last.progress, "0%"); assert!(!last.is_running);
         let conn = Connection::open(get_db_path()?)?; assert_eq!(conn.query_row("SELECT count(*) FROM sessions", [], |row| row.get::<_, i64>(0))?, 0);
         assert_eq!(fs::read_to_string(source.join(name))?, import_log()); assert_eq!(fs::read_to_string(source.join(second))?, import_log().replace("12:", "13:"));
         import::launch_startup_archive_import(app.handle().clone(), app.state())?; let progress = events.finish(&app)?;
-        assert_eq!(progress.last().ok_or("再開の完了進捗がありません")?.status, "Data 内 zst アーカイブからの取り込みが完了しました。");
+        assert_eq!(progress.last().ok_or("再開の完了進捗がありません")?.status, "ログの取り込みが完了しました。");
         assert_eq!(conn.query_row("SELECT count(*) FROM sessions", [], |row| row.get::<_, i64>(0))?, 2); app.cleanup_before_exit(); Ok(())
     })
 }
@@ -454,9 +561,9 @@ fn command_import_enhanced_database_failure_preserves_bytes_and_can_retry() -> N
         let archive = create_native_import_archive("output_log_2026-10-08_12-00-00.txt", import_log())?; let path = get_db_path()?; fs::write(&path, b"not a database")?;
         let (app, events) = native_import_app()?; import::launch_enhanced_import(app.handle().clone(), vec![archive.clone()], app.state())?;
         let progress = events.finish(&app)?; let last = progress.last().ok_or("DB失敗の進捗がありません")?;
-        assert!(last.status.starts_with("エラー: ")); assert_eq!(last.progress, "0%"); assert!(!last.is_running); assert_eq!(fs::read(&path)?, b"not a database");
+        assert!(last.status == "ログを取り込めませんでした。"); assert_eq!(last.progress, "0%"); assert!(!last.is_running); assert_eq!(fs::read(&path)?, b"not a database");
         fs::remove_file(&path)?; import::launch_enhanced_import(app.handle().clone(), vec![archive], app.state())?; let progress = events.finish(&app)?;
-        assert_eq!(progress.last().ok_or("再開の完了進捗がありません")?.status, "1件のインポートが完了しました。");
+        assert_eq!(progress.last().ok_or("再開の完了進捗がありません")?.status, "1 件のログの取り込みが完了しました。");
         let conn = Connection::open(path)?; assert_eq!(conn.query_row("SELECT count(*) FROM sessions", [], |row| row.get::<_, i64>(0))?, 1); app.cleanup_before_exit(); Ok(())
     })
 }
@@ -563,7 +670,7 @@ fn native_busy_expected_visit(id: i64, session_id: i64, world: &str, instance: &
 }
 fn native_busy_expected_import(name: &str, contents: &str) -> Result<NativeBusyImportedLog, Box<dyn std::error::Error>> {
     use sha2::Digest;
-    Ok(NativeBusyImportedLog { log_name: name.to_string(), content_sha256: sha2::Sha256::digest(contents.as_bytes()).to_vec(), content_size: i64::try_from(contents.len())?, parser_version: 2 })
+    Ok(NativeBusyImportedLog { log_name: name.to_string(), content_sha256: sha2::Sha256::digest(contents.as_bytes()).to_vec(), content_size: i64::try_from(contents.len())?, parser_version: 3 })
 }
 fn native_busy_assert_integrity(rows: &NativeBusyDatabaseRows) {
     assert_eq!(rows.apps, [(1, "保持するランチャー登録".to_string(), "保持する説明".to_string(), "owned-preserved.exe".to_string())]);
@@ -647,7 +754,7 @@ fn native_busy_import_boundary(startup: bool, directory: &tempfile::TempDir, reg
     let failed_progress = events.finish(&app)?; assert!(!keeper.is_autocommit()); let still_busy = native_busy_writer_code()?;
     let failed = native_busy_stage(case, "03-failed-held", directory, registry, &app, &failed_progress, Some(("sqlite-writer", still_busy)))?;
     let terminal = failed_progress.last().ok_or("SQLite busyの終端進捗がありません")?;
-    assert!(terminal.status.starts_with("エラー: メイン DB を初期化できませんでした: "), "{}", terminal.status); assert!(terminal.status.contains("database is locked"), "{}", terminal.status);
+    assert_eq!(terminal.status, "ログを取り込めませんでした。"); let diagnostics = native_error_log_text()?; assert!(diagnostics.contains("メイン DB を初期化できませんでした")); assert!(diagnostics.contains("database is locked"));
     assert_eq!(terminal.progress, "0%"); assert!(!terminal.is_running); assert!(!failed.running); assert_eq!(still_busy, 5);
     assert_eq!(keeper.query_row("SELECT world_name FROM visits WHERE id = 1", [], |row| row.get::<_, String>(0))?, "未確定のwriter更新");
     assert_eq!(failed.database_bytes, held.database_bytes); assert_eq!(failed.wal_bytes, held.wal_bytes); assert_eq!(failed.rows, original.rows); assert_eq!(failed.settings, original.settings); native_busy_assert_previews(&failed)?;
@@ -663,7 +770,7 @@ fn native_busy_import_boundary(startup: bool, directory: &tempfile::TempDir, reg
     else { import::launch_enhanced_import(app.handle().clone(), vec![pending_archive], app.state())?; }
     let retried_progress = events.finish(&app)?; let retried = native_busy_stage(case, "05-retried", directory, registry, &app, &retried_progress, None)?;
     let terminal = retried_progress.last().ok_or("同じDB pathの再試行進捗がありません")?;
-    assert_eq!(terminal.status, if startup { "Data 内 zst アーカイブからの取り込みが完了しました。" } else { "1件のインポートが完了しました。" }); assert_eq!(terminal.progress, "100%"); assert!(!terminal.is_running); assert!(!retried.running);
+    assert_eq!(terminal.status, if startup { "ログの取り込みが完了しました。" } else { "1 件のログの取り込みが完了しました。" }); assert_eq!(terminal.progress, "100%"); assert!(!terminal.is_running); assert!(!retried.running);
     assert_eq!(retried.rows.sessions, [native_busy_expected_session(1, old_name, "2026-10-08 12:00:00", "2026-10-08 12:05:00"), native_busy_expected_session(2, pending_name, "2026-10-08 13:00:00", "2026-10-08 13:05:00")]);
     assert_eq!(retried.rows.visits, [native_busy_expected_visit(1, 1, "Owned World", "123", "jp", "2026-10-08 12:01:01", "2026-10-08 12:05:00"), native_busy_expected_visit(2, 2, "後続の確定ワールド", "123", "jp", "2026-10-08 13:01:01", "2026-10-08 13:05:00")]);
     assert_eq!(retried.rows.imported_logs, [native_busy_expected_import(old_name, import_log())?, native_busy_expected_import(pending_name, &pending_contents)?]);
@@ -700,11 +807,11 @@ fn command_import_startup_archive_lock_preserves_partial_sync_and_retries_same_p
         // plannerの読込を許可し、圧縮完了後の既存target renameだけを実共有違反にする。
         let locked = fs::OpenOptions::new().read(true).share_mode(FILE_SHARE_READ.0 | FILE_SHARE_WRITE.0).open(&second_path)?;
         import::launch_startup_archive_import(app.handle().clone(), app.state())?; let failed_progress = events.finish(&app)?;
-        let lock_code = failed_progress.last().and_then(|item| item.status.rsplit_once("os error ")).and_then(|(_, tail)| tail.strip_suffix(')')).and_then(|value| value.parse::<i32>().ok()).unwrap_or_default();
+        let diagnostics = native_error_log_text()?; let lock_code = diagnostics.rsplit_once("os error ").and_then(|(_, tail)| tail.split(')').next()).and_then(|value| value.parse::<i32>().ok()).unwrap_or_default();
         let failed = native_busy_stage(case, "02-failed-held", directory, registry, &app, &failed_progress, Some(("archive-no-delete", lock_code)))?;
         let terminal = failed_progress.last().ok_or("archive同期失敗の終端進捗がありません")?;
-        assert!(terminal.status.starts_with("起動時 Data 同期に失敗しました: バックアップへ退避できませんでした ["), "{}", terminal.status); assert!(terminal.status.contains("os error 32"), "{}", terminal.status);
-        assert_eq!(lock_code, 32); native_busy_assert_file_inventory(&failed, first_name, second_name);
+        assert_eq!(terminal.status, "ログを圧縮保存できませんでした。"); assert!(diagnostics.contains("置き換えに失敗しました [")); assert!(matches!(lock_code, 5 | 32), "{diagnostics}");
+        assert!(matches!(lock_code, 5 | 32)); native_busy_assert_file_inventory(&failed, first_name, second_name);
         assert_eq!(terminal.progress, "0%"); assert!(!terminal.is_running); assert!(!failed.running);
         assert_eq!(failed.database_bytes, original.database_bytes); assert_eq!(failed.wal_bytes, original.wal_bytes); assert_eq!(failed.rows, original.rows); assert_eq!(failed.settings, original.settings);
         let first_archive = format!("{first_name}.tar.zst"); native_busy_assert_archive(&store.join(&first_archive), first_name, &first_contents)?;
@@ -716,7 +823,7 @@ fn command_import_startup_archive_lock_preserves_partial_sync_and_retries_same_p
         let first_before = fs::read(store.join(&first_archive))?; drop(locked);
         import::launch_startup_archive_import(app.handle().clone(), app.state())?; let retried_progress = events.finish(&app)?;
         let retried = native_busy_stage(case, "03-retried", directory, registry, &app, &retried_progress, None)?;
-        let terminal = retried_progress.last().ok_or("同じarchive pathの再試行進捗がありません")?; assert_eq!(terminal.status, "Data 内 zst アーカイブからの取り込みが完了しました。"); assert_eq!(terminal.progress, "100%"); assert!(!terminal.is_running); assert!(!retried.running);
+        let terminal = retried_progress.last().ok_or("同じarchive pathの再試行進捗がありません")?; assert_eq!(terminal.status, "ログの取り込みが完了しました。"); assert_eq!(terminal.progress, "100%"); assert!(!terminal.is_running); assert!(!retried.running);
         native_busy_assert_archive(&store.join(&first_archive), first_name, &first_contents)?; native_busy_assert_archive(&second_path, second_name, &second_contents)?; assert_eq!(fs::read(store.join(&first_archive))?, first_before);
         assert_eq!(retried.rows.sessions, [native_busy_expected_session(2, first_name, "2026-10-08 12:00:00", "2026-10-08 12:05:00"), native_busy_expected_session(3, second_name, "2026-10-08 13:00:00", "2026-10-08 14:05:00")]);
         assert_eq!(retried.rows.visits, [native_busy_expected_visit(2, 2, "先行の確定ワールド", "123", "jp", "2026-10-08 12:01:01", "2026-10-08 12:05:00"), native_busy_expected_visit(3, 3, "Owned World", "123", "jp", "2026-10-08 13:01:01", "2026-10-08 13:05:00"), native_busy_expected_visit(4, 3, "追記の確定ワールド", "456", "us", "2026-10-08 14:01:01", "2026-10-08 14:05:00")]);
@@ -737,9 +844,9 @@ fn command_import_enhanced_worker_commits_real_archive_and_emits_finished() -> N
         use tauri::Manager;
         let name = "output_log_2026-10-08_12-00-00.txt"; let filename = create_native_import_archive(name, import_log())?; let source = get_source_log_dir()?;
         let (app, events) = native_import_app()?; let status = app.state::<crate::AnalyzeCancelStatus>(); status.cancel.store(true, std::sync::atomic::Ordering::SeqCst);
-        assert_eq!(import::launch_enhanced_import(app.handle().clone(), vec![filename.clone()], status)?, "1件のアーカイブ同期を開始しました。");
+        assert_eq!(import::launch_enhanced_import(app.handle().clone(), vec![filename.clone()], status)?, "1 件のログの取り込みを開始しました。");
         let progress = events.finish(&app)?; assert!(progress.iter().any(|item| item.is_running)); let last = progress.last().ok_or("完了進捗がありません")?;
-        assert_eq!(last.status, "1件のインポートが完了しました。"); assert_eq!(last.progress, "100%"); assert!(!last.is_running);
+        assert_eq!(last.status, "1 件のログの取り込みが完了しました。"); assert_eq!(last.progress, "100%"); assert!(!last.is_running);
         let conn = Connection::open(get_db_path()?)?; assert_eq!(conn.query_row("SELECT count(*) FROM sessions", [], |row| row.get::<_, i64>(0))?, 1);
         assert_eq!(conn.query_row("SELECT count(*) FROM visits", [], |row| row.get::<_, i64>(0))?, 1); assert_eq!(fs::read_to_string(source.join(name))?, import_log());
         import::launch_enhanced_import(app.handle().clone(), vec![filename], app.state())?; events.finish(&app)?;
@@ -853,7 +960,7 @@ fn native_statement_expected(expected: NativeStatementExpected) -> Result<Native
             "imported_logs" => {
                 let inputs = if first_saved { vec![(NATIVE_STATEMENT_FIRST, NATIVE_STATEMENT_FIRST_BODY), (NATIVE_STATEMENT_AFFECTED, if rebuilt { changed.as_str() } else { NATIVE_STATEMENT_OLD_BODY })] }
                     else { vec![(NATIVE_STATEMENT_AFFECTED, NATIVE_STATEMENT_OLD_BODY)] };
-                inputs.into_iter().map(|(filename, body)| Ok(vec![T(filename.to_string()), B(sha2::Sha256::digest(body.as_bytes()).to_vec()), I(i64::try_from(body.len())?), I(2)])).collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?
+                inputs.into_iter().map(|(filename, body)| Ok(vec![T(filename.to_string()), B(sha2::Sha256::digest(body.as_bytes()).to_vec()), I(i64::try_from(body.len())?), I(3)])).collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?
             },
             "visits" => {
                 let old = vec![I(if rebuilt { 3 } else { 1 }), I(affected_id), T("Old Affected World".to_string()), T("123".to_string()), T("public".to_string()), T("jp".to_string()), T("2026-10-08 13:01:01".to_string()), T("2026-10-08 13:05:00".to_string())];
@@ -896,7 +1003,7 @@ BEGIN
    AND EXISTS (SELECT 1 FROM visits WHERE id = 2 AND session_id = 2 AND world_name = 'First Committed World'
        AND instance_id = '111' AND instance_type = 'public' AND region = 'jp' AND join_time = '2026-10-08 12:01:01' AND leave_time = '2026-10-08 12:05:00')
    AND EXISTS (SELECT 1 FROM imported_logs WHERE log_name = 'output_log_2026-10-08_12-00-00.txt'
-       AND content_sha256 = X'{}' AND content_size = {} AND parser_version = 2)
+       AND content_sha256 = X'{}' AND content_size = {} AND parser_version = 3)
  THEN RAISE(ABORT, 'stella_native_statement_abort_owned')
  ELSE RAISE(ABORT, 'stella_native_statement_boundary_not_reached_owned') END;
 END", native_busy_sha256(NATIVE_STATEMENT_FIRST_BODY.as_bytes()), NATIVE_STATEMENT_FIRST_BODY.len())
@@ -955,14 +1062,14 @@ fn native_statement_assert_inventory(stage: &NativeStatementStage, first_archive
 
 fn native_statement_assert_progress(progress: &[NativeProgress], startup: bool) -> NativeCommandTestResult {
     let first = progress.iter().position(|item| item.status == format!("取り込み完了: {NATIVE_STATEMENT_FIRST}") && item.is_running).ok_or("先行savepoint成功eventがありません")?;
-    let affected = progress.iter().position(|item| item.status == format!("処理中: {NATIVE_STATEMENT_AFFECTED}") && item.is_running).ok_or("対象fileの処理開始eventがありません")?;
-    let parse = progress.iter().enumerate().filter(|(_, item)| item.status == "パース開始" && item.is_running).map(|(index, _)| index).collect::<Vec<_>>();
+    let affected = progress.iter().position(|item| item.status == format!("取り込み中: {NATIVE_STATEMENT_AFFECTED}") && item.is_running).ok_or("対象fileの処理開始eventがありません")?;
+    let parse = progress.iter().enumerate().filter(|(_, item)| item.status == "ログを解析しています…" && item.is_running).map(|(index, _)| index).collect::<Vec<_>>();
     assert_eq!(parse.len(), 2); assert!(parse[0] < first && first < affected && affected < parse[1]);
     assert!(!progress.iter().any(|item| item.status == format!("取り込み完了: {NATIVE_STATEMENT_AFFECTED}") || item.progress == "100%" || item.status.contains(NATIVE_STATEMENT_BOUNDARY_MARKER)));
     assert_eq!(progress.iter().filter(|item| !item.is_running).count(), 1);
     let terminal = progress.last().ok_or("statement故障の終端eventがありません")?; assert!(!terminal.is_running);
-    if startup { assert_eq!(terminal.status, format!("1件完了、1件失敗（成功分は保存済み）: {NATIVE_STATEMENT_AFFECTED}")); assert_eq!(terminal.progress, "1/2"); }
-    else { assert!(terminal.status.starts_with("エラー: 対象ログを取り込めませんでした: ")); assert!(terminal.status.contains(NATIVE_STATEMENT_MARKER)); assert_eq!(terminal.progress, "0%"); }
+    if startup { assert_eq!(terminal.status, format!("1 件完了、1 件失敗（成功分は保存済み）: {NATIVE_STATEMENT_AFFECTED}")); assert_eq!(terminal.progress, "1/2"); }
+    else { assert_eq!(terminal.status, "ログを取り込めませんでした。"); let diagnostics = native_error_log_text()?; assert!(diagnostics.contains("対象ログを取り込めませんでした")); assert!(diagnostics.contains(NATIVE_STATEMENT_MARKER)); assert_eq!(terminal.progress, "0%"); }
     Ok(())
 }
 
@@ -985,9 +1092,9 @@ fn native_statement_boundary(startup: bool, directory: &tempfile::TempDir, regis
     let affected_archive = create_native_import_archive(NATIVE_STATEMENT_AFFECTED, NATIVE_STATEMENT_OLD_BODY)?;
     let (app, events) = native_import_app()?; let initial = app.state::<crate::AnalyzeCancelStatus>();
     assert!(!initial.running.load(std::sync::atomic::Ordering::SeqCst)); assert!(!initial.cancel.load(std::sync::atomic::Ordering::SeqCst));
-    assert_eq!(import::launch_enhanced_import(app.handle().clone(), vec![affected_archive.clone()], initial)?, "1件のアーカイブ同期を開始しました。");
+    assert_eq!(import::launch_enhanced_import(app.handle().clone(), vec![affected_archive.clone()], initial)?, "1 件のログの取り込みを開始しました。");
     let seeded = events.finish(&app)?; let seed_terminal = seeded.last().ok_or("旧stateのseed取込が終了していません")?;
-    assert_eq!(seed_terminal.status, "1件のインポートが完了しました。"); assert_eq!(seed_terminal.progress, "100%"); assert!(!seed_terminal.is_running);
+    assert_eq!(seed_terminal.status, "1 件のログの取り込みが完了しました。"); assert_eq!(seed_terminal.progress, "100%"); assert!(!seed_terminal.is_running);
     let conn = Connection::open(get_db_path()?)?; assert!(conn.is_autocommit());
     conn.execute("INSERT INTO apps (name, description, path, icon, registered_at) VALUES ('保持するランチャー登録', '保持する説明', 'owned-preserved.exe', X'010203', '2026-10-08 00:00:00')", [])?; drop(conn);
     let original = native_statement_stage(case, "00-seed", directory, registry, &app, &seeded)?;
@@ -1008,7 +1115,7 @@ fn native_statement_boundary(startup: bool, directory: &tempfile::TempDir, regis
     else { native_busy_assert_archive(&store.join(&affected_archive), NATIVE_STATEMENT_AFFECTED, &changed)?; native_busy_assert_archive(&store.join(format!("{NATIVE_STATEMENT_FIRST}.tar.zst")), NATIVE_STATEMENT_FIRST, NATIVE_STATEMENT_FIRST_BODY)?; }
     let selected = vec![affected_archive.clone(), format!("{NATIVE_STATEMENT_FIRST}.tar.zst")];
     if startup { import::launch_startup_archive_import(app.handle().clone(), app.state())?; }
-    else { assert_eq!(import::launch_enhanced_import(app.handle().clone(), selected.clone(), app.state())?, "2件のアーカイブ同期を開始しました。"); }
+    else { assert_eq!(import::launch_enhanced_import(app.handle().clone(), selected.clone(), app.state())?, "2 件のログの取り込みを開始しました。"); }
     let failed_progress = events.finish(&app)?;
     let failed = native_statement_stage(case, "02-failed", directory, registry, &app, &failed_progress)?;
     native_statement_assert_progress(&failed_progress, startup)?;
@@ -1020,22 +1127,23 @@ fn native_statement_boundary(startup: bool, directory: &tempfile::TempDir, regis
     native_busy_assert_archive(&store.join(&affected_archive), NATIVE_STATEMENT_AFFECTED, &changed)?; native_busy_assert_archive(&store.join(format!("{NATIVE_STATEMENT_FIRST}.tar.zst")), NATIVE_STATEMENT_FIRST, NATIVE_STATEMENT_FIRST_BODY)?;
     if startup { assert_ne!(fs::read(store.join(&affected_archive))?, old_archive_bytes); } else { assert_eq!(failed.files, before.files); }
     let added_errors = native_statement_new_errors(&before.logs, &failed.logs)?;
-    if startup { assert_eq!(added_errors.len(), 1); assert!(added_errors[0].contains(NATIVE_STATEMENT_AFFECTED)); assert_eq!(added_errors[0].matches(NATIVE_STATEMENT_MARKER).count(), 1); }
-    else { assert!(added_errors.is_empty()); }
+    assert_eq!(added_errors.len(), 1);
+    if startup { assert!(added_errors[0].contains(NATIVE_STATEMENT_AFFECTED)); }
+    assert_eq!(added_errors[0].matches(NATIVE_STATEMENT_MARKER).count(), 1);
     // fault解除は同じDBのtrigger除去だけ。source／archive／設定／appの修復・再作成は行わない。
     let conn = Connection::open(get_db_path()?)?; assert!(conn.is_autocommit()); conn.execute_batch("DROP TRIGGER stella_owned_statement_abort;")?; assert!(conn.is_autocommit()); drop(conn);
     let removed = native_statement_stage(case, "03-trigger-removed", directory, registry, &app, &[])?;
     assert!(removed.triggers.is_empty()); assert_eq!(removed.rows, failed.rows); assert_eq!(removed.files, failed.files); assert_eq!(removed.logs, failed.logs); assert_eq!(removed.settings, before.settings);
     if startup { import::launch_startup_archive_import(app.handle().clone(), app.state())?; }
-    else { assert_eq!(import::launch_enhanced_import(app.handle().clone(), selected, app.state())?, "2件のアーカイブ同期を開始しました。"); }
+    else { assert_eq!(import::launch_enhanced_import(app.handle().clone(), selected, app.state())?, "2 件のログの取り込みを開始しました。"); }
     let retry_progress = events.finish(&app)?;
     let retried = native_statement_stage(case, "04-retried", directory, registry, &app, &retry_progress)?;
     let terminal = retry_progress.last().ok_or("statement再試行の終端eventがありません")?;
-    assert_eq!(terminal.status, if startup { "Data 内 zst アーカイブからの取り込みが完了しました。" } else { "2件のインポートが完了しました。" }); assert_eq!(terminal.progress, "100%"); assert!(!terminal.is_running);
+    assert_eq!(terminal.status, if startup { "ログの取り込みが完了しました。" } else { "2 件のログの取り込みが完了しました。" }); assert_eq!(terminal.progress, "100%"); assert!(!terminal.is_running);
     assert_eq!(retry_progress.iter().filter(|item| !item.is_running).count(), 1);
-    assert_eq!(retry_progress.iter().filter(|item| item.status == "パース開始" && item.is_running).count(), if startup { 1 } else { 2 });
+    assert_eq!(retry_progress.iter().filter(|item| item.status == "ログを解析しています…" && item.is_running).count(), if startup { 1 } else { 2 });
     assert_eq!(retry_progress.iter().filter(|item| item.status == format!("取り込み完了: {NATIVE_STATEMENT_AFFECTED}") && item.is_running).count(), 1);
-    assert_eq!(retry_progress.iter().filter(|item| item.status == format!("スキップ（内容変更なし）: {NATIVE_STATEMENT_FIRST}") && item.is_running).count(), usize::from(startup));
+    assert_eq!(retry_progress.iter().filter(|item| item.status == format!("取り込み済み（変更なし）: {NATIVE_STATEMENT_FIRST}") && item.is_running).count(), usize::from(startup));
     assert_eq!(retried.rows, native_statement_expected(NativeStatementExpected::Rebuilt)?); assert!(retried.triggers.is_empty()); assert_eq!(retried.settings, before.settings);
     assert_eq!(retried.database_path, before.database_path); assert_eq!(retried.source_path, before.source_path); assert_eq!(retried.archive_path, before.archive_path);
     assert_eq!(retried.files, failed.files); assert_eq!(retried.logs, failed.logs); assert!(!retried.running); assert!(!retried.cancel); native_statement_assert_inventory(&retried, true);

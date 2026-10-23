@@ -37,9 +37,9 @@ mod tests {
 
     #[test]
     fn mb_to_bytes_rejects_out_of_range_values() {
-        assert_eq!(archive_limit_mb_to_bytes(0), Err("警告ラインは 1MB～10,485,760MB (10TB) の整数で指定してください".to_string()));
-        assert_eq!(archive_limit_mb_to_bytes(10_485_761), Err("警告ラインは 1MB～10,485,760MB (10TB) の整数で指定してください".to_string()));
-        assert_eq!(archive_limit_mb_to_bytes(u64::MAX), Err("警告ラインは 1MB～10,485,760MB (10TB) の整数で指定してください".to_string()));
+        assert_eq!(archive_limit_mb_to_bytes(0), Err(message!("Commands.Settings.archiveLimitMbToBytes.text").to_string()));
+        assert_eq!(archive_limit_mb_to_bytes(10_485_761), Err(message!("Commands.Settings.archiveLimitMbToBytes.text").to_string()));
+        assert_eq!(archive_limit_mb_to_bytes(u64::MAX), Err(message!("Commands.Settings.archiveLimitMbToBytes.text").to_string()));
     }
 
     #[test]

@@ -29,9 +29,9 @@ export function CreditButton() {
       </button>
 
       {isOpen && (
-        <CreditModal onClose={() => {
-            setIsOpen(false);
-          }} />
+        <CreditModal
+          onClose={() => { setIsOpen(false); }}
+        />
       )}
     </>
   );

@@ -12,12 +12,18 @@ export interface LogViewerMeta {
   source_name: string;
 }
 
+/** 本文を基準とする UTF-16 の強調範囲。end は範囲に含めない。 */
+export interface LogViewerHighlight {
+  start: number;
+  end: number;
+}
+
 /**
  * ストリーミング中にTauriイベントとして送信される1バッチ分のログ行
  *
  * Level:    0=plain  1=info  2=warning  3=error  4=debug
  * Category: 0=plain  1=world  2=notification
- *           3=player-join  4=player-ready  5=player-left  6=debug-system
+ *           3=player-join  4=player-left  5=video  6=photo
  */
 export interface LogViewerChunk {
   /** ファイル切替時に前回ストリームのイベントを破棄するためのセッション識別子 */
@@ -26,8 +32,8 @@ export interface LogViewerChunk {
   levels: number[];
   categories: number[];
   raw_lines: string[];
-  /** Backendが検出したハイライト対象キーワード（該当なしの行はnull） */
-  highlights: (string | null)[];
+  /** DB登録項目、または動画URL・タイトルの強調範囲（該当なしの行はnull） */
+  highlights: (LogViewerHighlight | null)[];
 }
 
 /** ストリーミングチャンクを蓄積して構築するログビューア表示状態（Frontend専用） */
@@ -38,7 +44,7 @@ export interface LogViewerData {
   levels: number[];
   categories: number[];
   raw_lines: string[];
-  highlights: (string | null)[];
+  highlights: (LogViewerHighlight | null)[];
 }
 
 /** インポート/閲覧モーダルで選択可能なアーカイブファイル */

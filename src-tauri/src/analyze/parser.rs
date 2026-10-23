@@ -31,7 +31,18 @@ fn compile_regex(pattern: &str, name: &str) -> Regex {
 /// ログ行先頭のタイムスタンプにマッチする。
 pub static RE_TIME: LazyLock<Regex> = LazyLock::new(|| compile_regex(r"^(\d{4}\.\d{2}\.\d{2} \d{2}:\d{2}:\d{2})", "RE_TIME"));
 
-/// セッションごとに1回出現するユーザー認証行にマッチする。
+/// ビューアで日時・重要度・本文を分離する先頭形式。
+///
+/// フロントエンドの `splitLogLine` と同じ書式を受け入れる。
+pub static RE_LOG_HEADER: LazyLock<Regex> = LazyLock::new(|| compile_regex(r"^([0-9]{4}\.[0-9]{2}\.[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})[ \t]+(Debug|Warning|Error|Info|Log)[ \t]+-[ \t]*(.*)$", "RE_LOG_HEADER"));
+
+/// ログ本文に含まれる Unity の装飾タグ。判定時だけ取り除き、表示原文は保持する。
+pub static RE_LOG_RICH_TEXT: LazyLock<Regex> = LazyLock::new(|| compile_regex(r"</?(?:color(?:=[^>]*)?|size(?:=[^>]*)?|b|i)>", "RE_LOG_RICH_TEXT"));
+
+/// 動画プレイヤーの出力内で強調する URL。外部への問い合わせには使用しない。
+pub static RE_VIDEO_URL: LazyLock<Regex> = LazyLock::new(|| compile_regex(r#"(?i:https?|rtsps?|rtmp)://[^\s<>"'\]]+"#, "RE_VIDEO_URL"));
+
+/// 初回認証とログ内のアカウント切り替えに伴うユーザー認証行にマッチする。
 /// 例: `User Authenticated: Name (usr_xxxx)`
 pub static RE_USER_AUTH: LazyLock<Regex> = LazyLock::new(|| compile_regex(r"User Authenticated: (.*?) \((usr_[a-f0-9\-]+)\)", "RE_USER_AUTH"));
 
@@ -181,15 +192,15 @@ pub fn parse_location(location: &str) -> ParsedLocation {
         result.instance_id = Some(instance_id.to_string());
     }
 
-    if let Some(access_raw) = parts.next() {
-        let (access_type, instance_owner) = parse_access_type(access_raw);
-        result.access_type = access_type;
-        result.instance_owner = instance_owner;
-    }
-
     for part in parts {
         if let Some(region) = part.strip_prefix("region(").and_then(|value| value.strip_suffix(')')) {
             result.region = Some(region.to_string());
+        } else if result.access_type.is_none() {
+            let (access_type, instance_owner) = parse_access_type(part);
+            if access_type.is_some() {
+                result.access_type = access_type;
+                result.instance_owner = instance_owner;
+            }
         }
     }
 

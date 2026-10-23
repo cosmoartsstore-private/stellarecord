@@ -3,11 +3,11 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StartupImportSettings } from '../models/types';
-import { loadStartupImportSettings, saveStartupImportPreference } from '../services/settingsService';
+import { changeSourceLogDirectory, loadStartupImportSettings, saveStartupImportPreference } from '../services/settingsService';
 import { useStartupImportSettings } from './useStartupImportSettings';
 
-vi.mock('../services/settingsService', () => ({ loadStartupImportSettings: vi.fn(), saveStartupImportPreference: vi.fn() }));
-const settings: StartupImportSettings = { enabled: false, preference_set: false, log_archive_path: 'C:/Data/logs', database_path: 'C:/Data/events.db' };
+vi.mock('../services/settingsService', () => ({ changeSourceLogDirectory: vi.fn(), loadStartupImportSettings: vi.fn(), saveStartupImportPreference: vi.fn() }));
+const settings: StartupImportSettings = { enabled: false, preference_set: false, source_log_path: 'C:/Polaris/Data/archive', log_archive_path: 'C:/Data/logs', database_path: 'C:/Data/events.db' };
 
 beforeEach(() => { vi.resetAllMocks(); vi.mocked(loadStartupImportSettings).mockResolvedValue(settings); vi.mocked(saveStartupImportPreference).mockResolvedValue(undefined); });
 afterEach(cleanup);
@@ -64,6 +64,35 @@ describe('起動時取り込み設定', () => {
     await act(async () => { await result.current.saveStartupImportPreference(true); });
     expect(result.current.startupImportSettings).toBeNull();
     expect(result.current.isStartupImportPreferenceSaving).toBe(false);
+  });
+
+  it('フォルダの選択・保存が終わるまで待ち、読込元だけを更新する', async () => {
+    const { result } = renderHook(() => useStartupImportSettings());
+    await act(async () => { await Promise.resolve(); });
+    let finishChange: (path: string) => void = () => { throw new Error('選択前'); };
+    vi.mocked(changeSourceLogDirectory).mockReturnValueOnce(new Promise((resolve) => { finishChange = resolve; }));
+    let changing: Promise<string | null> = Promise.resolve(null);
+    act(() => { changing = result.current.changeSourceLogDirectory(); });
+    expect(result.current.isChangingSourceLogDirectory).toBe(true);
+    expect(result.current.startupImportSettings).toEqual(settings);
+    await act(async () => { finishChange('D:/日本語 ログ'); await changing; });
+    expect(result.current.startupImportSettings).toEqual({ ...settings, source_log_path: 'D:/日本語 ログ' });
+    expect(result.current.isChangingSourceLogDirectory).toBe(false);
+    expect(saveStartupImportPreference).not.toHaveBeenCalled();
+  });
+
+  it.each(['cancel', 'reject'])('フォルダ変更の中止・失敗では元の設定を保持する: %s', async (outcome) => {
+    const { result } = renderHook(() => useStartupImportSettings());
+    await act(async () => { await Promise.resolve(); });
+    const failure = new Error('保存拒否');
+    if (outcome === 'cancel') vi.mocked(changeSourceLogDirectory).mockResolvedValueOnce(null);
+    else vi.mocked(changeSourceLogDirectory).mockRejectedValueOnce(failure);
+    await act(async () => {
+      if (outcome === 'cancel') await expect(result.current.changeSourceLogDirectory()).resolves.toBeNull();
+      else await expect(result.current.changeSourceLogDirectory()).rejects.toBe(failure);
+    });
+    expect(result.current.startupImportSettings).toEqual(settings);
+    expect(result.current.isChangingSourceLogDirectory).toBe(false);
   });
 
   it.each(['resolve', 'reject'])('unmount後の取得結果でstateを変更しない: %s', async (outcome) => {

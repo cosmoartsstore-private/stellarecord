@@ -7,6 +7,9 @@ export const launchExternalApp = (appPath: string) => invoke('launch_external_ap
 /** 指定パスをOSのファイルエクスプローラで開く */
 export const openFolder = (path: string) => invoke('open_folder', { path });
 
+/** エクスプローラーで登録済みアプリの実行ファイルを選択する。 */
+export const showAppInFolder = (path: string) => invoke('show_app_in_folder', { path });
+
 /** ランチャー画面用のアプリregistryカタログを取得する */
 export const loadRegistryCatalog = () => invoke<RegistryCatalog>('read_registry_catalog');
 

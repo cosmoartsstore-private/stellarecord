@@ -18,12 +18,14 @@
   --danger: #ef4444;
   --btn-primary-shadow: none;
   --btn-primary-hover-shadow: none;
-  --terminal-world: #60a5fa;
-  --terminal-notification: #facc15;
-  --terminal-player-join: #4ade80;
-  --terminal-player-left: #f87171;
-  --terminal-warning: #fb923c;
-  --terminal-error: #ef4444;
+  --terminal-world: #7db8f4;
+  --terminal-notification: #f3d46d;
+  --terminal-player-join: #80d3ae;
+  --terminal-player-left: #b3d994;
+  --terminal-video: #c4aae3;
+  --terminal-photo: #e2bf94;
+  --terminal-warning: #f7ae70;
+  --terminal-error: #f48888;
   --terminal-highlight-text: #fff;
 
   /* 共有スタイルへ渡すエイリアス。 */

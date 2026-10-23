@@ -46,10 +46,17 @@ pub struct LogViewerMeta {
     pub source_name: String,
 }
 
+/// 本文を基準とする UTF-16 の強調範囲。`end` は範囲に含めない。
+#[derive(Debug, Clone, Serialize)]
+pub struct LogViewerHighlight {
+    pub start: usize,
+    pub end: usize,
+}
+
 /// ストリーミング中に Tauri イベントとして送出される処理済みログ行の1バッチ。
 ///
 /// Level:    0=plain 1=info 2=warning 3=error 4=debug
-/// Category: 0=plain 1=world 2=notification `3=player_join` `4=player_ready` `5=player_left` 6=debug-system
+/// Category: 0=plain 1=world 2=notification `3=player_join` `4=player_left` 5=video 6=photo
 #[derive(Debug, Clone, Serialize)]
 pub struct LogViewerChunk {
     pub session_id: String,
@@ -57,7 +64,7 @@ pub struct LogViewerChunk {
     pub levels: Vec<u8>,
     pub categories: Vec<u8>,
     pub raw_lines: Vec<String>,
-    pub highlights: Vec<Option<String>>,
+    pub highlights: Vec<Option<LogViewerHighlight>>,
 }
 
 /// アーカイブ選択モーダルに返すファイル記述子。
@@ -72,4 +79,11 @@ pub struct ArchiveFileItem {
 pub struct DeletableLogInfo {
     pub file_name: String,
     pub size_bytes: u64,
+}
+
+/// 削除候補を取得した時点の読込元と、そのフォルダ内の対象ログ。
+#[derive(Debug, Clone, Serialize)]
+pub struct SourceLogCandidates {
+    pub source_log_path: String,
+    pub logs: Vec<DeletableLogInfo>,
 }

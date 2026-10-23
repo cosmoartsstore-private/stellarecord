@@ -36,6 +36,24 @@
   user-select: text;
 }
 
+.editablePath {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.sourcePath {
+  flex: 1;
+  min-width: 0;
+}
+
+.changeButton {
+  flex-shrink: 0;
+  padding: 0.2rem 0.65rem;
+  border-radius: 8px;
+  font-size: 0.76rem;
+}
+
 @media (width <= 640px) {
   .item {
     grid-template-columns: 1fr;

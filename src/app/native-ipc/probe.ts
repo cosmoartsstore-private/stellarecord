@@ -9,7 +9,7 @@ import * as registry from '../../features/registry/services/registryService';
 import * as settings from '../../features/settings/services/settingsService';
 
 interface ProbeInputs {
-  database_path: string; log_archive_path: string; owned_exe: string; archive_name: string; archive_bytes: number;
+  database_path: string; source_log_path: string; log_archive_path: string; owned_exe: string; archive_name: string; archive_bytes: number;
   source_name: string; raw_lines: string[]; external_path: string; external_lines: string[]; invalid_external_path: string;
 }
 const checks: string[] = [];
@@ -33,10 +33,10 @@ async function run() {
     equal((await settings.loadManagementSettings()).archive_limit_mb, 127, '拒否後の容量保持');
     await settings.saveManagementSettings(false, 512);
     equal(await settings.loadManagementSettings(), { startup_enabled: false, startup_preference_set: true, archive_limit_mb: 512 }, '保存後の管理設定');
-    equal(await settings.loadStartupImportSettings(), { enabled: false, preference_set: false, log_archive_path: input.log_archive_path, database_path: input.database_path }, '起動時取込の初期設定');
+    equal(await settings.loadStartupImportSettings(), { enabled: false, preference_set: false, source_log_path: input.source_log_path, log_archive_path: input.log_archive_path, database_path: input.database_path }, '起動時取込の初期設定');
     await settings.saveStartupImportPreference(true); assert((await settings.loadStartupImportSettings()).enabled, '取込許可が保存されていません。');
     await settings.saveStartupImportPreference(false);
-    equal(await settings.loadStartupImportSettings(), { enabled: false, preference_set: true, log_archive_path: input.log_archive_path, database_path: input.database_path }, '取込拒否の保存');
+    equal(await settings.loadStartupImportSettings(), { enabled: false, preference_set: true, source_log_path: input.source_log_path, log_archive_path: input.log_archive_path, database_path: input.database_path }, '取込拒否の保存');
   });
   await check('catalog-and-database', async () => {
     await registry.registerApp(input.owned_exe, ' 登録用アプリ ', '説明 "保持"');
@@ -66,12 +66,12 @@ async function run() {
     const unlistenFinished = await analyze.onAnalyzeFinished(() => { finished++; resolveFinished?.(); });
     async function importOnce() {
       const done = new Promise<void>(resolve => { resolveFinished = resolve; });
-      equal(await archive.launchEnhancedImport([input.archive_name]), '1件のアーカイブ同期を開始しました。', '取り込みの開始返却');
+      equal(await archive.launchEnhancedImport([input.archive_name]), '1 件のログの取り込みを開始しました。', '取り込みの開始返却');
       await done; resolveFinished = undefined;
     }
     try {
       await importOnce(); equal(finished, 1, '最初の完了event'); assert(progress.some(payload => payload.is_running), '実行中の進捗がありません。');
-      equal(progress.at(-1), { status: '1件のインポートが完了しました。', progress: '100%', is_running: false }, '最終進捗の型と値');
+      equal(progress.at(-1), { status: '1 件のログの取り込みが完了しました。', progress: '100%', is_running: false }, '最終進捗の型と値');
       equal((await database.loadDbTableData('sessions')).total_rows, 1, '取り込みの永続化');
       const count = progress.length; unlistenProgress(); isProgressSubscribed = false;
       await importOnce(); equal(finished, 2, '再取り込みの完了event'); equal(progress.length, count, '解除後の進捗callback');
@@ -94,7 +94,7 @@ async function run() {
   await check('archive-viewer-events', async () => {
     const { meta, chunks } = await viewer('archive-browser', () => archive.startLogViewerStream(input.archive_name, 'archive-browser'), input.raw_lines);
     equal(meta.source_name, input.source_name, 'archive元ログ名'); equal(meta.archive_name, input.archive_name, 'archiveのメタ情報'); equal(chunks.length, 1, 'archiveのchunk数');
-    equal(chunks[0].categories, [0, 1, 1, 1], '実DBから取得したカテゴリ'); equal(chunks[0].highlights[1], 'Owned World', '保存済みワールドのhighlight');
+    equal(chunks[0].categories, [0, 1, 0, 1], '実DBから取得したカテゴリ'); equal(chunks[0].highlights[1], { start: '[Behaviour] Entering Room: '.length, end: '[Behaviour] Entering Room: Owned World'.length }, '保存済みワールドのhighlight');
   });
   await check('external-viewer-events', async () => {
     const { meta, chunks } = await viewer('external-browser', () => archive.startExternalLogViewerStream(input.external_path, 'external-browser'), input.external_lines);

@@ -12,7 +12,7 @@ mod tests {
         assert_eq!(
             format_diff_import_completion(&summary),
             (
-                "2件完了、1件失敗（成功分は保存済み）: output_log_failed.txt".to_string(),
+                "2 件完了、1 件失敗（成功分は保存済み）: output_log_failed.txt".to_string(),
                 "2/3".to_string(),
             )
         );
@@ -28,7 +28,7 @@ mod tests {
         assert_eq!(
             format_diff_import_completion(&summary),
             (
-                "Data 内 zst アーカイブからの取り込みが完了しました。".to_string(),
+                "ログの取り込みが完了しました。".to_string(),
                 "100%".to_string(),
             )
         );

@@ -53,7 +53,7 @@ describe('アーカイブ選択画面から選択処理への接続', () => {
     fireEvent.click(screen.getByRole('button', { name: '取り込み開始' }));
     expect(confirm).toHaveBeenCalledOnce();
     rerender(<ArchiveSelectorModal {...props} archiveFiles={[]} selectedFiles={new Set()} />);
-    expect(screen.getByText('バックアップフォルダ内にアーカイブファイルが見つかりません')).toBeTruthy();
+    expect(screen.getByText('取り込めるアーカイブがありません')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'キャンセル' }));
     expect(close).toHaveBeenCalledOnce();
     expect(confirm).toHaveBeenCalledOnce();

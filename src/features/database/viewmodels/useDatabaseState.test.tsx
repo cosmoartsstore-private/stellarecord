@@ -91,12 +91,12 @@ describe('useDatabaseState', () => {
     expect(result.current.currentTable).toBe('logs');
     expect(result.current.tableData.rows).toEqual([['保存済み']]);
     expect(result.current.currentPage).toBe(1);
-    expect(addToast).toHaveBeenCalledWith('データを読み込めませんでした');
+    expect(addToast).toHaveBeenCalledWith('テーブルのデータを読み込めませんでした');
     loadDbTablesMock.mockRejectedValueOnce(new Error('カタログ不能'));
     await act(async () => { await result.current.loadDatabaseCatalog(); });
     expect(result.current).toMatchObject({ currentTable: '', currentPage: 0, sortState: null, dbTables: [], isDbLoading: false, totalPages: 1 });
     expect(result.current.tableData.total_rows).toBe(0);
-    expect(addToast).toHaveBeenLastCalledWith('DB一覧を取得できませんでした');
+    expect(addToast).toHaveBeenLastCalledWith('テーブル一覧を取得できませんでした');
   });
 
   it('空のカタログは古いページ・ソート・行を残さない', async () => {

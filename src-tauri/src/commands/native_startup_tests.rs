@@ -6,13 +6,10 @@ mod startup {
     use std::io::{Read, Write};
     use std::path::{Path, PathBuf};
     use std::process::Command;
-    use std::sync::Mutex;
     use std::time::Duration;
     use std::os::windows::process::CommandExt;
     use sha2::Digest;
 
-    // 専用portと同じsingle-instance名だけを直列化する。失敗時も各fixtureの所有資源はDropで終了する。
-    static NATIVE_STARTUP_TEST_LOCK: Mutex<()> = Mutex::new(());
     type StartupHandle = *mut c_void;
     type StartupTestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
     #[repr(C)]
@@ -412,7 +409,8 @@ mod startup {
     fn startup_remove_fixture(directory: tempfile::TempDir) -> StartupTestResult<String> {
         let root = directory.path().canonicalize()?; assert_eq!(root.parent(), Some(std::env::temp_dir().canonicalize()?.as_path()));
         assert!(root.file_name().and_then(|name| name.to_str()).is_some_and(|name| name.starts_with("stellarecord-native-startup-")));
-        let deadline = std::time::Instant::now() + Duration::from_secs(5); let mut failures = Vec::new();
+        // WebView2のlockfile解放を、子processの終了確認と同じ15秒まで待つ。
+        let deadline = std::time::Instant::now() + Duration::from_secs(15); let mut failures = Vec::new();
         loop {
             match fs::remove_dir_all(&root) {
                 Ok(()) => break,
@@ -428,7 +426,7 @@ mod startup {
 
     #[test]
     fn native_startup_main_runs_owned_data_and_duplicate_exits_before_setup() -> StartupTestResult {
-        let _lock = NATIVE_STARTUP_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner); native_startup_single_instance_available();
+        let _lock = super::NATIVE_OS_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner); native_startup_single_instance_available();
         let input = native_startup_input_desktop(); let directory = tempfile::Builder::new().prefix("stellarecord-native-startup-normal-").tempdir()?;
         let (executable, library) = native_startup_compile(&directory)?; startup_archive_inputs("normal", directory.path(), &executable, &library)?;
         let desktop = NativeStartupDesktop::new(directory.path()); let registry = NativeStartupRegistry::new(directory.path())?;
@@ -495,7 +493,7 @@ mod startup {
             crate::show_error_dialog(MESSAGE); fs::write(root.join("startup.returned.txt"), b"returned")?;
             assert_eq!(unsafe { super::RegOverridePredefKey(winreg::enums::HKEY_CURRENT_USER, 0) }, 0); return Ok(());
         }
-        let _lock = NATIVE_STARTUP_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _lock = super::NATIVE_OS_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let input = native_startup_input_desktop(); let directory = tempfile::Builder::new().prefix("stellarecord-native-startup-dialog-").tempdir()?;
         let executable = std::env::current_exe()?; let desktop = NativeStartupDesktop::new(directory.path()); let registry = NativeStartupRegistry::new(directory.path())?;
         startup_fixture(directory.path(), &registry)?; let database = fs::read(directory.path().join("Data/db/stellarecord.db"))?;
@@ -516,7 +514,7 @@ mod startup {
     fn native_startup_main_logs_mutex_type_collision_and_continues() -> StartupTestResult {
         use windows::Win32::System::Threading::CreateEventW;
         use windows::core::HSTRING;
-        let _lock = NATIVE_STARTUP_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner); native_startup_single_instance_available();
+        let _lock = super::NATIVE_OS_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner); native_startup_single_instance_available();
         let collision = unsafe { CreateEventW(None, true, false, &HSTRING::from("Local\\StellaRecord_SingleInstance")) }?;
         let collision = NativeStartupHandle::new(collision.0);
         let input = native_startup_input_desktop(); let directory = tempfile::Builder::new().prefix("stellarecord-native-startup-mutex-").tempdir()?;
@@ -634,7 +632,7 @@ mod startup {
     fn native_ui_picker_case(name: &str, case: NativeUiPickerCase) -> StartupTestResult {
         if let Some(root) = std::env::var_os("STELLA_STARTUP_TEST_ROOT") { return native_ui_picker_child(&PathBuf::from(root), case); }
         let external_read_failure = case == NativeUiPickerCase::ReadFailure; let external_stream_lock = case == NativeUiPickerCase::StreamLocked; let external_stream_partial = case == NativeUiPickerCase::StreamPartial;
-        let _lock = NATIVE_STARTUP_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner); let input = native_startup_input_desktop();
+        let _lock = super::NATIVE_OS_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner); let input = native_startup_input_desktop();
         let directory = tempfile::Builder::new().prefix("stellarecord-native-startup-ui-picker-").tempdir()?;
         let archive_guard = NativeUiPickerArchive(directory.path(), case.prefix());
         let mut external = native_ui_picker_fixture(directory.path(), case)?; let expected = external.iter().map(|(path, _)| path.clone()).collect::<Vec<_>>();
@@ -707,6 +705,7 @@ mod startup {
         match kind {
             "exe" => super::registry::pick_exe_file().map(|value| value.into_iter().collect()),
             "logs" => super::archive::pick_log_files(),
+            "source" => super::settings::change_source_log_directory().map(|value| value.into_iter().collect()),
             _ => unreachable!(),
         }
     }
@@ -723,9 +722,15 @@ mod startup {
         // 別COM apartmentの実HRESULTを発生させ、故障除去後に同じthreadで取消し・再選択する。
         assert_eq!(unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }.0, 0);
         let com_error = native_picker_paths(kind).unwrap_err(); unsafe { CoUninitialize() };
-        assert!(com_error.starts_with("COM 初期化に失敗しました: ") && com_error.contains("0x80010106"), "{com_error}");
+        let error_prefix = if kind == "source" { "フォルダ選択の COM 初期化に失敗しました: " } else { "COM 初期化に失敗しました: " };
+        assert!(com_error.starts_with(error_prefix) && com_error.contains("0x80010106"), "{com_error}");
         let cancelled = native_picker_paths(kind)?; assert!(cancelled.is_empty()); fs::write(root.join("picker.cancelled.txt"), b"cancelled")?;
+        if kind == "source" { assert!(registry.open_subkey("Software\\CosmoArtsStore\\StellaRecord")?.get_value::<String, _>("SourceLogPath").is_err()); }
         let selected = native_picker_paths(kind)?;
+        if kind == "source" {
+            assert_eq!(crate::config::load_source_log_dir(), selected.first().map(PathBuf::from));
+            let settings = super::settings::get_startup_import_settings()?; assert!(!settings.enabled && settings.preference_set);
+        }
         // productionによるCOM解除を確認し、test自身が追加した初期化も解除する。
         let final_com_initialization = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }.0; assert_eq!(final_com_initialization, 0); unsafe { CoUninitialize() };
         fs::write(root.join("picker.result.json"), startup_json(NativePickerObservation { com_error, cancelled, selected, final_com_initialization })?)?;
@@ -747,11 +752,12 @@ mod startup {
 
     fn native_picker_select(dialog: StartupHandle, expected: &[String]) {
         unsafe extern "system" fn collect(window: StartupHandle, parameter: isize) -> i32 { unsafe { &mut *(parameter as *mut Vec<StartupHandle>) }.push(window); 1 }
-        // Windows SDK dlgs.hのcmb13に含まれる実file名Editだけへ入力する。
-        let field = unsafe { GetDlgItem(dialog, 0x047c) }; assert!(!field.is_null(), "所有するpickerのfile名controlがありません");
-        let mut controls = Vec::new(); unsafe { EnumChildWindows(field, Some(collect), std::ptr::from_mut(&mut controls) as isize) };
-        let edits: Vec<_> = controls.into_iter().filter(|window| startup_window_class(*window) == "Edit").collect(); assert_eq!(edits.len(), 1);
-        let value = expected.iter().map(|path| format!("\"{path}\"")).collect::<Vec<_>>().join(" "); let mut received = 0;
+        // ファイル選択はcmb13内、フォルダ選択はdialog内の表示中Editへ入力する。
+        let field = unsafe { GetDlgItem(dialog, 0x047c) };
+        let mut controls = Vec::new(); unsafe { EnumChildWindows(if field.is_null() { dialog } else { field }, Some(collect), std::ptr::from_mut(&mut controls) as isize) };
+        let edits: Vec<_> = controls.iter().copied().filter(|window| startup_window_class(*window) == "Edit" && unsafe { IsWindowVisible(*window) } != 0).collect();
+        assert_eq!(edits.len(), 1, "所有するpickerの入力欄を一意に確認できません: {:?}", controls.iter().map(|window| (startup_window_class(*window), startup_window_text(*window), unsafe { IsWindowVisible(*window) })).collect::<Vec<_>>());
+        let value = if field.is_null() { assert_eq!(expected.len(), 1); expected[0].clone() } else { expected.iter().map(|path| format!("\"{path}\"")).collect::<Vec<_>>().join(" ") }; let mut received = 0;
         assert_ne!(unsafe { SendMessageTimeoutW(edits[0], 0x0c, 0, startup_wide(&value).as_ptr() as isize, 2, 1000, &raw mut received) }, 0);
         assert_eq!(startup_window_text(edits[0]).as_deref(), Some(value.as_str()));
         let button = unsafe { GetDlgItem(dialog, 1) }; assert!(!button.is_null()); assert_ne!(unsafe { PostMessageW(button, 0x00f5, 0, 0) }, 0);
@@ -759,13 +765,22 @@ mod startup {
 
     fn native_picker_test(kind: &str, test_name: &str) -> StartupTestResult {
         if let Some(root) = std::env::var_os("STELLA_STARTUP_TEST_ROOT") { return native_picker_child(&PathBuf::from(root), kind); }
-        let _lock = NATIVE_STARTUP_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner); let input = native_startup_input_desktop();
+        let _lock = super::NATIVE_OS_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner); let input = native_startup_input_desktop();
         let directory = tempfile::Builder::new().prefix(&format!("stellarecord-native-startup-picker-{kind}-")).tempdir()?;
         let desktop = NativeStartupDesktop::new(directory.path()); let registry = NativeStartupRegistry::new(directory.path())?; startup_fixture(directory.path(), &registry)?;
         let database = fs::read(directory.path().join("Data/db/stellarecord.db"))?;
-        let names = if kind == "exe" { vec!["選択専用★ アプリ.exe"] } else { vec!["output_log_日本語 1.txt", "output_log_日本語 2.tar.zst"] };
+        let names = match kind { "exe" => vec!["選択専用★ アプリ.exe"], "source" => vec!["選択専用★ ログフォルダ"], _ => vec!["output_log_日本語 1.txt", "output_log_日本語 2.tar.zst"] };
         let mut expected = Vec::new();
-        for name in names { let path = directory.path().join(name); fs::write(&path, "選択のみで保持する日本語の全byte列\n")?; expected.push(path.display().to_string()); }
+        for name in names {
+            let path = directory.path().join(name);
+            if kind == "source" { fs::create_dir(&path)?; fs::write(path.join("保持するファイル.txt"), b"keep")?; }
+            else { fs::write(&path, "選択のみで保持する日本語の全byte列\n")?; }
+            expected.push(path.display().to_string());
+        }
+        if kind == "source" {
+            let polaris = directory.path().join("Polaris"); fs::create_dir_all(polaris.join("Data/archive"))?;
+            registry.isolated.create_subkey("Software\\CosmoArtsStore\\Polaris")?.0.set_value("InstallLocation", &polaris.display().to_string())?;
+        }
         let executable = std::env::current_exe()?;
         let child = NativeStartupProcess::start_with_args(&executable, directory.path(), &desktop, &registry, &format!("--exact commands::tests::startup::{test_name} --nocapture"));
         let cancelled = native_picker_dialog(&desktop, &child); assert_ne!(unsafe { PostMessageW(cancelled, 0x10, 0, 0) }, 0);
@@ -778,10 +793,14 @@ mod startup {
         let observation: NativePickerObservation = tauri::ipc::InvokeResponseBody::Json(fs::read_to_string(directory.path().join("picker.result.json"))?).deserialize()?;
         assert!(observation.cancelled.is_empty()); assert_eq!(observation.selected.len(), expected.len());
         let mut actual = observation.selected.clone(); actual.sort(); expected.sort(); assert_eq!(actual, expected); assert_eq!(observation.final_com_initialization, 0);
-        assert!(observation.com_error.starts_with("COM 初期化に失敗しました: ") && observation.com_error.contains("0x80010106"));
-        for path in &expected { assert_eq!(fs::read(path)?, "選択のみで保持する日本語の全byte列\n".as_bytes()); }
+        let error_prefix = if kind == "source" { "フォルダ選択の COM 初期化に失敗しました: " } else { "COM 初期化に失敗しました: " };
+        assert!(observation.com_error.starts_with(error_prefix) && observation.com_error.contains("0x80010106"));
+        for path in &expected {
+            if kind == "source" { assert_eq!(fs::read(Path::new(path).join("保持するファイル.txt"))?, b"keep"); }
+            else { assert_eq!(fs::read(path)?, "選択のみで保持する日本語の全byte列\n".as_bytes()); }
+        }
         startup_preserved(directory.path(), &database)?; let window_cleanup = desktop.wait_for_empty_windows(); drop(desktop); assert_eq!(native_startup_input_desktop(), input);
-        let mut evidence = startup_evidence(if kind == "exe" { "picker-exe" } else { "picker-logs" }, None, None, vec![0]); evidence.actual_main_body = false; evidence.actual_run = false;
+        let mut evidence = startup_evidence(match kind { "exe" => "picker-exe", "source" => "picker-source", _ => "picker-logs" }, None, None, vec![0]); evidence.actual_main_body = false; evidence.actual_run = false;
         evidence.window_cleanup = Some(window_cleanup); evidence.picker = Some(observation);
         startup_finish(evidence.kind, directory, &executable, &executable, registry, evidence)
     }
@@ -794,5 +813,10 @@ mod startup {
     #[test]
     fn native_file_picker_logs_recovers_com_conflict_cancels_and_selects_multiple() -> StartupTestResult {
         native_picker_test("logs", "native_file_picker_logs_recovers_com_conflict_cancels_and_selects_multiple")
+    }
+
+    #[test]
+    fn native_source_folder_picker_recovers_com_conflict_cancels_and_persists_unicode() -> StartupTestResult {
+        native_picker_test("source", "native_source_folder_picker_recovers_com_conflict_cancels_and_persists_unicode")
     }
 }

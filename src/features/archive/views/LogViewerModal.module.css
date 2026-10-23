@@ -286,7 +286,8 @@
   flex-shrink: 0;
 }
 
-.legendItem {
+.legendItem,
+.filterClear {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
@@ -313,7 +314,8 @@
   background: var(--legend-color);
 }
 
-.legendItem:hover:not(.legendItemActive) {
+.legendItem:hover:not(:disabled, .legendItemActive),
+.filterClear:hover:not(:disabled) {
   background: var(--bg-card-soft);
 }
 
@@ -321,9 +323,100 @@
   background: var(--accent-soft);
 }
 
-.legendItem:focus-visible {
+.legendItem:focus-visible,
+.filterClear:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+.legendItem:disabled,
+.filterClear:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ── ログ内検索 ─────────────────────────────────── */
+
+.searchBar {
+  display: flex;
+  align-items: center;
+  align-self: flex-end;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  width: min(100%, 24rem);
+  min-height: 34px;
+  box-sizing: border-box;
+  padding: 0 0.2rem 0 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-card-soft);
+}
+
+.logEmpty {
+  margin: 0;
+  padding: 2rem;
+  color: var(--terminal-body);
+}
+
+.searchInput {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0.4rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-main);
+  font: inherit;
+  font-size: 0.78rem;
+  outline: none;
+}
+
+.searchInput::placeholder {
+  color: var(--text-dim);
+}
+
+.searchButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 5px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.searchButton:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.searchBar:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.searchIcon {
+  width: 16px;
+  height: 16px;
+  fill: currentcolor;
+}
+
+.searchInput:disabled,
+.searchButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.searchStatus {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  white-space: nowrap;
 }
 
 /* ── ログリスト ─────────────────────────────────── */
@@ -411,6 +504,10 @@
   user-select: text;
 }
 
+.lineTarget {
+  background: var(--terminal-highlight-bg);
+}
+
 .highlight {
   display: inline;
   padding: 0.08rem 0.28rem;
@@ -422,27 +519,42 @@
 
 /* ── カテゴリ色 ──────────────────────────── */
 
-.line.categoryWorld {
+.categoryWorld {
   color: var(--terminal-world);
 }
 .legendWorld {
   --legend-color: var(--terminal-world);
 }
-.line.categoryNotification {
+.categoryNotification {
   color: var(--terminal-notification);
 }
 .legendNotification {
   --legend-color: var(--terminal-notification);
 }
-.line.categoryPlayerJoin,
-.line.categoryPlayerReady {
+.categoryPlayerJoin {
   color: var(--terminal-player-join);
 }
 .legendPlayerJoin {
   --legend-color: var(--terminal-player-join);
 }
-.line.categoryPlayerLeft {
+.categoryPlayerLeft {
   color: var(--terminal-player-left);
+}
+.categoryVideo {
+  color: var(--terminal-video);
+}
+.videoValue {
+  background: transparent;
+  color: var(--terminal-video);
+}
+.legendVideo {
+  --legend-color: var(--terminal-video);
+}
+.categoryPhoto {
+  color: var(--terminal-photo);
+}
+.legendPhoto {
+  --legend-color: var(--terminal-photo);
 }
 .legendWarning {
   --legend-color: var(--terminal-warning);
@@ -453,8 +565,8 @@
 .legendDebug {
   --legend-color: var(--terminal-debug);
 }
-.line.categoryDebugSystem {
-  color: var(--terminal-debug-system);
+.identifier {
+  color: var(--terminal-body);
 }
 
 /* ── ログレベル色 ─────────────────────────────── */

@@ -1,7 +1,7 @@
 import { storageKeys } from '../../../shared/constants';
 
 /** アプリがサポートするテーマの切替順 */
-export const themeModes = ['light', 'dark', 'midnight'] as const;
+export const themeModes = ['light', 'dark'] as const;
 
 export type ThemeMode = (typeof themeModes)[number];
 

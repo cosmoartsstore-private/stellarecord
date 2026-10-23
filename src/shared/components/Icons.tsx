@@ -36,6 +36,7 @@ export const stellaIconNames = {
   plus: 'plus',
   trash: 'trash',
   power: 'power',
+  search: 'search',
 } as const;
 
 /** stellaIconNames マップから導出される有効なアイコン名のユニオン型 */
@@ -65,6 +66,7 @@ const stellaIconMap: Record<StellaIconName, StellaIconDefinition> = {
   plus: { path: 'M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z' },
   trash: { path: 'M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z' },
   power: { path: 'M13,3H11V13H13V3M17.83,5.17L16.41,6.59C18.05,7.91 19,9.85 19,12A7,7 0 0,1 12,19A7,7 0 0,1 5,12C5,9.85 5.95,7.91 7.59,6.59L6.17,5.17C4.23,6.82 3,9.26 3,12A9,9 0 0,0 12,21A9,9 0 0,0 21,12C21,9.26 19.77,6.82 17.83,5.17Z' },
+  search: { path: 'M10,3A7,7 0 1,0 14.19,15.61L19.59,21L21,19.59L15.61,14.19A7,7 0 0,0 10,3M10,5A5,5 0 1,1 10,15A5,5 0 0,1 10,5Z' },
 };
 
 interface StellaIconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {

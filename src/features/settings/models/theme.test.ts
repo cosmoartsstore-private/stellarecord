@@ -29,9 +29,9 @@ describe('readInitialTheme', () => {
     expect(readInitialTheme()).toBe('dark');
   });
 
-  test('returns stored midnight theme', () => {
+  test('削除済みのテーマ識別子はlightとして扱う', () => {
     storage['stella-record-theme'] = 'midnight';
-    expect(readInitialTheme()).toBe('midnight');
+    expect(readInitialTheme()).toBe('light');
   });
 
   test('returns light for invalid stored value', () => {
@@ -71,8 +71,8 @@ describe('saveTheme', () => {
 
   test('overwrites previous theme', () => {
     saveTheme('dark');
-    saveTheme('midnight');
-    expect(storage['stella-record-theme']).toBe('midnight');
+    saveTheme('light');
+    expect(storage['stella-record-theme']).toBe('light');
   });
 
   test('windowがない実行環境では保存せず、初期themeをlightにする', () => {

@@ -4,6 +4,11 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   plugins: [react()],
   test: {
+    // Windowsで画面テストのworker初期化が停止するため、実行方式と同時数を固定する。
+    pool: 'threads',
+    maxWorkers: 2,
+    // coverageを伴う画面操作がWindowsで既定の5秒を超えるため、操作列の実行時間を確保する。
+    testTimeout: 15000,
     coverage: {
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['src/**/*.d.ts', 'src/test/**'],

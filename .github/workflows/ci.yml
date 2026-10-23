@@ -24,6 +24,17 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # native連携検証はNodeでTypeScriptを直接実行し、esbuildを使用する。
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: .
+
       # rust-toolchain.toml で 1.93.0 + clippy/rustfmt + MSVC target がピン留めされている。
       # rustup が自動でその toolchain を導入する。
       - name: Show toolchain
@@ -43,6 +54,9 @@ jobs:
         run: cargo clippy --locked --all-targets -- -D warnings
 
       - name: Unit tests
+        # Shell・WebView2の終了処理と、他のOS連携fixtureの起動・削除を重ねない。
+        env:
+          RUST_TEST_THREADS: 1
         run: cargo test --locked --all-targets
 
   # Frontend の Vitest と ESLint 検証には ubuntu-latest を使用する。
@@ -55,7 +69,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install dependencies

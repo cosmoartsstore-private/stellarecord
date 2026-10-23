@@ -17,6 +17,15 @@ pub fn launch_external_app(app_path: &str) -> Result<(), String> {
     platform::launch_external_process(app_path)
 }
 
+/// Shell のパス解決を UI スレッドから分離し、アプリの実行ファイルを選択表示する。
+///
+/// # Errors
+/// 実行ファイルの場所を開けない、または処理タスクが終了できない場合にエラーを返す。
+#[tauri::command]
+pub async fn show_app_in_folder(path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || platform::show_file_in_folder(Path::new(&path))).await.map_err(|err| utils::command_err(message!("Commands.Registry.showAppInFolder.failed"), err))?
+}
+
 /// ネイティブファイルダイアログで exe ファイルを選択する。
 #[tauri::command]
 pub fn pick_exe_file() -> Result<Option<String>, String> {

@@ -13,13 +13,14 @@ mod parser;
 
 pub use db::init_main_db;
 pub use parser::{
-    is_collectible_notification, parse_access_type, parse_location, ParsedLocation, RE_AVATAR_DOWNLOAD_FRIEND, RE_AVATAR_SWITCH, RE_AVATAR_UNPACK, RE_ENTERING, RE_IS_LOCAL, RE_JOINING, RE_LEFT_ROOM, RE_NOTIFICATION,
-    RE_NOTIFICATION_WORLD_ID, RE_NOTIFICATION_WORLD_NAME, RE_OSC_FOUND, RE_PLAYER_JOIN, RE_PLAYER_JOIN_COMPLETE, RE_PLAYER_LEFT, RE_SCREENSHOT, RE_SUBSCRIPTION_STATUS, RE_TIME, RE_USER_AUTH,
+    is_collectible_notification, parse_access_type, parse_location, ParsedLocation, RE_AVATAR_DOWNLOAD_FRIEND, RE_AVATAR_SWITCH, RE_AVATAR_UNPACK, RE_ENTERING, RE_IS_LOCAL, RE_JOINING, RE_LEFT_ROOM, RE_LOG_HEADER, RE_LOG_RICH_TEXT,
+    RE_NOTIFICATION, RE_NOTIFICATION_WORLD_ID, RE_NOTIFICATION_WORLD_NAME, RE_OSC_FOUND, RE_PLAYER_JOIN, RE_PLAYER_JOIN_COMPLETE, RE_PLAYER_LEFT, RE_SCREENSHOT, RE_SUBSCRIPTION_STATUS, RE_TIME, RE_USER_AUTH, RE_VIDEO_URL,
 };
 
 use chrono::NaiveDateTime;
 use rusqlite::{params, Connection, Result, Savepoint, Transaction};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
@@ -29,7 +30,7 @@ use crate::utils::decode_log_line_lossy;
 use friendship::{FriendStatus, FriendshipTracker, UNKNOWN_FRIEND_STATUS};
 
 /// 取り込み結果へ影響するログ解析仕様のバージョン。
-const CURRENT_PARSER_VERSION: i64 = 2;
+const CURRENT_PARSER_VERSION: i64 = 3;
 
 /// インポートが意図的にキャンセルされた際にユーザーに返すメッセージ。
 ///
@@ -188,8 +189,18 @@ where
         let Some(entry) = entries.next() else {
             return Err(rusqlite::Error::InvalidParameterName(message!("Analyze.withLogContentReader.logMissing").to_string()));
         };
-        let mut entry = entry.map_err(|err| analyze_sqlite_err(message!("Analyze.withLogContentReader.logEntryReadFailed"), err))?;
-        return callback(&mut entry);
+        let entry = entry.map_err(|err| analyze_sqlite_err(message!("Analyze.withLogContentReader.logEntryReadFailed"), err))?;
+        if !entry.header().entry_type().is_file() {
+            return Err(rusqlite::Error::InvalidParameterName(message!("Analyze.withLogContentReader.logMissing").to_string()));
+        }
+        let declared_size = entry.header().size().map_err(|err| analyze_sqlite_err(message!("Analyze.withLogContentReader.logEntryReadFailed"), err))?;
+        // tar の本文リーダーは宣言サイズより早い EOF を返すことがあるため、消費量も検証する。
+        let mut content = entry.take(declared_size);
+        let result = callback(&mut content)?;
+        if content.limit() != 0 {
+            return Err(rusqlite::Error::InvalidParameterName(message!("Analyze.withLogContentReader.logIncomplete").to_string()));
+        }
+        return Ok(result);
     }
 
     // FILE_SHARE_READ により、VRChat が書き込み中のログでも読み取り可能にする。
@@ -529,6 +540,38 @@ where
     with_log_content_reader(log_path, |reader| parse_and_import_reader(main_conn, BufReader::new(reader), filename, cancel_status, progress_callback))
 }
 
+/// 訪問内の参加者だけからローカルユーザーを確定し、同名の別ユーザーを一括指定しない。
+/// ローカル初期化がある場合はその表示名を優先し、同名候補が複数なら認証済み ID で判別する。
+fn identify_visit_local_player(conn: &Connection, visit_id: i64, local_name: Option<&str>, authenticated_account: Option<(&str, &str)>) -> Result<Option<(String, String)>> {
+    let authenticated_id = authenticated_account.map(|(id, _)| id);
+    let mut statement = conn.prepare(
+        "SELECT w.vrchat_id, u.account_name FROM with_users w
+         JOIN find_users u ON u.vrchat_id = w.vrchat_id
+         WHERE w.visit_id = ?1
+           AND ((?2 IS NOT NULL AND u.account_name = ?2)
+                OR (?2 IS NULL AND w.vrchat_id = ?3))",
+    )?;
+    let candidates = statement.query_map(params![visit_id, local_name, authenticated_id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?.collect::<Result<Vec<_>>>()?;
+    let selected = if let Some(account) = candidates.iter().find(|(id, _)| Some(id.as_str()) == authenticated_id) {
+        Some(account.clone())
+    } else if local_name.is_some() && local_name == authenticated_account.map(|(_, name)| name) {
+        // 同名参加者が先に到着しても、認証済みユーザーの参加を待つ。
+        None
+    } else if candidates.len() == 1 {
+        candidates.into_iter().next()
+    } else {
+        None
+    };
+    conn.execute(
+        "UPDATE with_users
+         SET is_self = CASE WHEN vrchat_id = ?2 THEN 1 ELSE 0 END,
+             friend_status = CASE WHEN vrchat_id = ?2 THEN ?3 ELSE friend_status END
+         WHERE visit_id = ?1",
+        params![visit_id, selected.as_ref().map(|(id, _)| id.as_str()), UNKNOWN_FRIEND_STATUS],
+    )?;
+    Ok(selected)
+}
+
 /// ログストリーム1件を解析し、正規化データをメインデータベースに書き込む。
 ///
 /// 行単位のステートマシンを意図的に1か所にまとめている。パーサーは
@@ -543,7 +586,10 @@ where
     let mut start_time: Option<String> = None;
     let mut end_time: Option<String> = None;
     let mut my_user_id: Option<String> = None;
+    let mut authenticated_account: Option<(String, String)> = None;
     let mut my_display_name: Option<String> = None;
+    let mut log_accounts = BTreeMap::new();
+    let mut visit_local_name: Option<String> = None;
     let mut current_ts: Option<NaiveDateTime> = None;
     let mut current_visit_id: Option<i64> = None;
     let mut pending_room_name: Option<String> = None;
@@ -645,10 +691,24 @@ where
 
         // --- セッション識別（認証済みユーザー） ---
         if let Some(caps) = RE_USER_AUTH.captures(&line) {
-            if my_display_name.is_none() {
-                if let (Some(name_match), Some(user_match)) = (caps.get(1), caps.get(2)) {
-                    my_display_name = Some(name_match.as_str().to_string());
-                    my_user_id = Some(user_match.as_str().to_string());
+            if let (Some(name_match), Some(user_match)) = (caps.get(1), caps.get(2)) {
+                let user_id = user_match.as_str();
+                if my_user_id.as_deref().is_some_and(|previous| previous != user_id) {
+                    // 新アカウントのイベントを、退室出力のない旧訪問へ紐付けない。
+                    if let Some(visit_id) = current_visit_id.take() {
+                        main_tx.execute("UPDATE visits SET leave_time = ?1 WHERE id = ?2 AND leave_time IS NULL", params![ts_str, visit_id])?;
+                        main_tx.execute("UPDATE with_users SET leave_time = ?1 WHERE visit_id = ?2 AND leave_time IS NULL", params![ts_str, visit_id])?;
+                    }
+                    pending_room_name = None;
+                    visit_local_name = None;
+                    friendship_tracker.reset_visit();
+                }
+                my_display_name = Some(name_match.as_str().to_string());
+                my_user_id = Some(user_id.to_string());
+                authenticated_account = Some((user_id.to_string(), name_match.as_str().to_string()));
+                log_accounts.insert(user_id.to_string(), name_match.as_str().to_string());
+                if let Some(visit_id) = current_visit_id {
+                    identify_visit_local_player(main_tx, visit_id, visit_local_name.as_deref(), authenticated_account.as_ref().map(|(id, name)| (id.as_str(), name.as_str())))?;
                 }
             }
             continue;
@@ -656,6 +716,7 @@ where
 
         // --- ワールド訪問ライフサイクル（入室・参加・退室） ---
         if let Some(caps) = RE_ENTERING.captures(&line) {
+            visit_local_name = None;
             friendship_tracker.reset_visit();
             if let Some(visit_id) = current_visit_id {
                 main_tx.execute("UPDATE visits SET leave_time = ?1 WHERE id = ?2 AND leave_time IS NULL", params![ts_str, visit_id])?;
@@ -690,6 +751,7 @@ where
         }
 
         if RE_LEFT_ROOM.is_match(&line) {
+            visit_local_name = None;
             if let Some(visit_id) = current_visit_id {
                 main_tx.execute("UPDATE visits SET leave_time = ?1 WHERE id = ?2 AND leave_time IS NULL", params![ts_str, visit_id])?;
                 main_tx.execute("UPDATE with_users SET leave_time = ?1 WHERE visit_id = ?2 AND leave_time IS NULL", params![ts_str, visit_id])?;
@@ -721,6 +783,18 @@ where
                      VALUES (?1, ?2, 0, ?3)",
                     params![visit_id, user_id, ts_str],
                 )?;
+                if my_user_id.as_deref() == Some(&user_id) || visit_local_name.as_deref() == Some(&display_name) {
+                    let identity = if visit_local_name.is_some() { authenticated_account.as_ref().map(|(id, name)| (id.as_str(), name.as_str())) } else { my_user_id.as_deref().zip(my_display_name.as_deref()) };
+                    if let Some((local_id, local_name)) = identify_visit_local_player(main_tx, visit_id, visit_local_name.as_deref(), identity)? {
+                        if visit_local_name.is_some() && authenticated_account.as_ref().map(|(id, _)| id.as_str()) != Some(local_id.as_str()) {
+                            authenticated_account = None;
+                        }
+                        my_user_id = Some(local_id);
+                        my_display_name = Some(local_name);
+                    } else if visit_local_name.is_some() && authenticated_account.is_none() {
+                        my_user_id = None;
+                    }
+                }
             }
             continue;
         }
@@ -750,16 +824,17 @@ where
             let display_name = display_match.as_str();
             let locality = locality_match.as_str();
             if locality == "local" {
-                if my_display_name.is_none() || my_display_name.as_deref() == Some("[LocalPlayer]") {
-                    my_display_name = Some(display_name.to_string());
-                }
+                my_display_name = Some(display_name.to_string());
+                visit_local_name = Some(display_name.to_string());
                 if let Some(visit_id) = current_visit_id {
-                    main_tx.execute(
-                        "UPDATE with_users SET is_self = 1, friend_status = ?3
-                         WHERE visit_id = ?1
-                           AND vrchat_id IN (SELECT vrchat_id FROM find_users WHERE account_name = ?2)",
-                        params![visit_id, display_name, UNKNOWN_FRIEND_STATUS],
-                    )?;
+                    if let Some((local_id, _)) = identify_visit_local_player(main_tx, visit_id, Some(display_name), authenticated_account.as_ref().map(|(id, name)| (id.as_str(), name.as_str())))? {
+                        if authenticated_account.as_ref().map(|(id, _)| id.as_str()) != Some(local_id.as_str()) {
+                            authenticated_account = None;
+                        }
+                        my_user_id = Some(local_id);
+                    } else if authenticated_account.is_none() {
+                        my_user_id = None;
+                    }
                 }
             }
             continue;
@@ -820,22 +895,31 @@ where
         main_tx.execute("UPDATE with_users SET leave_time = ?1 WHERE visit_id = ?2 AND leave_time IS NULL", params![last_ts, visit_id])?;
     }
 
+    // 途中の仮判定を残さず、各訪問で最終確定したローカル ID を集計する。
+    let mut local_players = main_tx.prepare(
+        "SELECT DISTINCT w.vrchat_id, u.account_name FROM with_users w
+         JOIN visits v ON v.id = w.visit_id
+         JOIN find_users u ON u.vrchat_id = w.vrchat_id
+         WHERE v.session_id = ?1 AND w.is_self = 1",
+    )?;
+    for account in local_players.query_map([session_id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))? {
+        let (user_id, display_name) = account?;
+        log_accounts.insert(user_id, display_name);
+    }
+    // sessions は1ログ1行。複数アカウントを単一の所有者へまとめず、各訪問の is_self を正とする。
+    let (account_id, account_name) = if log_accounts.len() > 1 {
+        (None, None)
+    } else if let Some((user_id, display_name)) = log_accounts.into_iter().next() {
+        (Some(user_id), Some(display_name))
+    } else {
+        (None, my_display_name)
+    };
     main_tx.execute(
         "UPDATE sessions
          SET start_time = ?1, end_time = ?2, account_id = ?3, account_name = ?4
          WHERE log_name = ?5",
-        params![start_time.unwrap_or_default(), end_time, my_user_id, my_display_name, filename],
+        params![start_time.unwrap_or_default(), end_time, account_id, account_name, filename],
     )?;
-
-    if let Some(user_id) = my_user_id {
-        main_tx.execute(
-            "UPDATE with_users
-             SET is_self = 1, friend_status = ?1
-             WHERE vrchat_id = ?2
-               AND visit_id IN (SELECT id FROM visits WHERE session_id = ?3)",
-            params![UNKNOWN_FRIEND_STATUS, user_id, session_id],
-        )?;
-    }
 
     Ok(())
 }

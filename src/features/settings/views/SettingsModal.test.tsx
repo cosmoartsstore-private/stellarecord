@@ -31,19 +31,23 @@ describe('設定dialog', () => {
   });
 
   it('初回取り込みは許可と拒否を区別し、保存中とEscapeでは回答を変えない', () => {
-    const props = { logArchivePath: 'C:/Data/logs', databasePath: 'C:/Data/events.db', isSaving: false, onAllow: vi.fn(), onDecline: vi.fn() };
+    const props = { sourceLogPath: 'C:/Polaris/Data/archive', logArchivePath: 'C:/Data/logs', databasePath: 'C:/Data/events.db', isSaving: false, onChangeSourceLogDirectory: vi.fn(), onAllow: vi.fn(), onDecline: vi.fn() };
     const { rerender } = render(<StartupImportConsentDialog {...props} />);
-    const dialog = screen.getByRole('dialog', { name: '起動時のログ取り込み' });
-    fireEvent.click(screen.getByRole('button', { name: '読み取らない' }));
-    fireEvent.click(screen.getByRole('button', { name: '読み取りを許可' }));
+    const dialog = screen.getByRole('dialog', { name: 'ログの自動取り込み' });
+    fireEvent.click(screen.getByRole('button', { name: 'ログの読み込み元を変更' }));
+    expect(props.onChangeSourceLogDirectory).toHaveBeenCalledOnce();
+    expect(props.onAllow).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '自動で取り込まない' }));
+    fireEvent.click(screen.getByRole('button', { name: '自動で取り込む' }));
     expect(props.onDecline).toHaveBeenCalledOnce();
     expect(props.onAllow).toHaveBeenCalledOnce();
     const cancel = new Event('cancel', { bubbles: false, cancelable: true });
     fireEvent(dialog, cancel);
     expect(cancel.defaultPrevented).toBe(true);
     rerender(<StartupImportConsentDialog {...props} isSaving />);
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '読み取らない' }).disabled).toBe(true);
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '読み取りを許可' }).disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '自動で取り込まない' }).disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '自動で取り込む' }).disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'ログの読み込み元を変更' }).disabled).toBe(true);
     expect(screen.getByText('C:/Data/events.db')).toBeTruthy();
   });
 });

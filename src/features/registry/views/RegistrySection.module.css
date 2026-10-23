@@ -186,10 +186,10 @@
 }
 
 .launcherCardLargeActions {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.4rem;
-  flex-wrap: nowrap;
 }
 
 .launcherCardLargeActions > button {
@@ -223,8 +223,14 @@
 }
 
 .launcherLaunchButton {
+  grid-column: 1 / -1;
   min-width: 0;
-  flex: 1;
+}
+
+.unregisterPath {
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  user-select: text;
 }
 
 .registerForm {

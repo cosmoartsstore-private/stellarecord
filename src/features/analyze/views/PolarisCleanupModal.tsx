@@ -10,12 +10,13 @@ import styles from './PolarisCleanupModal.module.css';
 /** クリーンアップモーダルのProps — アーカイブ内容と一致した元ログのみ受け取る */
 interface PolarisCleanupModalProps {
   logs: DeletableLogInfo[];
+  sourceLogPath: string;
   onClose: () => void;
   onConfirm: (fileNames: string[]) => void;
 }
 
 /** アーカイブ内容と一致したソースログの削除確認モーダル */
-export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanupModalProps) {
+export function PolarisCleanupModal({ logs, sourceLogPath, onClose, onConfirm }: PolarisCleanupModalProps) {
   // 一括削除が一般的なため、初期状態で全ファイルを選択
   const [selected, setSelected] = useState<Set<string>>(new Set(logs.map((l) => l.file_name)));
   const dialogRef = useModalDialog();
@@ -55,6 +56,7 @@ export function PolarisCleanupModal({ logs, onClose, onConfirm }: PolarisCleanup
           </div>
         </div>
 
+        <p className={styles.sourcePath} title={sourceLogPath}>{sourceLogPath}</p>
         <div id="polaris-cleanup-notice" className={styles.notice}>{getMsg('PolarisCleanup.archiveRetained')}</div>
 
         <div className={styles.listHeader}>

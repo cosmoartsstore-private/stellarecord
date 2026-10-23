@@ -257,7 +257,7 @@ describe('useArchiveState', () => {
     const oldSession = startLogViewerStreamMock.mock.calls[0][1];
     const oldChunk = listenMock.mock.calls[0][1] as EventCallback<LogViewerChunk>;
     const oldDone = listenMock.mock.calls[1][1] as EventCallback<string>;
-    const payload = (session: string, line: string): LogViewerChunk => ({ session_id: session, timestamps: ['時刻'], levels: [2], categories: [1], raw_lines: [line], highlights: ['強調'] });
+    const payload = (session: string, line: string): LogViewerChunk => ({ session_id: session, timestamps: ['時刻'], levels: [2], categories: [1], raw_lines: [line], highlights: [{ start: 0, end: 2 }] });
     act(() => { oldChunk({ event: 'log_viewer_chunk', id: 1, payload: payload(oldSession, '旧未反映') }); });
     expect(vi.getTimerCount()).toBe(1);
 
@@ -286,7 +286,7 @@ describe('useArchiveState', () => {
       currentChunk({ event: 'log_viewer_chunk', id: 7, payload: payload(currentSession, '現在二行目') });
       currentDone({ event: 'log_viewer_done', id: 8, payload: currentSession });
     });
-    expect(result.current.logViewerData).toEqual({ archive_name: 'current.log', source_name: 'source:current.log', timestamps: ['時刻', '時刻'], levels: [2, 2], categories: [1, 1], raw_lines: ['現在一行目', '現在二行目'], highlights: ['強調', '強調'] });
+    expect(result.current.logViewerData).toEqual({ archive_name: 'current.log', source_name: 'source:current.log', timestamps: ['時刻', '時刻'], levels: [2, 2], categories: [1, 1], raw_lines: ['現在一行目', '現在二行目'], highlights: [{ start: 0, end: 2 }, { start: 0, end: 2 }] });
     expect(result.current.isLogViewerLoaded).toBe(true);
     expect(result.current.isLogViewerLoading).toBe(false);
     expect(vi.getTimerCount()).toBe(0);

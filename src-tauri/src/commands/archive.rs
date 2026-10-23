@@ -1,11 +1,11 @@
 //! アーカイブ圧縮、同期計画、ログビューアストリーミング、ファイル管理。
 //!
-//! `.tar.zst` のライフサイクルを管理する: Polaris ソースdirectoryからの
+//! `.tar.zst` のライフサイクルを管理する: 設定された読込元directoryからの
 //! `VRChat` 生ログ圧縮、アーカイブの新規作成・安全な置き換え判断、
 //! ログビューア UI へのアーカイブ内容ストリーミング、アーカイブ済みソースログの
 //! クリーンアップ操作（一覧表示/削除）。
 
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
@@ -16,7 +16,7 @@ use tauri::Emitter;
 
 use crate::analyze;
 use crate::config;
-use crate::models::{ArchiveFileItem, DeletableLogInfo, LogViewerChunk, LogViewerMeta};
+use crate::models::{ArchiveFileItem, DeletableLogInfo, LogViewerChunk, LogViewerHighlight, LogViewerMeta, SourceLogCandidates};
 use crate::platform;
 use crate::utils;
 
@@ -35,7 +35,7 @@ pub(crate) fn matches_managed_archive_name(file_name: &str) -> bool {
     is_plain_file_name(file_name) && file_name.starts_with("output_log_") && file_name.ends_with(".txt.tar.zst")
 }
 
-/// Polaris 側の削除対象として扱えるソースログファイル名か判定する。
+/// 選択された読込元の削除対象として扱えるソースログファイル名か判定する。
 fn matches_source_log_file_name(file_name: &str) -> bool {
     is_plain_file_name(file_name) && file_name.starts_with("output_log_") && file_name.ends_with(".txt")
 }
@@ -78,10 +78,18 @@ fn open_source_log_for_read(path: &Path) -> Result<fs::File, String> {
 fn compress_single_file_to_output(src: &Path, output: fs::File) -> Result<(), String> {
     let mut encoder = zstd::stream::Encoder::new(output, 3).map_err(|err| utils::command_err(message!("Commands.Archive.compressSingleFileToOutput.zstdFailed"), err))?;
     let file_name = src.file_name().ok_or_else(|| format!(message!("Commands.Archive.compressSingleFileToOutput.fileFailed"), src.display()))?;
-    let mut input = open_source_log_for_read(src)?;
+    let input = open_source_log_for_read(src)?;
+    let metadata = input.metadata().map_err(|err| utils::command_read_err(src, err))?;
+    let mut header = tar::Header::new_gnu();
+    header.set_metadata(&metadata);
+    // ライブログの追記を tar ヘッダーの宣言サイズへ混入させず、開始時点の範囲を保存する。
+    let mut snapshot = input.take(metadata.len());
     {
         let mut tar = tar::Builder::new(&mut encoder);
-        tar.append_file(file_name, &mut input).map_err(|err| utils::command_err(message!("Commands.Archive.compressSingleFileToOutput.tarArchiveFailed"), err))?;
+        tar.append_data(&mut header, file_name, &mut snapshot).map_err(|err| utils::command_err(message!("Commands.Archive.compressSingleFileToOutput.tarArchiveFailed"), err))?;
+        if snapshot.limit() != 0 {
+            return Err(message!("Commands.Archive.compressSingleFileToOutput.sourceChanged").to_string());
+        }
         tar.finish().map_err(|err| utils::command_err(message!("Commands.Archive.compressSingleFileToOutput.tarArchiveCommitFailed"), err))?;
     }
     let output = encoder.finish().map_err(|err| utils::command_err(message!("Commands.Archive.compressSingleFileToOutput.zstdArchiveCommitFailed"), err))?;
@@ -92,7 +100,7 @@ fn compress_single_file_to_output(src: &Path, output: fs::File) -> Result<(), St
 /// `VRChat` の命名規則に合致するソースログファイルを収集する。
 ///
 /// # 引数
-/// * `source_dir` - Polaris と共有する不変の `VRChat` ログdirectory。
+/// * `source_dir` - 取り込み開始時点で確定した `VRChat` ログdirectory。
 ///
 /// # 戻り値
 /// filesystem列挙順でソートされたソース `.txt` ログパス。
@@ -152,20 +160,25 @@ fn fill_buf(reader: &mut impl Read, buf: &mut [u8]) -> std::io::Result<usize> {
 /// 2つのリーダーを先頭からチャンク単位で比較する。
 ///
 /// `reader_a` を EOF まで読み、同量のバイトを `reader_b` から読んで一致を確認する。
-/// `reader_a` の全バイトが `reader_b` の先頭と一致すれば `Ok(true)` を返す。
-fn streaming_prefix_equal(reader_a: &mut impl Read, reader_b: &mut impl Read) -> std::io::Result<bool> {
+/// `reader_a` が宣言サイズ分すべて存在し、`reader_b` の先頭と一致する場合だけ成功する。
+fn streaming_prefix_equal(reader_a: &mut impl Read, reader_b: &mut impl Read, expected_size: u64) -> std::io::Result<bool> {
     const CHUNK: usize = 64 * 1024;
     let mut buf_a = vec![0u8; CHUNK];
     let mut buf_b = vec![0u8; CHUNK];
+    let mut compared = 0u64;
     loop {
         let na = fill_buf(reader_a, &mut buf_a)?;
         if na == 0 {
-            return Ok(true);
+            return Ok(compared == expected_size);
+        }
+        if na as u64 > expected_size.saturating_sub(compared) {
+            return Ok(false);
         }
         let nb = fill_buf(reader_b, &mut buf_b[..na])?;
         if na != nb || buf_a[..na] != buf_b[..nb] {
             return Ok(false);
         }
+        compared += na as u64;
     }
 }
 
@@ -202,7 +215,7 @@ fn build_archive_sync_plan(source_path: &Path, archive_store_dir: &Path) -> Resu
     }
 
     if source_size == archived_size {
-        let equal = streaming_prefix_equal(&mut entry, &mut source_file).map_err(|err| utils::command_read_err(source_path, err))?;
+        let equal = streaming_prefix_equal(&mut entry, &mut source_file, archived_size).map_err(|err| utils::command_read_err(source_path, err))?;
         if !equal {
             utils::log_warn(&format!(message!("Commands.Archive.buildArchiveSyncPlan.zstdUpdateFailed"), file_name = file_name));
         }
@@ -210,7 +223,7 @@ fn build_archive_sync_plan(source_path: &Path, archive_store_dir: &Path) -> Resu
     }
 
     // source_size > archived_size: ソースがアーカイブ済み内容を厳密に拡張しているか確認
-    let extends = streaming_prefix_equal(&mut entry, &mut source_file).map_err(|err| utils::command_read_err(source_path, err))?;
+    let extends = streaming_prefix_equal(&mut entry, &mut source_file, archived_size).map_err(|err| utils::command_read_err(source_path, err))?;
     if !extends {
         utils::log_warn(&format!(message!("Commands.Archive.buildArchiveSyncPlan.archiveNotExtended"), file_name = file_name));
         return Ok(None);
@@ -219,20 +232,25 @@ fn build_archive_sync_plan(source_path: &Path, archive_store_dir: &Path) -> Resu
     Ok(Some(ArchiveSyncPlan { source_path: source_path.to_path_buf(), archive_path, mode: ArchiveSyncMode::Replace }))
 }
 
-/// ソースログの現在内容が管理アーカイブ内のログと完全に一致するか確認する。
+/// 完全に保存済みのソースログを、追記・差し替え・削除を禁止した状態で返す。
 ///
-/// 元ログ削除は取り返しがつかないため、ファイル名・サイズ・バイト列が一致する場合
-/// のみ削除可能とする。古いアーカイブが残っているだけの状態は削除対象にしない。
-fn is_source_log_exactly_archived(source_path: &Path, archive_path: &Path) -> Result<bool, String> {
+/// 照合から削除まで同じハンドルを保持し、Polaris の同名ファイル置換と競合させない。
+/// リンク先の実体を削除しないよう、末尾の再解析ポイントは追跡しない。
+fn open_archived_source_for_cleanup(source_path: &Path, archive_path: &Path) -> Result<Option<fs::File>, String> {
+    use std::os::windows::fs::OpenOptionsExt;
+    use windows::Win32::Foundation::GENERIC_READ;
+    use windows::Win32::Storage::FileSystem::{DELETE, FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_READ};
+
     if !archive_path.exists() {
-        return Ok(false);
+        return Ok(None);
     }
 
     let source_name = source_path.file_name().and_then(|name| name.to_str()).ok_or_else(|| format!(message!("Commands.Archive.isSourceLogExactlyArchived.fileFailed"), source_path.display()))?;
-    let archived_name = read_archive_source_name(archive_path)?;
-    if archived_name != source_name {
-        utils::log_warn(&format!(message!("Commands.Archive.isSourceLogExactlyArchived.logArchiveFileDeleteFailed"), archived_name = archived_name, source_name = source_name));
-        return Ok(false);
+    let mut source_file =
+        fs::OpenOptions::new().access_mode(GENERIC_READ.0 | DELETE.0).share_mode(FILE_SHARE_READ.0).custom_flags(FILE_FLAG_OPEN_REPARSE_POINT.0).open(source_path).map_err(|err| utils::command_open_err(source_path, err))?;
+    let source_metadata = source_file.metadata().map_err(|err| utils::command_read_err(source_path, err))?;
+    if !source_metadata.is_file() {
+        return Ok(None);
     }
 
     let archive_file = fs::File::open(archive_path).map_err(|err| utils::command_open_err(archive_path, err))?;
@@ -240,24 +258,41 @@ fn is_source_log_exactly_archived(source_path: &Path, archive_path: &Path) -> Re
     let mut archive = tar::Archive::new(decoder);
     let mut entries = archive.entries().map_err(|err| utils::command_err(message!("Commands.Archive.isSourceLogExactlyArchived.zstdEntryEntryListReadFailed"), err))?;
     let Some(entry_result) = entries.next() else {
-        return Ok(false);
+        return Ok(None);
     };
     let mut entry = entry_result.map_err(|err| utils::command_err(message!("Commands.Archive.isSourceLogExactlyArchived.zstdEntryReadFailed"), err))?;
+    let archived_name = entry.path().map_err(|err| utils::command_err(message!("Commands.Archive.isSourceLogExactlyArchived.zstdEntryReadFailed"), err))?.file_name().and_then(|name| name.to_str()).map(str::to_owned);
+    if archived_name.as_deref() != Some(source_name) || !entry.header().entry_type().is_file() {
+        utils::log_warn(&format!(message!("Commands.Archive.isSourceLogExactlyArchived.logArchiveFileDeleteFailed"), archived_name = archived_name.as_deref().unwrap_or_default(), source_name = source_name));
+        return Ok(None);
+    }
     let archived_size = entry.header().size().map_err(|err| utils::command_err(message!("Commands.Archive.isSourceLogExactlyArchived.archiveEntryReadFailed"), err))?;
-
-    let mut source_file = open_source_log_for_read(source_path)?;
-    let source_size = source_file.metadata().map_err(|err| utils::command_read_err(source_path, err))?.len();
-    if source_size != archived_size {
-        return Ok(false);
+    if source_metadata.len() != archived_size {
+        return Ok(None);
     }
 
-    streaming_prefix_equal(&mut entry, &mut source_file).map_err(|err| utils::command_read_err(source_path, err))
+    let is_equal = streaming_prefix_equal(&mut entry, &mut source_file, archived_size).map_err(|err| utils::command_read_err(source_path, err))?;
+    Ok(is_equal.then_some(source_file))
+}
+
+/// 照合済みハンドルが指すファイルを削除する。パス名による開き直しは行わない。
+fn delete_open_source_log(source_file: fs::File, source_path: &Path) -> Result<(), String> {
+    use std::os::windows::io::AsRawHandle;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::Storage::FileSystem::{FileDispositionInfo, SetFileInformationByHandle, FILE_DISPOSITION_INFO};
+
+    let disposition = FILE_DISPOSITION_INFO { DeleteFile: true.into() };
+    #[allow(clippy::cast_possible_truncation)]
+    let size = std::mem::size_of::<FILE_DISPOSITION_INFO>() as u32;
+    unsafe { SetFileInformationByHandle(HANDLE(source_file.as_raw_handle()), FileDispositionInfo, (&raw const disposition).cast(), size) }.map_err(|err| utils::command_remove_err(source_path, err))?;
+    drop(source_file);
+    Ok(())
 }
 
 /// `Data` でアーカイブまたは更新が必要なソースログを収集する。
 ///
 /// # 引数
-/// * `source_dir` - Polaris と共有する不変の `VRChat` ログdirectory。
+/// * `source_dir` - 取り込み開始時点で確定した `VRChat` ログdirectory。
 /// * `archive_store_dir` - `StellaRecord` が管理する `.tar.zst` ファイルの格納directory。
 ///
 /// # 戻り値
@@ -306,27 +341,36 @@ fn collect_directory_size(path: &Path) -> Result<u64, String> {
     Ok(total)
 }
 
-/// 一時ファイルとバックアップ復元パスを使用して対象ファイルを置き換える。
+/// 同じディレクトリの一時ファイルで、既存名を一度の操作で置き換える。
 ///
-/// 長い生ログからアーカイブを再圧縮する際に使用し、最終リネームが
-/// 失敗しても既存アーカイブが失われないようにする。
+/// 旧名を先に退避せず、処理中断時に正規のアーカイブ名が欠落する区間を作らない。
 fn replace_file_atomically(temp_path: &Path, target_path: &Path) -> Result<(), String> {
-    let backup_path = target_path.with_extension("bak");
-    if backup_path.exists() {
-        fs::remove_file(&backup_path).map_err(|err| utils::command_remove_err(&backup_path, err))?;
+    fs::rename(temp_path, target_path).map_err(|err| utils::command_err(&format!(message!("Commands.Archive.replaceFileAtomically.failed"), target_path.display()), err))
+}
+
+/// 圧縮中に元ログが変わっても、既存アーカイブの本文を欠落させる置換は拒否する。
+fn validate_archive_replacement(temp_path: &Path, target_path: &Path) -> Result<(), String> {
+    let open_archive = |path: &Path| {
+        let file = fs::File::open(path).map_err(|err| utils::command_open_err(path, err))?;
+        let decoder = zstd::stream::Decoder::new(file).map_err(|err| utils::command_err(message!("Commands.Archive.buildArchiveSyncPlan.zstdFailed"), err))?;
+        Ok::<_, String>(tar::Archive::new(decoder))
+    };
+    let mut original = open_archive(target_path)?;
+    let mut staged = open_archive(temp_path)?;
+    let mut original_entries = original.entries().map_err(|err| utils::command_err(message!("Commands.Archive.buildArchiveSyncPlan.zstdEntryEntryListReadFailed"), err))?;
+    let mut staged_entries = staged.entries().map_err(|err| utils::command_err(message!("Commands.Archive.buildArchiveSyncPlan.zstdEntryEntryListReadFailed"), err))?;
+    let changed = || message!("Commands.Archive.writeArchiveSafely.contentChanged").to_string();
+    let mut original_entry = original_entries.next().ok_or_else(changed)?.map_err(|err| utils::command_err(message!("Commands.Archive.buildArchiveSyncPlan.zstdEntryReadFailed"), err))?;
+    let mut staged_entry = staged_entries.next().ok_or_else(changed)?.map_err(|err| utils::command_err(message!("Commands.Archive.buildArchiveSyncPlan.zstdEntryReadFailed"), err))?;
+    let original_size = original_entry.header().size().map_err(|err| utils::command_err(message!("Commands.Archive.buildArchiveSyncPlan.archiveEntryReadFailed"), err))?;
+    let staged_size = staged_entry.header().size().map_err(|err| utils::command_err(message!("Commands.Archive.buildArchiveSyncPlan.archiveEntryReadFailed"), err))?;
+    let original_name = original_entry.path().map_err(|err| utils::command_read_err(target_path, err))?;
+    let staged_name = staged_entry.path().map_err(|err| utils::command_read_err(temp_path, err))?;
+    if !original_entry.header().entry_type().is_file() || !staged_entry.header().entry_type().is_file() || original_name != staged_name || staged_size < original_size {
+        return Err(changed());
     }
-
-    fs::rename(target_path, &backup_path).map_err(|err| utils::command_err(&format!(message!("Commands.Archive.replaceFileAtomically.backupFailed"), target_path.display()), err))?;
-
-    if let Err(err) = fs::rename(temp_path, target_path) {
-        if let Err(restore_err) = fs::rename(&backup_path, target_path) {
-            utils::log_warn(&format!(message!("Commands.Archive.replaceFileAtomically.backupRestoreFailed"), backup_path.display(), target_path.display(), restore_err));
-        }
-        return Err(utils::command_err(&format!(message!("Commands.Archive.replaceFileAtomically.failed"), target_path.display()), err));
-    }
-
-    if let Err(err) = fs::remove_file(&backup_path) {
-        utils::log_warn(&format!(message!("Commands.Archive.replaceFileAtomically.backupArchiveDeleteFailed"), backup_path.display(), err));
+    if !streaming_prefix_equal(&mut original_entry, &mut staged_entry, original_size).map_err(|err| utils::command_read_err(target_path, err))? {
+        return Err(changed());
     }
     Ok(())
 }
@@ -349,6 +393,7 @@ fn write_archive_safely(source_path: &Path, target_path: &Path, mode: ArchiveSyn
             fs::rename(&temp_path_buf, target_path).map_err(|err| utils::command_err(&format!(message!("Commands.Archive.writeArchiveSafely.archiveFailed"), target_path.display()), err))?;
         }
         ArchiveSyncMode::Replace => {
+            validate_archive_replacement(&temp_path_buf, target_path)?;
             replace_file_atomically(&temp_path_buf, target_path)?;
         }
     }
@@ -390,16 +435,15 @@ fn encode_log_level_u8(level: &str) -> u8 {
 /// ビューアのカテゴリタグをチャンク転送用のコンパクトな `u8` にエンコードする。
 ///
 /// カテゴリはログビューア UI のフィルタサイドバーと対応する。
-/// DB に登録される情報を中心に番号を振り、`debug-system` のみ複数行
-/// デバッグブロックの範囲タグとして残している。
+/// ワールドへの接続要求やプレイヤーのロード完了は入退室に含めない。
 fn encode_log_category_u8(category: &str) -> u8 {
     match category {
         "world" => 1,
         "notification" => 2,
         "player_join" => 3,
-        "player_ready" => 4,
-        "player_left" => 5,
-        "debug-system" => 6,
+        "player_left" => 4,
+        "video" => 5,
+        "photo" => 6,
         _ => 0,
     }
 }
@@ -420,97 +464,27 @@ fn read_archive_source_name(archive_path: &Path) -> Result<String, String> {
     entry_path.file_name().and_then(|value| value.to_str()).ok_or_else(|| message!("Commands.Archive.readArchiveSourceName.archiveFileFailed").to_string()).map(str::to_string)
 }
 
-/// DB 内容から導出されたログビューアのハイライト文字列。
-///
-/// カテゴリはタイムスタンプと行構造から決定するため、マーカー自体にはカテゴリを
-/// 持たせない。同じユーザー名が join/left の両方に現れても分類へ影響しない。
+/// 本文の対応項目との完全一致に用いる DB 登録済み文字列。
 #[derive(Clone)]
 struct DbKeywordMarker {
     text: String,
 }
 
-/// 生ログ行をビューア用の重要度に分類する。
+/// 先頭形式のない行は、本文の語句や直前行に依存せずデバッグとして扱う。
 fn classify_log_level(line: &str) -> &'static str {
-    if line.contains("[UserInfoLogger] Environment Info:") {
+    let Some(header) = analyze::RE_LOG_HEADER.captures(line) else {
         return "debug";
+    };
+    match header.get(2).map(|value| value.as_str()) {
+        Some("Error") => "error",
+        Some("Warning") => "warning",
+        Some("Debug") => "debug",
+        Some("Info" | "Log") => "info",
+        _ => "plain",
     }
-    if line.contains("[UserInfoLogger] User Settings Info:") {
-        return "debug";
-    }
-    if line.contains("Microphones installed (") {
-        return "debug";
-    }
-    if line.contains(" Error ") || line.contains("Error      -") {
-        return "error";
-    }
-    if line.contains(" Warning ") || line.contains("Warning    -") {
-        return "warning";
-    }
-    if line.contains(" Debug ") || line.contains("Debug      -") {
-        return "debug";
-    }
-
-    "plain"
 }
 
-/// 正規化されたデータベース行からタイムスタンプ→カテゴリのマッピングを収集する。
-///
-/// ビューアカテゴリごとに1つの SQL ブロックを意図的に維持し、
-/// 格納データとハイライト対象ログ行の関係を監査しやすくする。
-fn collect_db_log_categories(conn: &rusqlite::Connection, source_name: &str) -> Result<HashMap<String, Vec<String>>, String> {
-    let mut categories: HashMap<String, Vec<String>> = HashMap::new();
-
-    // DB に格納済みのカテゴリだけを収集する。
-    let sql = "
-        SELECT join_time, 'world'
-          FROM visits
-         WHERE session_id IN (SELECT id FROM sessions WHERE log_name = ?1)
-        UNION ALL
-        SELECT leave_time, 'world'
-          FROM visits
-         WHERE leave_time IS NOT NULL
-           AND session_id IN (SELECT id FROM sessions WHERE log_name = ?1)
-        UNION ALL
-        SELECT wu.join_time, 'player_join'
-          FROM with_users wu
-          JOIN visits v ON v.id = wu.visit_id
-          JOIN sessions s ON s.id = v.session_id
-         WHERE s.log_name = ?1 AND wu.is_self = 0
-        UNION ALL
-        SELECT wu.leave_time, 'player_left'
-          FROM with_users wu
-          JOIN visits v ON v.id = wu.visit_id
-          JOIN sessions s ON s.id = v.session_id
-         WHERE s.log_name = ?1 AND wu.is_self = 0 AND wu.leave_time IS NOT NULL
-        UNION ALL
-        SELECT received_at, 'notification'
-          FROM notifications
-         WHERE session_id IN (SELECT id FROM sessions WHERE log_name = ?1)
-    ";
-
-    let mut stmt = conn.prepare(sql).map_err(|err| utils::command_err(message!("Commands.Archive.collectDbLogCategories.logPrepareFailed"), err))?;
-
-    let rows = stmt.query_map([source_name], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))).map_err(|err| utils::command_err(message!("Commands.Archive.collectDbLogCategories.logFailed"), err))?;
-
-    for row in rows {
-        match row {
-            Ok((timestamp, category)) => {
-                categories.entry(timestamp).or_default().push(category);
-            }
-            Err(err) => {
-                utils::log_warn(&format!(message!("Commands.Archive.collectDbLogCategories.logViewerRowDecodeFailed"), err = err));
-            }
-        }
-    }
-
-    Ok(categories)
-}
-
-/// キーワードハイライト用に DB 行から表示名とメッセージを収集する。
-///
-/// マーカーは最長優先でソートし、行に複数の候補文字列が含まれる場合
-/// （例: ワールド名の部分文字列であるプレイヤー名）に最も具体的なマッチが
-/// 優先されるようにする。
+/// 本文の対象項目と照合する表示名と通知本文を DB から取得する。
 fn collect_db_keyword_markers(conn: &rusqlite::Connection, source_name: &str) -> Result<Vec<DbKeywordMarker>, String> {
     let mut markers = Vec::new();
 
@@ -555,150 +529,297 @@ fn collect_db_keyword_markers(conn: &rusqlite::Connection, source_name: &str) ->
         }
     }
 
-    // 最長優先ソートにより、行スキャン時に最も具体的なキーワードが優先される。
-    markers.sort_by(|left, right| right.text.len().cmp(&left.text.len()).then_with(|| left.text.cmp(&right.text)));
+    // 対象項目の完全一致に用いるため、文字列順に並べて重複を除く。
+    markers.sort_by(|left, right| left.text.cmp(&right.text));
     markers.dedup_by(|left, right| left.text == right.text);
     Ok(markers)
 }
 
-/// 生行とタイムスタンプから DB 登録済みカテゴリを解決する。
+/// 本文の文字位置を JavaScript の UTF-16 オフセットへ変換する。
+/// `start` と `end` は本文内の UTF-8 境界を指し、`end` は範囲に含めない。
+fn log_highlight_range(body: &str, start: usize, end: usize) -> LogViewerHighlight {
+    LogViewerHighlight { start: body[..start].encode_utf16().count(), end: body[..end].encode_utf16().count() }
+}
+
+/// DB 登録項目の強調範囲を、その項目の位置から求める。
 ///
-/// DB タイムスタンプが権威で、同一秒に複数カテゴリがある場合は行内容で
-/// タイブレークする。`player_ready` は DB に直接列を持たないが、訪問への
-/// 参加完了として `player_join` の派生扱いにする。
-fn resolve_db_category(line: &str, timestamp: &str, db_categories: &HashMap<String, Vec<String>>) -> Option<String> {
-    let matched = db_categories.get(timestamp)?;
+/// 同じ文字列が送信者名と通知本文の両方にあっても、選択した項目だけを強調する。
+fn resolve_db_highlight(body: &str, category: &str, markers: &[DbKeywordMarker]) -> Option<LogViewerHighlight> {
+    let field_range = |value: &str, start: usize| {
+        let trimmed = value.trim();
+        if !markers.iter().any(|marker| marker.text == trimmed) {
+            return None;
+        }
+        let trimmed_start = start + value.len() - value.trim_start().len();
+        let trimmed_end = trimmed_start + trimmed.len();
+        Some(log_highlight_range(body, trimmed_start, trimmed_end))
+    };
 
-    if analyze::RE_PLAYER_JOIN_COMPLETE.is_match(line) {
-        // OnPlayerJoinComplete は join_time と同一秒に出力されることが多いので
-        // player_join のヒットに便乗して player_ready を別カテゴリとして付与する。
-        return matched.iter().any(|category| category == "player_join").then(|| "player_ready".to_string());
+    match category {
+        "world" => {
+            let prefix = "[Behaviour] Entering Room: ";
+            field_range(body.strip_prefix(prefix)?, prefix.len())
+        }
+        "player_join" | "player_left" => {
+            let pattern = if category == "player_join" { &*analyze::RE_PLAYER_JOIN } else { &*analyze::RE_PLAYER_LEFT };
+            let capture = pattern.captures(body)?;
+            let display_name = capture.get(1)?;
+            field_range(display_name.as_str(), display_name.start())
+        }
+        "notification" => {
+            if let Some(capture) = analyze::RE_NOTIFICATION.captures(body) {
+                // 通知本文を送信者名より優先し、他の項目に同じ文字列があっても位置を混同しない。
+                for index in [6, 1] {
+                    if let Some(value) = capture.get(index) {
+                        if let Some(range) = field_range(value.as_str(), value.start()) {
+                            return Some(range);
+                        }
+                    }
+                }
+                return None;
+            }
+            // 複数行通知の開始行では、確定している送信者名だけを候補にする。
+            let prefix = "Received Notification: <Notification from username:";
+            let (sender, _) = body.strip_prefix(prefix)?.split_once(", sender user id:")?;
+            field_range(sender, prefix.len())
+        }
+        _ => None,
     }
+}
 
-    let preferred = if analyze::RE_PLAYER_JOIN.is_match(line) {
-        Some("player_join")
-    } else if analyze::RE_PLAYER_LEFT.is_match(line) {
-        Some("player_left")
-    } else if analyze::RE_NOTIFICATION.is_match(line) {
-        Some("notification")
-    } else if line.contains("[Behaviour] Entering Room:") || line.contains("[Behaviour] OnLeftRoom") {
-        Some("world")
+/// `ProTV` の管理オブジェクト名とメッセージを分離する。名前が異なるプレイヤーは混同しない。
+fn protv_source_message(plain_body: &str) -> Option<(&str, &str)> {
+    let (tag, message) = plain_body.split_once("] ")?;
+    if !tag.starts_with("[AT") {
+        return None;
+    }
+    let (_, source) = tag.split_once('\t')?;
+    let source = source.trim_start();
+    source.starts_with("TVManager (").then_some((source, message))
+}
+
+/// `VVMW` の同期状態と PC 用 URL を取り出す。`Player` は利用者ではなく再生バックエンドを示す。
+struct VvmwPlayback<'a> {
+    player: u8,
+    state: u8,
+    url: &'a str,
+}
+
+impl<'a> VvmwPlayback<'a> {
+    fn parse(body: &'a str) -> Option<Self> {
+        let (player, message) = body.strip_prefix("[VVMW] Deserialized: Player=")?.split_once(", State=")?;
+        let (state, message) = message.split_once(", Time=")?;
+        let (_, message) = message.split_once(", Speed=")?;
+        let (_, message) = message.split_once(", URL(PC)=")?;
+        let (url, _) = message.split_once(", URL(Quest)=")?;
+        let url = url.trim();
+        if !analyze::RE_VIDEO_URL.find(url).is_some_and(|matched| matched.start() == 0 && matched.end() == url.len()) {
+            return None;
+        }
+        Some(Self { player: player.parse().ok()?, state: state.parse().ok()?, url })
+    }
+}
+
+/// 同じ動画の状態再送を除き、再生中と確認できた最初の行を強調する。
+///
+/// 空の待機状態には管理オブジェクトの識別子がなく、別プレイヤーの出力も混在するため、
+/// 再生済み URL を一括解除しない。一時停止・時刻補正でも解除せず、再読み込みか退室で解除する。
+#[derive(Default)]
+struct VvmwPlaybackContext {
+    playing: HashSet<(u8, String)>,
+}
+
+impl VvmwPlaybackContext {
+    fn observe(&mut self, body: &str) -> bool {
+        let body = analyze::RE_LOG_RICH_TEXT.replace_all(body, "");
+        if body == "[Behaviour] OnLeftRoom" || body.strip_prefix("[Behaviour] Entering Room: ").is_some_and(|name| !name.trim().is_empty()) {
+            self.playing.clear();
+        }
+        let Some(playback) = VvmwPlayback::parse(&body) else {
+            return false;
+        };
+        if playback.player == 0 {
+            return false;
+        }
+        let key = (playback.player, playback.url.to_string());
+        match playback.state {
+            0 | 1 => {
+                self.playing.remove(&key);
+                false
+            }
+            2 => self.playing.insert(key),
+            _ => false,
+        }
+    }
+}
+
+/// 動画の識別・読み込み・再生を示す既知の出力だけを対象にする。
+/// 汎用的な URL 解決、一時的な配信先への接続、エラー、時刻同期などの内部処理は含めない。
+fn is_video_body(plain_body: &str) -> bool {
+    let has_url = analyze::RE_VIDEO_URL.is_match(plain_body);
+    if let Some(message) = plain_body.strip_prefix("[USharpVideo] ") {
+        return has_url && ["Started video load for URL: ", "Started video: ", "Playing synced "].iter().any(|prefix| message.starts_with(prefix));
+    }
+    if let Some(message) = plain_body.strip_prefix("[YamaStream] ") {
+        let message = if message.starts_with('[') { message.split_once("] ").map_or(message, |(_, value)| value) } else { message };
+        return (has_url && ["Play track: ", "Load url: ", "Play url: ", "auto play: ", "On track synced: ", "Try get video info: "].iter().any(|prefix| message.starts_with(prefix)))
+            || message.strip_prefix("Loaded video info from YouTube: ").is_some_and(|title| !title.trim().is_empty())
+            || ["Video start.", "Video play.", "Video ready.", "Video end.", "Video stop."].iter().any(|event| message.ends_with(event));
+    }
+    if let Some(message) = plain_body.strip_prefix("[iwaSync3] ") {
+        return matches!(message, "The video has started playing." | "The video is ready.");
+    }
+    if let Some(title) = plain_body.strip_prefix("[YTTL] title:") {
+        return !title.trim().is_empty();
+    }
+    if let Some((_, message)) = protv_source_message(plain_body) {
+        return (has_url && (message.contains("] loading URL") || message.contains(" Now Playing: ") || message.starts_with("Variable value is: ") || message.starts_with("Preparing implicit TV autoplay media: ")))
+            || matches!(message, "Media starting playing." | "Buffering complete." | "Ending media playback." | "Stopping current media");
+    }
+    // VVMW の同期行は前後の再生状態を使うため、VvmwPlaybackContext で分類する。
+    if let Some(message) = plain_body.strip_prefix("[JLChnToZ.VRC.VVMW.Core] Send Event ") {
+        return matches!(message, "_OnVideoBeginLoad" | "_onVideoReady" | "OnVideoPlay" | "_onVideoStart" | "_onVideoEnd");
+    }
+    if plain_body.starts_with("[VideoTXL:") {
+        return has_url && plain_body.split_once("] ").is_some_and(|(_, message)| message.starts_with("Play video ") || message.starts_with("Load Url: "));
+    }
+    if plain_body.starts_with("[KineL] Video ready # ") {
+        return has_url;
+    }
+    has_url && (plain_body.starts_with("[VRCVideoReserveItem] start load url=[") || plain_body.starts_with("[VRCVideoReserveItem] finish load url=["))
+}
+
+/// 動画の URL・タイトルを DB に依存せず強調する。指定者の名前は範囲に含めない。
+fn resolve_video_highlight(body: &str, is_forwarded_title: bool) -> Option<LogViewerHighlight> {
+    if let Some(playback) = VvmwPlayback::parse(body) {
+        // PC と Quest の URL が同じでも、PC で使う URL だけを強調する。
+        let start = body.find(", URL(PC)=")? + ", URL(PC)=".len();
+        let start = start + body[start..].len() - body[start..].trim_start().len();
+        return Some(log_highlight_range(body, start, start + playback.url.len()));
+    }
+    let title_marker = if is_forwarded_title {
+        Some("Variable value is: ")
+    } else if body.starts_with("[YTTL] title:") {
+        Some("[YTTL] title:")
+    } else if body.contains("Loaded video info from YouTube: ") {
+        Some("Loaded video info from YouTube: ")
     } else {
         None
     };
-
-    if let Some(expected) = preferred {
-        return matched.iter().any(|category| category == expected).then(|| expected.to_string());
+    if let Some(marker) = title_marker {
+        let start = body.find(marker)? + marker.len();
+        let value = &body[start..];
+        let title = value.trim();
+        if title.is_empty() {
+            return None;
+        }
+        let start = start + value.len() - value.trim_start().len();
+        return Some(log_highlight_range(body, start, start + title.len()));
     }
 
-    matched.first().cloned()
+    // USharpVideo は URL の後ろ、ProTV は URL の前に指定者名が出る。
+    let url_body = body.split_once(" requested by ").map_or(body, |(value, _)| value);
+    let first = analyze::RE_VIDEO_URL.find(url_body)?;
+    let last = analyze::RE_VIDEO_URL.find_iter(url_body).last()?;
+    let start = if body.contains("TVManager (") { last.start() } else { first.start() };
+    let end = if body.starts_with("[VRCVideoReserveItem] finish load url=[") { body.trim_end().len() } else { last.end() };
+    Some(log_highlight_range(body, start, end))
 }
 
-/// 生ログ行に含まれる最初のキーワードマーカーを検索する。
-fn resolve_db_keyword_marker<'a>(line: &str, db_keyword_markers: &'a [DbKeywordMarker]) -> Option<&'a DbKeywordMarker> {
-    db_keyword_markers.iter().find(|marker| line.contains(marker.text.as_str()))
+/// `ProTV` の変更ブロックでは旧タイトルを除き、新タイトルの値だけを強調する。
+fn resolve_protv_title_change(line: &str) -> Option<LogViewerHighlight> {
+    let changes = line.trim_start().strip_prefix("Title change ")?;
+    let (_, new_title) = changes.split_once(" -> ")?;
+    let title = new_title.trim();
+    if title.is_empty() {
+        return None;
+    }
+    let start = line.len() - new_title.trim_start().len();
+    Some(log_highlight_range(line, start, start + title.len()))
 }
 
-/// 行テキストのみからビューアカテゴリを推定する（DB ヒント不在時のフォールバック）。
+/// `ProTV` のタイトル値を、同じ管理オブジェクトの出力に限定して関連付ける。
+#[derive(Default)]
+struct VideoTitleContext {
+    is_changes: bool,
+    pending_source: Option<String>,
+}
+
+impl VideoTitleContext {
+    fn highlight(&mut self, line: &str, body: Option<&str>) -> Option<LogViewerHighlight> {
+        let previous_source = self.pending_source.take();
+        if let Some(body) = body {
+            let plain_body = analyze::RE_LOG_RICH_TEXT.replace_all(body, "");
+            let protv = protv_source_message(&plain_body);
+            self.is_changes = protv.is_some_and(|(_, message)| message == "Deserialization Changes");
+            if let Some((source, message)) = protv {
+                if message.starts_with("Forwarding variable OUT_TITLE to ") {
+                    self.pending_source = Some(source.to_string());
+                }
+                if previous_source.as_deref() == Some(source) && message.starts_with("Variable value is: ") {
+                    return resolve_video_highlight(body, true);
+                }
+            }
+            None
+        } else {
+            if line.trim().is_empty() {
+                self.is_changes = false;
+            }
+            if self.is_changes {
+                resolve_protv_title_change(line)
+            } else {
+                None
+            }
+        }
+    }
+}
+
+/// 先頭形式とイベント本文が一致する行だけをカテゴリに分類する。
 ///
-/// DB に取り込まれていない外部ログでも、ワールド/プレイヤー/通知の地色が付くように
-/// 取り込みパーサと同じパターンで行種別を判定する。地色はログ自身の構造から導けるため
-/// DB 登録の有無に依存させない。一方ハイライト（キーワード強調）は確定データのみという
-/// 方針を保つため、ここではカテゴリのみを返しハイライト文字列は生成しない。
+/// DB 時刻の一致、初期化、ロード完了、音声処理などからイベントを推測しない。
 fn classify_text_category(line: &str) -> Option<&'static str> {
-    if analyze::RE_PLAYER_JOIN_COMPLETE.is_match(line) {
-        return Some("player_ready");
+    let header = analyze::RE_LOG_HEADER.captures(line)?;
+    let body = header.get(3)?.as_str().trim_end();
+
+    if body.starts_with("[Behaviour] OnPlayerJoinComplete ") && analyze::RE_PLAYER_JOIN_COMPLETE.is_match(body) {
+        return None;
     }
-    if analyze::RE_PLAYER_JOIN.is_match(line) {
+    if body.starts_with("[Behaviour] OnPlayerJoined ") && analyze::RE_PLAYER_JOIN.find(body).is_some_and(|matched| matched.start() == 0 && matched.end() == body.len()) {
         return Some("player_join");
     }
-    if analyze::RE_PLAYER_LEFT.is_match(line) {
+    if body.starts_with("[Behaviour] OnPlayerLeft ") && analyze::RE_PLAYER_LEFT.find(body).is_some_and(|matched| matched.start() == 0 && matched.end() == body.len()) {
         return Some("player_left");
     }
-    if line.contains("Received Notification:") {
+    if body.starts_with("Received Notification: <Notification ") {
         return Some("notification");
     }
-    if line.contains("[Behaviour] Entering Room:") || line.contains("[Behaviour] OnLeftRoom") || line.contains("[Behaviour] Joining wrld_") {
+    if body.strip_prefix("[Behaviour] Entering Room: ").is_some_and(|name| !name.trim().is_empty()) || body == "[Behaviour] Successfully joined room" || body == "[Behaviour] OnLeftRoom" {
         return Some("world");
     }
-    None
-}
-
-/// ログビューア行のカテゴリを安定した優先順位で解決する。
-///
-/// 範囲分類を最優先し、次に DB の同一時刻候補と行構造が一致するカテゴリを採用する。
-/// DB 候補が行構造と矛盾する場合はテキスト判定へ戻し、キーワード一致は分類に使わない。
-fn resolve_viewer_category(line: &str, timestamp: &str, active_range_category: Option<&str>, db_categories: Option<&HashMap<String, Vec<String>>>) -> String {
-    active_range_category
-        .map(str::to_string)
-        .or_else(|| db_categories.and_then(|categories| resolve_db_category(line, timestamp, categories)))
-        .or_else(|| classify_text_category(line).map(str::to_string))
-        .unwrap_or_else(|| "plain".to_string())
-}
-
-/// 複数行にまたがる DB 関連ブロックを継続中であることを表す。
-///
-/// `VRChat` ログでは大半の行が独立したタイムスタンプを持つが、一部のレコードは
-/// 複数行に渡る (`UserInfo` デバッグブロックや、稀に改行を含む通知ペイロード)。
-/// 範囲全体に同じカテゴリを付与してフィルタチップで一括選択できるようにする。
-#[derive(Clone, Copy)]
-enum RangeBlockKind {
-    /// `[UserInfoLogger]` 系の 4 スペースインデント継続ブロック。
-    DebugSystem,
-    /// `Received Notification: <Notification ...>` が改行を含むケース。
-    /// 行内に閉じ `>` が出現するまで継続する。
-    Notification,
-}
-
-/// 進行中の範囲ブロックの状態。
-struct RangeBlock {
-    kind: RangeBlockKind,
-    category: &'static str,
-    /// ブロック開始からこれまでに範囲内として扱った行数。
-    /// 破損ログ等で終端条件が満たされない場合の暴走を防ぐ。
-    span_lines: usize,
-}
-
-/// Notification 範囲ブロックを継続できる最大行数。
-/// 通常の `VRChat` 通知は数行〜十数行に収まるため、これを超えるケースは
-/// 終端 `>` が失われた破損ログとみなして範囲を強制終了する。
-const NOTIFICATION_BLOCK_MAX_LINES: usize = 200;
-/// `[UserInfoLogger]` 系デバッグブロックを継続できる最大行数。
-/// インデント解除されない異常ケースに対する保険。
-const DEBUG_SYSTEM_BLOCK_MAX_LINES: usize = 2000;
-
-/// 行が新しい範囲ブロックを開始するなら、その種類とカテゴリを返す。
-fn detect_range_block_start(line: &str) -> Option<RangeBlock> {
-    if line.contains("[UserInfoLogger] Environment Info:") || line.contains("[UserInfoLogger] User Settings Info:") || line.contains("Microphones installed (") {
-        return Some(RangeBlock { kind: RangeBlockKind::DebugSystem, category: "debug-system", span_lines: 0 });
+    if body.starts_with("[VRC Camera] Took screenshot to: ") && analyze::RE_SCREENSHOT.is_match(body) {
+        return Some("photo");
     }
-    if line.contains("Received Notification: <Notification") && !line.contains('>') {
-        return Some(RangeBlock { kind: RangeBlockKind::Notification, category: "notification", span_lines: 0 });
+    let plain_body = analyze::RE_LOG_RICH_TEXT.replace_all(body, "");
+    if is_video_body(&plain_body) {
+        return Some("video");
     }
     None
 }
 
-/// アーカイブログテキストと DB ヒントからカテゴリ付きログビューア行を構築する。
+/// 本文のカテゴリと DB 登録項目の強調範囲を行単位で送信する。
 ///
-/// 生ログ内容と正規化 DB データをマージし、TypeScript でログ全体を
-/// 再パースせずに UI が重要な行をハイライトできるようにする。
-///
-/// ハイライトは DB に登録されたキーワードにマッチした場合のみ付与し、
-/// 正規表現のみで検出される断片はハイライトしない。複数行にわたる DB
-/// レコード（UserInfo ブロック、複数行通知、動画ロードシーケンス）は
-/// 範囲全体に同一カテゴリを付与し、フィルタチップで一括選択できるようにする。
-#[allow(clippy::too_many_lines)]
-fn emit_log_viewer_chunks(mut reader: impl BufRead, session_id: String, db_categories: Option<HashMap<String, Vec<String>>>, db_keyword_markers: Option<Vec<DbKeywordMarker>>, app: AppHandle) {
-    // 1イベントあたり500行で IPC オーバーヘッドを抑えつつ UI への更新を途絶えさせない。
+/// 先頭形式のない行はデバッグとし、`ProTV` の変更ブロック内のタイトルだけを追加で強調する。
+fn emit_log_viewer_chunks(mut reader: impl BufRead, session_id: String, db_keyword_markers: Option<Vec<DbKeywordMarker>>, app: AppHandle) {
+    // 1イベントあたり500行で IPC オーバーヘッドを抑える。
     const CHUNK_SIZE: usize = 500;
 
     let mut timestamps: Vec<String> = Vec::with_capacity(CHUNK_SIZE);
     let mut levels: Vec<u8> = Vec::with_capacity(CHUNK_SIZE);
     let mut categories: Vec<u8> = Vec::with_capacity(CHUNK_SIZE);
     let mut raw_lines: Vec<String> = Vec::with_capacity(CHUNK_SIZE);
-    let mut highlights: Vec<Option<String>> = Vec::with_capacity(CHUNK_SIZE);
+    let mut highlights: Vec<Option<LogViewerHighlight>> = Vec::with_capacity(CHUNK_SIZE);
 
-    let flush = |ts: &mut Vec<String>, lv: &mut Vec<u8>, cat: &mut Vec<u8>, rl: &mut Vec<String>, hl: &mut Vec<Option<String>>, sid: &str, app: &AppHandle| -> bool {
+    let flush = |ts: &mut Vec<String>, lv: &mut Vec<u8>, cat: &mut Vec<u8>, rl: &mut Vec<String>, hl: &mut Vec<Option<LogViewerHighlight>>, sid: &str, app: &AppHandle| -> bool {
         app.emit(
             "log_viewer_chunk",
             &LogViewerChunk { session_id: sid.to_string(), timestamps: std::mem::take(ts), levels: std::mem::take(lv), categories: std::mem::take(cat), raw_lines: std::mem::take(rl), highlights: std::mem::take(hl) },
@@ -706,8 +827,9 @@ fn emit_log_viewer_chunks(mut reader: impl BufRead, session_id: String, db_categ
         .is_ok()
     };
 
-    let mut active_range: Option<RangeBlock> = None;
     let mut line_buffer = Vec::new();
+    let mut video_titles = VideoTitleContext::default();
+    let mut vvmw_playback = VvmwPlaybackContext::default();
     loop {
         line_buffer.clear();
         match reader.read_until(b'\n', &mut line_buffer) {
@@ -720,70 +842,22 @@ fn emit_log_viewer_chunks(mut reader: impl BufRead, session_id: String, db_categ
         }
 
         let line = utils::decode_log_line_lossy(&line_buffer);
-        // 既存の範囲ブロックの終了判定。終了行は範囲外扱いで、終了が成立した時点で
-        // 範囲を解除してから当該行を分類する（インデント解除した行は範囲に含めない）。
-        if let Some(block) = active_range.as_ref() {
-            let should_end = match block.kind {
-                RangeBlockKind::DebugSystem => !line.starts_with("    "),
-                // Notification は閉じ `>` を含む行を範囲の最終行として含めるため
-                // ここでは終了しない（後段で `>` 検出後に解除する）。
-                RangeBlockKind::Notification => false,
-            };
-            if should_end {
-                active_range = None;
-            }
-        }
-
-        // 範囲未開始のときのみ新規範囲ブロックの開始を検出する。
-        if active_range.is_none() {
-            active_range = detect_range_block_start(&line);
-        }
-
-        // 進行中の範囲ブロックの累積行数を更新し、上限を超えたら強制終了する。
-        // 破損ログで終端条件（インデント解除 / 閉じ `>`）が満たされない暴走への保険。
-        if let Some(block) = active_range.as_mut() {
-            block.span_lines += 1;
-            let max = match block.kind {
-                RangeBlockKind::DebugSystem => DEBUG_SYSTEM_BLOCK_MAX_LINES,
-                RangeBlockKind::Notification => NOTIFICATION_BLOCK_MAX_LINES,
-            };
-            if block.span_lines > max {
-                active_range = None;
-            }
-        }
-
+        let header = analyze::RE_LOG_HEADER.captures(&line);
         let timestamp =
-            analyze::RE_TIME.captures(&line).and_then(|caps| caps.get(1)).and_then(|m| NaiveDateTime::parse_from_str(m.as_str(), "%Y.%m.%d %H:%M:%S").ok().map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())).unwrap_or_default();
-
-        // 範囲ブロック内では debug-system 由来なら debug 固定。
-        // Notification 範囲はタイムスタンプ付き行の本来のログレベルを尊重する。
-        let level = if matches!(active_range.as_ref().map(|b| b.kind), Some(RangeBlockKind::DebugSystem)) { "debug" } else { classify_log_level(&line) };
-
-        // DB キーワードマーカーはハイライト専用。カテゴリ分類には使用しない。
-        let keyword_marker = if timestamp.is_empty() { None } else { db_keyword_markers.as_deref().and_then(|markers| resolve_db_keyword_marker(&line, markers)) };
-
-        // カテゴリ優先順位:
-        //   1. 範囲ブロックが進行中ならその範囲カテゴリ（複数行を同じカテゴリに統一）
-        //   2. DB タイムスタンプ候補と行構造が一致するカテゴリ
-        //   3. 行テキストからの分類（未取り込みの外部ログでもカテゴリ地色を付与）
-        //   4. 上記いずれも該当しなければ "plain"
-        let category = resolve_viewer_category(&line, &timestamp, active_range.as_ref().map(|block| block.category), db_categories.as_ref());
-
-        // ハイライト（キーワード強調）は DB マーカーがマッチした場合のみ付与する。
-        // カテゴリ地色は未取り込みログでも classify_text_category で付くが、ハイライトは
-        // 確定データのみを強調する方針のため、揮発性のテキストフォールバックを意図的に持たない。
-        let highlight_text = keyword_marker.map(|marker| marker.text.clone());
-
-        // Notification 範囲は閉じ `>` を含む行を最終行として範囲を解除する。
-        if matches!(active_range.as_ref().map(|b| b.kind), Some(RangeBlockKind::Notification)) && line.contains('>') {
-            active_range = None;
-        }
+            header.as_ref().and_then(|capture| capture.get(1)).and_then(|value| NaiveDateTime::parse_from_str(value.as_str(), "%Y.%m.%d %H:%M:%S").ok()).map(|value| value.format("%Y-%m-%d %H:%M:%S").to_string()).unwrap_or_default();
+        let level = classify_log_level(&line);
+        let body = header.as_ref().and_then(|capture| capture.get(3)).map(|value| value.as_str());
+        let title_highlight = video_titles.highlight(&line, body);
+        let is_vvmw_playback = body.is_some_and(|body| vvmw_playback.observe(body));
+        let category = if title_highlight.is_some() || is_vvmw_playback { "video" } else { classify_text_category(&line).unwrap_or("plain") };
+        let highlight =
+            title_highlight.or_else(|| body.and_then(|body| if category == "video" { resolve_video_highlight(body, false) } else { db_keyword_markers.as_deref().and_then(|markers| resolve_db_highlight(body, category, markers)) }));
 
         timestamps.push(timestamp);
         levels.push(encode_log_level_u8(level));
-        categories.push(encode_log_category_u8(&category));
+        categories.push(encode_log_category_u8(category));
         raw_lines.push(line);
-        highlights.push(highlight_text);
+        highlights.push(highlight);
 
         if raw_lines.len() >= CHUNK_SIZE && !flush(&mut timestamps, &mut levels, &mut categories, &mut raw_lines, &mut highlights, &session_id, &app) {
             return;
@@ -839,47 +913,34 @@ pub fn list_archive_files() -> Result<Vec<ArchiveFileItem>, String> {
     Ok(files)
 }
 
-/// ソース名で DB の正規化済みヒント（カテゴリ・キーワード）を取得する。
+/// ソース名に対応する DB 登録文字列を本文の強調用に取得する。
 ///
-/// DB が存在しない・該当セッションが未取り込みなど、ヒントが得られないケースは
-/// 警告ログを出して `(None, None)` を返し、ビューアは正規表現ベースの分類に
-/// フォールバックする。
-#[allow(clippy::type_complexity)]
-fn build_db_hints(source_name: &str) -> (Option<HashMap<String, Vec<String>>>, Option<Vec<DbKeywordMarker>>) {
+/// DB がなくても本文によるカテゴリ分類と重要度の表示は利用できる。
+fn build_db_keyword_markers(source_name: &str) -> Option<Vec<DbKeywordMarker>> {
     match get_db_path() {
         Ok(db_path) if db_path.exists() => match rusqlite::Connection::open(&db_path) {
-            Ok(conn) => {
-                let categories = match collect_db_log_categories(&conn, source_name) {
-                    Ok(c) => Some(c),
-                    Err(err) => {
-                        utils::log_warn(&format!(message!("Commands.Archive.buildDbHints.logFailed"), err = err));
-                        None
-                    }
-                };
-                let keyword_markers = match collect_db_keyword_markers(&conn, source_name) {
-                    Ok(m) => Some(m),
-                    Err(err) => {
-                        utils::log_warn(&format!(message!("Commands.Archive.buildDbHints.logKeywordReadFailed"), err = err));
-                        None
-                    }
-                };
-                (categories, keyword_markers)
-            }
+            Ok(conn) => match collect_db_keyword_markers(&conn, source_name) {
+                Ok(markers) => Some(markers),
+                Err(err) => {
+                    utils::log_warn(&format!(message!("Commands.Archive.buildDbHints.logKeywordReadFailed"), err = err));
+                    None
+                }
+            },
             Err(err) => {
                 utils::log_warn(&format!(message!("Commands.Archive.buildDbHints.logDatabaseOpenFailed"), db_path.display(), err));
-                (None, None)
+                None
             }
         },
-        Ok(_) => (None, None),
+        Ok(_) => None,
         Err(err) => {
             utils::log_warn(&format!(message!("Commands.Archive.buildDbHints.logDatabasePathFailed"), err = err));
-            (None, None)
+            None
         }
     }
 }
 
 /// 圧縮済み `.tar.zst` ログを別スレッドでストリーミングしてビューアイベントを送出する。
-fn spawn_compressed_log_stream(archive_path: PathBuf, session_id: String, db_categories: Option<HashMap<String, Vec<String>>>, db_keyword_markers: Option<Vec<DbKeywordMarker>>, app: AppHandle) {
+fn spawn_compressed_log_stream(archive_path: PathBuf, session_id: String, db_keyword_markers: Option<Vec<DbKeywordMarker>>, app: AppHandle) {
     std::thread::spawn(move || {
         let app_fallback = app.clone();
         let sid_fallback = session_id.clone();
@@ -892,7 +953,7 @@ fn spawn_compressed_log_stream(archive_path: PathBuf, session_id: String, db_cat
                 return Err(format!(message!("Commands.Archive.spawnCompressedLogStream.archiveLogFileMissing"), archive_path.display()));
             };
             let mut entry = entry_result.map_err(|err| utils::command_err(message!("Commands.Archive.spawnCompressedLogStream.zstdEntryReadFailed"), err))?;
-            emit_log_viewer_chunks(BufReader::new(&mut entry), session_id, db_categories, db_keyword_markers, app);
+            emit_log_viewer_chunks(BufReader::new(&mut entry), session_id, db_keyword_markers, app);
             Ok(())
         })();
         if let Err(err) = result {
@@ -903,13 +964,13 @@ fn spawn_compressed_log_stream(archive_path: PathBuf, session_id: String, db_cat
 }
 
 /// プレーンテキスト `.txt` ログを別スレッドでストリーミングしてビューアイベントを送出する。
-fn spawn_plain_log_stream(log_path: PathBuf, session_id: String, db_categories: Option<HashMap<String, Vec<String>>>, db_keyword_markers: Option<Vec<DbKeywordMarker>>, app: AppHandle) {
+fn spawn_plain_log_stream(log_path: PathBuf, session_id: String, db_keyword_markers: Option<Vec<DbKeywordMarker>>, app: AppHandle) {
     std::thread::spawn(move || {
         let app_fallback = app.clone();
         let sid_fallback = session_id.clone();
         let result: Result<(), String> = (|| {
             let file = open_source_log_for_read(&log_path)?;
-            emit_log_viewer_chunks(BufReader::new(file), session_id, db_categories, db_keyword_markers, app);
+            emit_log_viewer_chunks(BufReader::new(file), session_id, db_keyword_markers, app);
             Ok(())
         })();
         if let Err(err) = result {
@@ -934,11 +995,11 @@ pub fn read_archive_log_viewer(file_name: String, session_id: String, app: AppHa
     }
 
     let source_name = read_archive_source_name(&archive_path)?;
-    let (db_categories, db_keyword_markers) = build_db_hints(&source_name);
+    let db_keyword_markers = build_db_keyword_markers(&source_name);
 
     // セッション ID により、前回のストリームがまだ飛行中にユーザーが別ファイルに
     // 切り替えた場合、Frontendが古いチャンクイベントを破棄できる。
-    spawn_compressed_log_stream(archive_path, session_id.clone(), db_categories, db_keyword_markers, app);
+    spawn_compressed_log_stream(archive_path, session_id.clone(), db_keyword_markers, app);
 
     Ok(LogViewerMeta { session_id, archive_name: file_name, source_name })
 }
@@ -971,7 +1032,7 @@ pub fn open_folder(path: &str) -> Result<(), String> {
 /// # Errors
 /// ソースログdirectoryまたはアーカイブdirectoryを読み取れない場合にエラーを返す。
 #[tauri::command]
-pub fn get_deletable_source_logs() -> Result<Vec<DeletableLogInfo>, String> {
+pub fn get_deletable_source_logs() -> Result<SourceLogCandidates, String> {
     let source_dir = get_source_log_dir()?;
     let archive_dir = get_archive_store_dir()?;
 
@@ -988,23 +1049,21 @@ pub fn get_deletable_source_logs() -> Result<Vec<DeletableLogInfo>, String> {
                 return None;
             }
             let archive_path = archive_dir.join(format!("{name}.tar.zst"));
-            let is_archived = match is_source_log_exactly_archived(&path, &archive_path) {
-                Ok(value) => value,
+            let source_file = match open_archived_source_for_cleanup(&path, &archive_path) {
+                Ok(Some(file)) => file,
+                Ok(None) => return None,
                 Err(err) => {
                     utils::log_warn(&format!(message!("Commands.Archive.getDeletableSourceLogs.logVerifyFailed"), err = err, name = name));
-                    false
+                    return None;
                 }
             };
-            if !is_archived {
-                return None;
-            }
-            let size_bytes = path.metadata().map(|m| m.len()).unwrap_or(0);
+            let size_bytes = source_file.metadata().map(|m| m.len()).unwrap_or(0);
             Some(DeletableLogInfo { file_name: name, size_bytes })
         })
         .collect();
 
     results.sort_by(|a, b| a.file_name.cmp(&b.file_name));
-    Ok(results)
+    Ok(SourceLogCandidates { source_log_path: source_dir.display().to_string(), logs: results })
 }
 
 /// 外部フォルダのファイル名がログビューア対応フォーマットに合致するか判定する。
@@ -1050,12 +1109,12 @@ pub fn read_external_log_viewer(file_path: String, session_id: String, app: AppH
     let is_compressed = file_name.ends_with(".tar.zst");
     let source_name = if is_compressed { read_archive_source_name(&log_path)? } else { file_name.clone() };
 
-    let (db_categories, db_keyword_markers) = build_db_hints(&source_name);
+    let db_keyword_markers = build_db_keyword_markers(&source_name);
 
     if is_compressed {
-        spawn_compressed_log_stream(log_path, session_id.clone(), db_categories, db_keyword_markers, app);
+        spawn_compressed_log_stream(log_path, session_id.clone(), db_keyword_markers, app);
     } else {
-        spawn_plain_log_stream(log_path, session_id.clone(), db_categories, db_keyword_markers, app);
+        spawn_plain_log_stream(log_path, session_id.clone(), db_keyword_markers, app);
     }
 
     Ok(LogViewerMeta { session_id, archive_name: file_path, source_name })
@@ -1066,8 +1125,12 @@ pub fn read_external_log_viewer(file_path: String, session_id: String, app: AppH
 /// # Errors
 /// ファイル名が不正、アーカイブが存在しない、または削除に失敗した場合にエラーを返す。
 #[tauri::command]
-pub fn delete_source_logs(file_names: Vec<String>) -> Result<usize, String> {
+pub fn delete_source_logs(source_log_path: String, file_names: Vec<String>) -> Result<usize, String> {
     let source_dir = get_source_log_dir()?;
+    // 一覧取得後に設定が変わった場合、別フォルダの同名ファイルへ削除対象を移さない。
+    if source_dir != Path::new(&source_log_path) {
+        return Err(message!("Commands.Archive.deleteSourceLogs.sourceDirectoryChanged").to_string());
+    }
     let archive_dir = get_archive_store_dir()?;
 
     let mut deleted_count: usize = 0;
@@ -1082,10 +1145,8 @@ pub fn delete_source_logs(file_names: Vec<String>) -> Result<usize, String> {
             if !archive_path.exists() {
                 return Err(format!(message!("Commands.Archive.deleteSourceLogs.archiveTarZstdMissing"), file_name = file_name));
             }
-            if !is_source_log_exactly_archived(&source_path, &archive_path)? {
-                return Err(format!(message!("Commands.Archive.deleteSourceLogs.logArchiveSynchronizeFailed"), file_name = file_name));
-            }
-            fs::remove_file(&source_path).map_err(|err| format!(message!("Commands.Archive.deleteSourceLogs.deleteFailed"), err = err, file_name = file_name))?;
+            let source_file = open_archived_source_for_cleanup(&source_path, &archive_path)?.ok_or_else(|| format!(message!("Commands.Archive.deleteSourceLogs.logArchiveSynchronizeFailed"), file_name = file_name))?;
+            delete_open_source_log(source_file, &source_path)?;
             deleted_count += 1;
         }
     }

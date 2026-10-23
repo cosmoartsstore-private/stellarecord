@@ -4,14 +4,14 @@
 
 ## Document Control
 
-| Field | Content |
-| --- | --- |
-| Application | StellaRecord |
-| Scope | 起動/終了、機能、workflow、成功/部分成功/取消し/失敗、外部効果と現在の制約。内部構造/schema/開発配布の詳細は対象外 |
-| Audience | 利用者、仕様を判断する人、機能を変更する人 |
-| Authority | `src/app/App.tsx` / `useAppModals.ts`、`src/features/`、`src-tauri/src/commands/` / `analyze/` |
-| Related documents | [README](../README.md)、[Architecture](architecture.md)、[Database Schema](database.md)、[Tech Stack](tech-stack.md)、[Operation Preview](manual.html) |
-| Source review date | 2026-10-22（sourceとの静的照合日。実行試験日ではない） |
+| Field              | Content                                                                                                                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Application        | StellaRecord                                                                                                                                           |
+| Scope              | 起動/終了、機能、workflow、成功/部分成功/取消し/失敗、外部効果と現在の制約。内部構造/schema/開発配布の詳細は対象外                                     |
+| Audience           | 利用者、仕様を判断する人、機能を変更する人                                                                                                             |
+| Authority          | `src/app/App.tsx` / `useAppModals.ts`、`src/features/`、`src-tauri/src/commands/` / `analyze/`                                                         |
+| Related documents  | [README](../README.md)、[Architecture](architecture.md)、[Database Schema](database.md)、[Tech Stack](tech-stack.md)、[Operation Preview](manual.html) |
+| Source review date | 2026-10-23（sourceとの静的照合日。実行試験日ではない）                                                                                                 |
 
 ## Table of Contents
 
@@ -29,7 +29,7 @@
 
 ### Overview
 
-Polarisが保存したVRChatログを圧縮保管し、archive本文と解析済み情報を閲覧するWindows向けアプリケーションである。解析情報は本文から再構築できるが、ランチャー登録・設定は同じ復元対象ではない。
+指定したフォルダのVRChatログを圧縮保管し、archive本文と解析済み情報を閲覧するWindows向けアプリケーションである。読込元の既定はPolarisの保存先。解析情報は本文から再構築できるが、ランチャー登録・設定は同じ復元対象ではない。
 
 ### Goals
 
@@ -57,7 +57,7 @@ VRChat改造、リアルタイム通信傍受、マルチユーザー/サーバ�
 
 ## Startup and Shutdown
 
-初回は実効archive/DB保存先を表示し、起動時取込を確認する。許可/不許可の保存成功で回答済みとなり、許可した場合だけ今回の取込を開始する。未回答の既定は許可なし。取得/保存失敗はerrorを表示し、許可保存に失敗したまま開始しない。
+初回は読込元と実効archive/DB保存先を表示し、起動時取込を確認する。読込元はこの確認中にも変更できる。許可/不許可の保存成功で回答済みとなり、許可した場合だけ今回の取込を開始する。未回答の既定は許可なし。取得/保存失敗はerrorを表示し、許可保存に失敗したまま開始しない。
 
 回答済みかつ許可済みなら起動ごとに1回同期・差分解析する。設定画面での許可変更は次回起動から適用する。Windowsサインイン時にStellaRecordを起動する設定とは独立している。
 
@@ -69,233 +69,247 @@ VRChat改造、リアルタイム通信傍受、マルチユーザー/サーバ�
 
 #### ランチャー一覧・再読込・list/card
 
-| Item | Contract |
-| --- | --- |
-| Purpose and Entry | ランチャー一覧・再読込・list/card |
-| Preconditions and Input | `apps` を実効DBから取得 |
-| Decision and Processing | 名前順、icon BLOB→Base64。遅い旧取得は世代で破棄 |
-| Success and Output | 一覧・表示モードはメモリ。取得失敗では空catalogになり得る |
-| Persistence | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する |
-| Cancellation and Failure | reloadで再取得。catalog読込みではDB/schemaを作成しない |
-| Source and Constraints | `src-tauri/src/config.rs:179`, `:192`; `src/features/registry/viewmodels/useRegistryState.ts:10` |
+| Item                     | Contract                                                                                  |
+| ------------------------ | ----------------------------------------------------------------------------------------- |
+| Purpose and Entry        | ランチャー一覧・再読込・list/card                                                         |
+| Preconditions and Input  | `apps` を実効DBから取得                                                                   |
+| Decision and Processing  | 名前順、icon BLOB→Base64。遅い旧取得は世代で破棄                                          |
+| Success and Output       | 一覧・表示モードはメモリ。取得失敗では空catalogになり得る                                 |
+| Persistence              | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する |
+| Cancellation and Failure | reloadで再取得。catalog読込みではDB/schemaを作成しない                                    |
+| Source and Constraints   | `src-tauri/src/config.rs`、`src/features/registry/viewmodels/useRegistryState.ts`         |
 
 #### EXE参照・表示名補完
 
-| Item | Contract |
-| --- | --- |
-| Purpose and Entry | EXE参照・表示名補完 |
-| Preconditions and Input | native picker。選択取消しはNone |
-| Decision and Processing | FileDescription→ProductName→stem。手入力・再選択を古い応答で戻さない |
-| Success and Output | 登録前のpath/name/descriptionはmodal state |
-| Persistence | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する |
-| Cancellation and Failure | picker失敗はUIで無通知、表示名取得失敗はstemへ。modal取消しは未保存 |
-| Source and Constraints | `src-tauri/src/commands/registry.rs:22`, `:31`; `src/features/registry/views/RegisterAppModal.tsx:25` |
+| Item                     | Contract                                                                                  |
+| ------------------------ | ----------------------------------------------------------------------------------------- |
+| Purpose and Entry        | EXE参照・表示名補完                                                                       |
+| Preconditions and Input  | native picker。選択取消しはNone                                                           |
+| Decision and Processing  | FileDescription→ProductName→stem。手入力・再選択を古い応答で戻さない                      |
+| Success and Output       | 登録前のpath/name/descriptionはmodal state                                                |
+| Persistence              | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する |
+| Cancellation and Failure | picker失敗はUIで無通知、表示名取得失敗はstemへ。modal取消しは未保存                       |
+| Source and Constraints   | `src-tauri/src/commands/registry.rs`、`src/features/registry/views/RegisterAppModal.tsx`  |
 
 #### アプリ登録
 
-| Item | Contract |
-| --- | --- |
-| Purpose and Entry | アプリ登録 |
-| Preconditions and Input | pathのis_file、trim後name必須、description任意 |
-| Decision and Processing | icon取得は任意。DB/schema初期化後INSERT、path UNIQUE |
-| Success and Output | `apps` にname/description/path/icon/registered_at |
-| Persistence | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する |
-| Cancellation and Failure | 重複pathは専用エラー、失敗時modalを維持。同名・別pathは許容 |
-| Source and Constraints | `src-tauri/src/commands/registry.rs:45`, `:67`; `src/app/App.tsx:97` |
+| Item                     | Contract                                                                                  |
+| ------------------------ | ----------------------------------------------------------------------------------------- |
+| Purpose and Entry        | アプリ登録                                                                                |
+| Preconditions and Input  | pathのis_file、trim後name必須、description任意                                            |
+| Decision and Processing  | icon取得は任意。DB/schema初期化後INSERT、path UNIQUE                                      |
+| Success and Output       | `apps` にname/description/path/icon/registered_at                                         |
+| Persistence              | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する |
+| Cancellation and Failure | 重複pathは専用エラー、失敗時modalを維持。同名・別pathは許容                               |
+| Source and Constraints   | `src-tauri/src/commands/registry.rs`、`src/app/App.tsx`                                   |
 
 #### 外部EXE起動・フォルダ表示
 
-| Item | Contract |
-| --- | --- |
-| Purpose and Entry | 外部EXE起動・フォルダ表示 |
-| Preconditions and Input | 登録pathを明示操作 |
-| Decision and Processing | `Command::new(path).spawn()`、Windows CREATE_NO_WINDOW。フォルダはopener |
-| Success and Output | 対象アプリの起動・OSフォルダ表示。Stellaの登録は変更しない |
-| Persistence | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する |
-| Cancellation and Failure | spawn成功を起動成功と通知。子アプリ終了・健康状態は追跡しない。再操作可 |
-| Source and Constraints | `src-tauri/src/platform.rs:83`; `src-tauri/src/commands/archive.rs:966`; `src/app/App.tsx:75` |
+| Item                     | Contract                                                                                                                   |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| Purpose and Entry        | 外部EXE起動・フォルダ表示                                                                                                  |
+| Preconditions and Input  | 登録pathを明示操作                                                                                                         |
+| Decision and Processing  | 起動は`Command::new(path).spawn()`とWindows CREATE_NO_WINDOW。「ファイルの場所を開く」はShell APIで親フォルダ内のEXEを選択 |
+| Success and Output       | 対象アプリの起動・Explorerでの対象ファイル選択。Stellaの登録は変更しない                                                   |
+| Persistence              | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する                                  |
+| Cancellation and Failure | spawn成功を起動成功と通知。子アプリ終了・健康状態は追跡しない。再操作可                                                    |
+| Source and Constraints   | `src-tauri/src/platform.rs`、`src-tauri/src/commands/archive.rs`、`src/app/App.tsx`                                        |
 
 #### 登録解除
 
-| Item | Contract |
-| --- | --- |
-| Purpose and Entry | 登録解除 |
-| Preconditions and Input | path一致の登録 |
-| Decision and Processing | DELETE apps、0件は該当なしエラー、再読込 |
-| Success and Output | 登録だけ削除。対象EXE・対象アプリのデータは削除しない |
-| Persistence | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する |
-| Cancellation and Failure | UI操作から直ちに実行。解除後の取消し・復元APIはない。再登録可 |
-| Source and Constraints | `src-tauri/src/commands/registry.rs:83`, `:92`; `src/app/App.tsx:110` |
+| Item                     | Contract                                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| Purpose and Entry        | 登録解除                                                                                                                  |
+| Preconditions and Input  | path一致の登録                                                                                                            |
+| Decision and Processing  | DELETE apps、0件は該当なしエラー、再読込                                                                                  |
+| Success and Output       | 登録だけ削除。対象EXE・対象アプリのデータは削除しない                                                                     |
+| Persistence              | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する                                 |
+| Cancellation and Failure | 確認ダイアログでキャンセルできる。確定後の解除処理中は重複実行・閉じる操作を抑止。解除後の取消し・復元APIはない。再登録可 |
+| Source and Constraints   | `src-tauri/src/commands/registry.rs`、`src/app/App.tsx`                                                                   |
 
 ### Analyze
 
 #### 起動時取込の初回確認・設定
 
-| Item | Contract |
-| --- | --- |
-| Purpose and Entry | 起動時取込の初回確認・設定 |
-| Preconditions and Input | 実効archive/DB保存先を取得して表示 |
-| Decision and Processing | 未選択なら確認。許可の保存成功後だけ今回実行。既回答かつ許可済みなら起動ごと1回 |
-| Success and Output | StartupImportEnabled→StartupImportPreferenceSet。設定画面変更は次回起動から |
-| Persistence | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する |
-| Cancellation and Failure | 不許可も回答済み保存。保存失敗は開始しない。通常のWindows自動起動とは別 |
-| Source and Constraints | `src/app/App.tsx:142`, `:154`, `:191`; `src-tauri/src/config.rs:141`, `:157` |
+| Item                     | Contract                                                                                  |
+| ------------------------ | ----------------------------------------------------------------------------------------- |
+| Purpose and Entry        | 起動時取込の初回確認・設定                                                                |
+| Preconditions and Input  | 実効archive/DB保存先を取得して表示                                                        |
+| Decision and Processing  | 未選択なら確認。許可の保存成功後だけ今回実行。既回答かつ許可済みなら起動ごと1回           |
+| Success and Output       | StartupImportEnabled→StartupImportPreferenceSet。設定画面変更は次回起動から               |
+| Persistence              | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する |
+| Cancellation and Failure | 不許可も回答済み保存。保存失敗は開始しない。通常のWindows自動起動とは別                   |
+| Source and Constraints   | `src/app/App.tsx`、`src-tauri/src/config.rs`                                              |
 
-#### Polaris原本→archive同期
+#### 読込元→archive同期
 
-| Item | Contract |
-| --- | --- |
-| Purpose and Entry | Polaris原本→archive同期 |
-| Preconditions and Input | Polaris InstallLocation/Data/archive、Stellaの実効archive |
-| Decision and Processing | 初回圧縮、厳密な追記だけ置換。同サイズ異内容・縮小・非prefixは旧archive保持 |
-| Success and Output | 1ログ1entry、zstd level3、tmp生成→finish/sync_all→配置、置換時.bak |
-| Persistence | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する |
-| Cancellation and Failure | 同期はcancelを確認しない。複数件の前半成功は残る。エラー時DB解析へ進まない |
-| Source and Constraints | `src-tauri/src/commands/mod.rs:65`; `src-tauri/src/commands/archive.rs:178`, `:314`, `:339`, `:367`; `src-tauri/src/commands/import.rs:110` |
+| Item                     | Contract                                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| Purpose and Entry        | 読込元→archive同期                                                                                                        |
+| Preconditions and Input  | SourceLogPath、未指定時はPolaris InstallLocation/Data/archive。出力はStellaの実効archive                                  |
+| Decision and Processing  | 初回圧縮、厳密な追記だけ置換。同サイズ異内容・縮小・非prefixは旧archive保持                                               |
+| Success and Output       | 開始時点の元ログサイズを1ログ1entry、zstd level3で保存。tmp生成→finish/sync_all→既存本文のprefix再確認→renameで配置・置換 |
+| Persistence              | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する                                 |
+| Cancellation and Failure | 同期はcancelを確認しない。複数件の前半成功は残る。エラー時DB解析へ進まない                                                |
+| Source and Constraints   | `src-tauri/src/commands/mod.rs`、`src-tauri/src/commands/archive.rs`、`src-tauri/src/commands/import.rs`                  |
 
 #### 起動時差分解析
 
-| Item | Contract |
-| --- | --- |
-| Purpose and Entry | 起動時差分解析 |
-| Preconditions and Input | Backendでも許可2条件を再確認。管理archive全体を走査 |
-| Decision and Processing | SHA-256/本文長/parser版一致はskip、変更はsession関連再構築 |
-| Success and Output | outer transaction＋file savepoint。通常ファイル失敗だけは成功分を最後にcommit |
-| Persistence | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する |
-| Cancellation and Failure | cancelは今回DB全rollback。失敗ファイルは次回再試行対象。archive同期済み分は残る |
-| Source and Constraints | `src-tauri/src/commands/import.rs:110`; `src-tauri/src/analyze/mod.rs:442` |
+| Item                     | Contract                                                                                  |
+| ------------------------ | ----------------------------------------------------------------------------------------- |
+| Purpose and Entry        | 起動時差分解析                                                                            |
+| Preconditions and Input  | Backendでも許可2条件を再確認。管理archive全体を走査                                       |
+| Decision and Processing  | SHA-256/本文長/parser版一致はskip、変更はsession関連再構築                                |
+| Success and Output       | outer transaction＋file savepoint。通常ファイル失敗だけは成功分を最後にcommit             |
+| Persistence              | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する |
+| Cancellation and Failure | cancelは今回DB全rollback。失敗ファイルは次回再試行対象。archive同期済み分は残る           |
+| Source and Constraints   | `src-tauri/src/commands/import.rs`、`src-tauri/src/analyze/mod.rs`                        |
 
-#### 手動バッチ取込（UI「復元」）
+#### 手動バッチ取込（UI「アーカイブの取り込み」）
 
-| Item | Contract |
-| --- | --- |
-| Purpose and Entry | 手動バッチ取込（UI「復元」） |
-| Preconditions and Input | 管理archive一覧から複数選択。単一名・命名規則・存在を事前検証 |
-| Decision and Processing | ソート後worker。内容同一ならskip、変更は再構築。外部pickerはこの入力経路ではない |
-| Success and Output | 全選択成功時だけ今回DB更新をcommit |
-| Persistence | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する |
-| Cancellation and Failure | 1ファイル失敗・cancelの双方で全選択rollback。選択modal取消しは開始しない。再選択再実行 |
-| Source and Constraints | `src/app/useAppModals.ts:53`; `src-tauri/src/commands/import.rs:68`; `src-tauri/src/analyze/mod.rs:855` |
+| Item                     | Contract                                                                                      |
+| ------------------------ | --------------------------------------------------------------------------------------------- |
+| Purpose and Entry        | 手動バッチ取込（UI「アーカイブの取り込み」）                                                  |
+| Preconditions and Input  | 管理archive一覧から複数選択。単一名・命名規則・存在を事前検証                                 |
+| Decision and Processing  | ソート後worker。内容同一ならskip、変更は再構築。外部pickerはこの入力経路ではない              |
+| Success and Output       | 全選択成功時だけ今回DB更新をcommit                                                            |
+| Persistence              | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する     |
+| Cancellation and Failure | 1ファイル失敗・cancelの双方で全選択rollback。選択modal取消しは開始しない。再選択再実行        |
+| Source and Constraints   | `src/app/useAppModals.ts`、`src-tauri/src/commands/import.rs`、`src-tauri/src/analyze/mod.rs` |
 
 #### 取込進捗・停止
 
-| Item | Contract |
-| --- | --- |
-| Purpose and Entry | 取込進捗・停止 |
-| Preconditions and Input | Backend running compare_exchangeで同時worker1本 |
-| Decision and Processing | analyze-progress/analyze-finishedを購読。停止はAtomicBoolへの要求 |
-| Success and Output | 進捗・running状態はメモリ。終了時guardがrunning解除 |
-| Persistence | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する |
-| Cancellation and Failure | 停止要求受理≠停止完了。解析は行/指紋chunk/commit前に確認、停止時間上限なし |
-| Source and Constraints | `src-tauri/src/commands/import.rs:23`, `:52`, `:167`; `src-tauri/src/analyze/mod.rs:209`, `:538`; `src/features/analyze/viewmodels/useAnalyzeState.ts:76` |
+| Item                     | Contract                                                                                                                 |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| Purpose and Entry        | 取込進捗・停止                                                                                                           |
+| Preconditions and Input  | Backend running compare_exchangeで同時worker1本                                                                          |
+| Decision and Processing  | analyze-progress/analyze-finishedを購読。停止はAtomicBoolへの要求                                                        |
+| Success and Output       | 進捗・running状態はメモリ。終了時guardがrunning解除                                                                      |
+| Persistence              | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する                                |
+| Cancellation and Failure | 停止要求受理≠停止完了。解析は行/指紋chunk/commit前に確認、停止時間上限なし                                               |
+| Source and Constraints   | `src-tauri/src/commands/import.rs`、`src-tauri/src/analyze/mod.rs`、`src/features/analyze/viewmodels/useAnalyzeState.ts` |
 
 #### 容量メーター・警告ライン
 
-| Item | Contract |
-| --- | --- |
-| Purpose and Entry | 容量メーター・警告ライン |
-| Preconditions and Input | 実効archive tree全体、Polaris閾値 |
-| Decision and Processing | 30秒・手動・解析終了時に再計算、表示率を100%までclamp |
-| Success and Output | 閾値のみregistry。容量値は表示state |
-| Persistence | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する |
-| Cancellation and Failure | 警告は容量制限や自動削除ではない。取得失敗は直前値保持。旧応答は世代で破棄 |
-| Source and Constraints | `src-tauri/src/commands/archive.rs:280`, `:952`; `src/features/analyze/viewmodels/useAnalyzeState.ts:23`; `src/features/analyze/views/AnalyzeSection.tsx:30` |
+| Item                     | Contract                                                                                                                                   |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Purpose and Entry        | 容量メーター・警告ライン                                                                                                                   |
+| Preconditions and Input  | 実効archive tree全体、Polaris閾値                                                                                                          |
+| Decision and Processing  | 30秒・手動・解析終了時に再計算、表示率を100%までclamp                                                                                      |
+| Success and Output       | 閾値のみregistry。容量値は表示state                                                                                                        |
+| Persistence              | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する                                                  |
+| Cancellation and Failure | 警告は容量制限や自動削除ではない。取得失敗は直前値保持。旧応答は世代で破棄                                                                 |
+| Source and Constraints   | `src-tauri/src/commands/archive.rs`、`src/features/analyze/viewmodels/useAnalyzeState.ts`、`src/features/analyze/views/AnalyzeSection.tsx` |
 
-#### Polaris元ログ削除
+#### 元ログ削除
 
-| Item | Contract |
-| --- | --- |
-| Purpose and Entry | Polaris元ログ削除 |
-| Preconditions and Input | 名前・size・本文がarchiveと完全一致した候補だけ。初期は全候補選択 |
-| Decision and Processing | modalで選択・確定後、削除直前にも一致を再確認して逐次remove_file |
-| Success and Output | Polaris原本だけを削除。archive/DBは保持 |
-| Persistence | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する |
-| Cancellation and Failure | modal取消し可。実行後undoなし。途中失敗では既削除分は戻らず、次回一覧から再確認 |
-| Source and Constraints | `src-tauri/src/commands/archive.rs:227`, `:975`, `:1070`; `src/features/analyze/views/PolarisCleanupModal.tsx:17`; `src/app/useAppModals.ts:123` |
+| Item                     | Contract                                                                                                                                        |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Purpose and Entry        | 元ログ削除                                                                                                                                      |
+| Preconditions and Input  | 名前・size・本文がarchiveと完全一致した候補だけ。初期は全候補選択                                                                               |
+| Decision and Processing  | 候補取得時の読込元を確定時にも照合。削除直前に同じファイルhandleで名前・size・本文を再確認し、追記・置換を禁止したままFileDispositionInfoで削除 |
+| Success and Output       | 確認した読込元の原本だけを削除。archive/DBは保持                                                                                                |
+| Persistence              | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する                                                       |
+| Cancellation and Failure | modal取消し可。実行後undoなし。途中失敗では既削除分は戻らず、次回一覧から再確認                                                                 |
+| Source and Constraints   | `src-tauri/src/commands/archive.rs`、`src/features/analyze/views/PolarisCleanupModal.tsx`、`src/app/useAppModals.ts`                            |
 
 #### 管理ログ閲覧・外部ログ選択
 
-| Item | Contract |
-| --- | --- |
-| Purpose and Entry | 管理ログ閲覧・外部ログ選択 |
-| Preconditions and Input | 管理はoutput_log_*.txt.tar.zst。外部はoutput_log_*＋.txt/.tar.zst、is_file |
-| Decision and Processing | 圧縮は先頭entry、plainは直接read。カテゴリは本文分類、強調はDB markerだけ |
-| Success and Output | 500行/event、100ms集約、全文配列をメモリ保持して仮想DOM表示 |
-| Persistence | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する |
-| Cancellation and Failure | 外部picker取消しは選択維持。file切替/closeはlistener解除と旧世代破棄。Rust読取りworker停止IPCはない |
-| Source and Constraints | `src-tauri/src/commands/archive.rs:692`, `:931`, `:1015`, `:1040`; `src/features/archive/viewmodels/useArchiveState.ts:64` |
+| Item                     | Contract                                                                                                                                                                          |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Purpose and Entry        | 管理ログ閲覧・外部ログ選択                                                                                                                                                        |
+| Preconditions and Input  | 管理は`output_log_*.txt.tar.zst`。外部は`output_log_*`＋.txt/.tar.zst、is_file                                                                                                    |
+| Decision and Processing  | 圧縮は先頭entry、plainは直接read。カテゴリは本文で判定し、表示名・通知の強調はDB marker、動画URL・タイトルは既知の出力形式で判定                                                  |
+| Success and Output       | 500行/event、100ms集約、全文配列をメモリ保持して仮想DOM表示                                                                                                                       |
+| Persistence              | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する                                                                                         |
+| Cancellation and Failure | 管理archiveが0件・一覧取得失敗・読み込み開始失敗でもファイル選択を利用できる。外部picker取消しは選択維持。file切替/closeはlistener解除と旧世代破棄。Rust読取りworker停止IPCはない |
+| Source and Constraints   | `src-tauri/src/commands/archive.rs`、`src/features/archive/viewmodels/useArchiveState.ts`                                                                                         |
 
 #### ビューアfilter・zoom・切替
 
-| Item | Contract |
-| --- | --- |
-| Purpose and Entry | ビューアfilter・zoom・切替 |
-| Preconditions and Input | world/notification/player/warning/error/debugチップ |
-| Decision and Processing | levelまたはcategory一致で表示行を絞る。Ctrl+wheel 0.5～2.5倍、overscan10 |
-| Success and Output | filter/zoomはmodal内state。file切替はscrollだけreset |
-| Persistence | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する |
-| Cancellation and Failure | file切替でfilter維持、close/reopenでstate再作成。原文・DBへの書込みなし |
-| Source and Constraints | `src/features/archive/views/LogViewerModal.tsx:15`, `:63`, `:92`, `:105` |
+| Item                     | Contract                                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| Purpose and Entry        | ビューアfilter・zoom・切替                                                                                         |
+| Preconditions and Input  | world/notification/player/video/photo/warning/error/debugチップ                                                    |
+| Decision and Processing  | 複数選択したlevelまたはcategoryのいずれかに一致する行を表示し、クリアで選択解除。Ctrl+wheel 0.5～2.5倍、overscan10 |
+| Success and Output       | filter/zoomはmodal内state。file切替はscrollだけreset                                                               |
+| Persistence              | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する                          |
+| Cancellation and Failure | file切替でfilter維持、close/reopenでstate再作成。原文・DBへの書込みなし                                            |
+| Source and Constraints   | `src/features/archive/views/LogViewerModal.tsx`                                                                    |
 
 ### Database Preview
 
 #### DB一覧・ページ・sort・物理名切替
 
-| Item | Contract |
-| --- | --- |
-| Purpose and Entry | DB一覧・ページ・sort・物理名切替 |
-| Preconditions and Input | 実効DB内のTABLE_COMMENTS登録済みobjectのみ |
-| Decision and Processing | 9可視table＋3view。内部imported_logs非表示。500行、asc→desc→解除、既定sort |
-| Success and Output | NULL/Blobは表示文字列、切替状態はメモリ。任意SQL/編集機能なし |
-| Persistence | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する |
-| Cancellation and Failure | load失敗toast。世代で旧応答を破棄し、行取得失敗は前の確定tableへ戻す |
-| Source and Constraints | `src-tauri/src/commands/database.rs:155`, `:248`, `:289`, `:342`; `src/features/database/viewmodels/useDatabaseState.ts:18`; `src/features/database/views/DatabaseSection.tsx:23` |
+| Item                     | Contract                                                                                                                                        |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Purpose and Entry        | DB一覧・ページ・sort・物理名切替                                                                                                                |
+| Preconditions and Input  | 実効DB内のTABLE_COMMENTS登録済みobjectのみ                                                                                                      |
+| Decision and Processing  | 9可視table＋3view。内部imported_logs非表示。500行、asc→desc→解除、既定sort                                                                      |
+| Success and Output       | NULL/Blobは表示文字列、切替状態はメモリ。任意SQL/編集機能なし                                                                                   |
+| Persistence              | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する                                                       |
+| Cancellation and Failure | load失敗toast。世代で旧応答を破棄し、行取得失敗は前の確定tableへ戻す                                                                            |
+| Source and Constraints   | `src-tauri/src/commands/database.rs`、`src/features/database/viewmodels/useDatabaseState.ts`、`src/features/database/views/DatabaseSection.tsx` |
 
 #### DB cleanup/reset/backup
 
-| Item | Contract |
-| --- | --- |
-| Purpose and Entry | DB cleanup/reset/backup |
-| Preconditions and Input | 現行UI・24 IPCに入口なし |
-| Decision and Processing | DB削除・VACUUM・全データbackup・restore APIなし |
-| Success and Output | archive再解析は解析DBの再構築でありapps/settings復元ではない |
-| Persistence | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する |
-| Cancellation and Failure | 外部手動保全の注意はstorage文書へ。存在しない操作手順を共通章の必須機能にしない |
-| Source and Constraints | `src-tauri/src/lib.rs:41`; `src/features/database/views/DatabaseSection.tsx:23`; `docs/database.md:628`, `:664` |
+| Item                     | Contract                                                                                      |
+| ------------------------ | --------------------------------------------------------------------------------------------- |
+| Purpose and Entry        | DB cleanup/reset/backup                                                                       |
+| Preconditions and Input  | 現行UI・26 IPCに入口なし                                                                      |
+| Decision and Processing  | DB削除・VACUUM・全データbackup・restore APIなし                                               |
+| Success and Output       | archive再解析は解析DBの再構築でありapps/settings復元ではない                                  |
+| Persistence              | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する     |
+| Cancellation and Failure | 外部手動保全の注意はstorage文書へ。存在しない操作手順を共通章の必須機能にしない               |
+| Source and Constraints   | `src-tauri/src/lib.rs`、`src/features/database/views/DatabaseSection.tsx`、`docs/database.md` |
 
 ### Settings
 
 #### Windowsログイン時自動起動・容量設定
 
-| Item | Contract |
-| --- | --- |
-| Purpose and Entry | Windowsログイン時自動起動・容量設定 |
-| Preconditions and Input | 閾値1～10,485,760 MiB相当の整数、enable bool |
-| Decision and Processing | Polaris設定→Run→Stella設定の順。UI toggleは即時保存、閾値は保存操作 |
-| Success and Output | Run/Stella EnableStartup・StartupPreferenceSet/Polaris CapacityThresholdBytes |
-| Persistence | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する |
-| Cancellation and Failure | 途中失敗で開始前値の復元を試みる。復元失敗を連結通知。全registry書込みの原子性なし |
-| Source and Constraints | `src-tauri/src/commands/settings.rs:67`, `:75`, `:117`; `src-tauri/src/platform.rs:97`; `src/features/settings/viewmodels/useSettingsState.ts:103` |
+| Item                     | Contract                                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| Purpose and Entry        | Windowsログイン時自動起動・容量設定                                                                                       |
+| Preconditions and Input  | 閾値1～10,485,760 MiB相当の整数、enable bool                                                                              |
+| Decision and Processing  | Polaris設定→Run→Stella設定の順。自動起動toggleは保存済み閾値を保って即時保存し、編集中の閾値は専用の保存操作で確定        |
+| Success and Output       | Run/Stella EnableStartup・StartupPreferenceSet/Polaris CapacityThresholdBytes                                             |
+| Persistence              | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する                                 |
+| Cancellation and Failure | 途中失敗で開始前値の復元を試みる。復元失敗を連結通知。全registry書込みの原子性なし                                        |
+| Source and Constraints   | `src-tauri/src/commands/settings.rs`、`src-tauri/src/platform.rs`、`src/features/settings/viewmodels/useSettingsState.ts` |
+
+#### ログの読込元変更
+
+| Item                     | Contract                                                                                                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Purpose and Entry        | 設定画面または初回取込確認の「ログの読み込み元を変更」                                                                                                       |
+| Preconditions and Input  | 実在する絶対パスのフォルダ。Polaris未導入でも選択できる                                                                                                      |
+| Decision and Processing  | アプリ画面を所有者とするnative dialogを表示し、変更・キャンセルまで背後の操作を抑止。選択後にis_dirとread_dirを確認                                          |
+| Success and Output       | SourceLogPathを保存し画面へ反映。次の取り込み開始時に使用                                                                                                    |
+| Persistence              | SourceLogPathだけを保存する。既存archive/DBの移動や再取り込みを直ちに行わない                                                                                |
+| Cancellation and Failure | キャンセルは未変更。選択・読み取り確認・保存失敗は元の設定を保持して通知                                                                                     |
+| Source and Constraints   | `src-tauri/src/commands/settings.rs`、`src-tauri/src/platform.rs`、`src-tauri/src/config.rs`、`src/features/settings/viewmodels/useStartupImportSettings.ts` |
 
 #### theme・設定保存先表示・credit
 
-| Item | Contract |
-| --- | --- |
-| Purpose and Entry | theme・設定保存先表示・credit |
-| Preconditions and Input | light/dark/midnight。保存先表示はStartupImportSettings |
-| Decision and Processing | theme変更即反映。archive/DB保存先の変更UIはない。creditから明示URL open |
-| Success and Output | themeだけlocalStorage。credit開閉/版表示はメモリ |
-| Persistence | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する |
-| Cancellation and Failure | theme保存に独自のResult/復元処理なし。credit外部リンクは通常業務のAPI通信と別 |
-| Source and Constraints | `src/features/settings/models/theme.ts:1`; `src/features/settings/views/DataLocationList.tsx:1`; `src/app/CreditModal.tsx:39`; `src/app/App.tsx:314` |
-
+| Item                     | Contract                                                                                                                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Purpose and Entry        | theme・設定保存先表示・credit                                                                                                                                                                           |
+| Preconditions and Input  | light/dark。読込元・保存先表示はStartupImportSettings                                                                                                                                                   |
+| Decision and Processing  | テーマは設定の選択欄、または設定ボタン横のボタンで即時変更。読込元は所有者付きnative dialogで選択し、確定・キャンセルまで背後のアプリ操作を抑止。archive/DB保存先の変更UIはない。creditから明示URL open |
+| Success and Output       | themeだけlocalStorage。credit開閉/版表示はメモリ                                                                                                                                                        |
+| Persistence              | 保存先・更新単位・保持/削除は[Database Schema](database.md)を正本とし、上記出力と区別する                                                                                                               |
+| Cancellation and Failure | theme保存に独自のResult/復元処理なし。credit外部リンクは通常業務のAPI通信と別                                                                                                                           |
+| Source and Constraints   | `src/features/settings/models/theme.ts`、`src/features/settings/views/DataLocationList.tsx`、`src/app/CreditModal.tsx`、`src/app/App.tsx`                                                               |
 
 ### Operation Details
 
-- 設定はglobal navの「設定」からSettingsModalを開く。Analyze内には配置しない。テーマはselectで即時反映、自動起動toggleは即時保存、警告ラインは保存操作、取込許可は次回起動から適用する。保存済み変更をmodal closeで取り消す機能ではない。
+- 設定はglobal navの設定アイコンからSettingsModalを開く。テーマはライトと黒基調のダーク。隣接するテーマボタンからも切り替えられる。トグルはスイッチ本体の操作でだけ変更し、自動起動は即時保存、警告ラインは専用の保存操作、取込許可・読込元変更は次回の取り込みから適用する。保存済み変更をmodal closeで取り消す機能ではない。
 - 容量表示は設定警告ラインが10 GiB以上ならGB、それ未満ならMB。90%超で警告色、bar幅を0〜100%へ制限する。警告は自動削除/保存拒否/空き容量予約ではない。
 - 手動archive選択は全選択/解除、個別toggle、Shift範囲追加、Ctrl/Meta個別toggle、drag選択/解除、keyboard toggleを扱う。
-- viewerのカテゴリ地色は本文分類、キーワード強調はDB markerのみ。DB未取込でも本文カテゴリ/levelは表示し、テキストだけから強調を推測しない。source名からヒントを探し、同名外部本文の指紋一致まで検証する契約ではない。
+- viewerの本文分類は先頭形式と既知イベントに限定し、入退室はOnPlayerJoined/OnPlayerLeft、ワールドはEntering Room/Successfully joined room/OnLeftRoomを対象とする。初期化・ロード完了・音声処理を入退室やワールドに含めない。形式の時刻・区切りは通常色、エラー・警告・デバッグはlevelの語だけを色付けし、形式のない行は1行全体をデバッグ扱いとする。
+- DB由来の強調はsource名に対応する項目の完全一致で判定し、通知本文を送信者名より優先する。同名外部本文の指紋一致までは検証しない。動画URL・タイトルはDBとは独立して強調し、DBへ登録しない。VVMWは再生中と最初に確認したPC URLを強調し、状態再送は除く。これは実際の再生開始時刻の確定ではない。既知のProTVタイトル継続行も強調対象とする。写真撮影はTook screenshotの本文を分類する。ワールドID・接続先情報は通常色で、リンクにしない。
+- 「ログ内を検索…」は読み込み完了後にファイル全体を文字列検索する。大文字小文字を区別せず、Enter/検索ボタンで次、Shift+Enterで前の一致行へ移動する。Ctrl+Fは入力欄へ移動、F3/Shift+F3でも移動し、入力中のEscapeは検索を解除する。一致行への移動時に分類フィルターを解除し、ファイル切り替えで検索を初期化する。追加の「全ログで表示」操作は設けない。
+- 操作結果のトーストはstatusとして通知し、modalが開いている間はそのdialog内に表示する。
 - viewer file切替はfilter/zoomを保ってscrollを戻し、close/reopenではmodal stateを作り直す。全受信行を配列保持するため仮想DOMを全文メモリ不保持と扱わない。
 - DB previewはBLOBを`<BLOB>`、NULLを`NULL`として表示し、table/viewを区別する。読取り専用画面はfilesystem無変更/read-only接続の保証ではない。
 - 登録解除はEXE/対象appデータを削除しない。fallback iconはRegistrySection内にある。Creditのversion表示と明示リンクopenはメモリ状態で、通常業務の外部API通信とは別の効果である。
@@ -334,14 +348,14 @@ VRChat改造、リアルタイム通信傍受、マルチユーザー/サーバ�
 
 開始受付、file進捗、最終確定は別段階である。fileの完了進捗はouter commit前に送るため、その時点で永続化確定とは限らない。
 
-| Mode and result | Database result | Retained effects and retry |
-| --- | --- | --- |
-| 手動全成功 | 全選択更新をcommit | 元archive保持 |
-| 手動の通常file失敗 | 今回の全選択更新をrollback | 既存archiveを再選択し実行 |
-| 起動時差分の通常file失敗 | 失敗fileを戻し、成功分を最後にcommit | 失敗fileは次回起動時または手動で再試行 |
-| いずれかの取消し | 今回DB全体をrollback | 先行同期archiveは残る。終了確認後に再実行 |
-| 同期失敗 | DB解析を開始しない | 先行成功archiveは残る。原本/保存先を確認して再試行 |
-| outer DB/commit失敗 | 成功として扱わない | errorを確認し再実行。別資源までrollbackしない |
+| Mode and result          | Database result                      | Retained effects and retry                         |
+| ------------------------ | ------------------------------------ | -------------------------------------------------- |
+| 手動全成功               | 全選択更新をcommit                   | 元archive保持                                      |
+| 手動の通常file失敗       | 今回の全選択更新をrollback           | 既存archiveを再選択し実行                          |
+| 起動時差分の通常file失敗 | 失敗fileを戻し、成功分を最後にcommit | 失敗fileは次回起動時または手動で再試行             |
+| いずれかの取消し         | 今回DB全体をrollback                 | 先行同期archiveは残る。終了確認後に再実行          |
+| 同期失敗                 | DB解析を開始しない                   | 先行成功archiveは残る。原本/保存先を確認して再試行 |
+| outer DB/commit失敗      | 成功として扱わない                   | errorを確認し再実行。別資源までrollbackしない      |
 
 schema初期化/互換処理はouter transaction開始前で、cancelのrollback対象外。手動経路は既存管理archiveを使いPolaris同期を行わない。同期済み本文・解析DB・apps/設定の「復元」を区別する。[Write Transactions and Invariants](database.md#write-transactions-and-invariants)に物理確定手順を記す。
 
@@ -362,35 +376,35 @@ schema初期化/互換処理はouter transaction開始前で、cancelのrollback
 
 ## External Effects and Validation
 
-| Boundary | Current rule and effect |
-| --- | --- |
-| 管理archive | 単一filename、output_log_*.txt.tar.zst。path traversalを許可しない |
-| 外部viewer | 明示選択した既存file、output_log_*と.txt/.tar.zstを検証。取込入力とは別経路 |
-| DB table/column | ASCII英数字/_と表示metadata allowlistを検証。page500行、sortのasc以外はDESC |
-| app登録 | 既存file、trim後非空name、path UNIQUE。起動/folderは明示操作 |
-| 警告ライン | 1〜10,485,760 MB整数、1 MB=1024² bytes。Polaris共有値も変更 |
-| registry | 管理設定は順次保存と補償的復元でatomicではない。[Settings Writes](database.md#settings-writes) |
-| 通信/権限 | 通常API/認証/テレメトリなし。明示URL/EXE/folderを開く。installerのWebView2導入とpreviewのGoogle Fontsは別 |
+| Boundary        | Current rule and effect                                                                                   |
+| --------------- | --------------------------------------------------------------------------------------------------------- |
+| 管理archive     | 単一filename、`output_log_*.txt.tar.zst`。path traversalを許可しない                                      |
+| 外部viewer      | 明示選択した既存file、`output_log_*`と.txt/.tar.zstを検証。取込入力とは別経路                             |
+| DB table/column | ASCII英数字/\_と表示metadata allowlistを検証。page500行、sortのasc以外はDESC                              |
+| app登録         | 既存file、trim後非空name、path UNIQUE。起動/folderは明示操作                                              |
+| 警告ライン      | 1〜10,485,760 MB整数、1 MB=1024² bytes。Polaris共有値も変更                                               |
+| registry        | 管理設定は順次保存と補償的復元でatomicではない。[Settings Writes](database.md#settings-writes)            |
+| 通信/権限       | 通常API/認証/テレメトリなし。明示URL/EXE/folderを開く。installerのWebView2導入とpreviewのGoogle Fontsは別 |
 
 ## Current Constraints
 
 ### Known Limitations
 
-| Limitation | Impact | Current handling |
-| --- | --- | --- |
-| VRChat形式依存 | 未対応/変更形式は解析情報が欠け得る | 本文と解析を区別し、parser版更新後に再構築 |
-| 生instance_typeラベル | hidden等の内部名を保存/表示 | 人向けmappingはconsumer責務 |
-| 非UTF-8置換 | 該当fieldを完全復元できない | 元bytesはarchiveに保持 |
-| Windowsのみ/日本語UI | 他OS/多言語を提供しない | 対応範囲拡張の保証なし |
-| viewer途中失敗/大容量 | 部分行表示、全行メモリ保持 | doneを全文成功とせずlog確認/再取得 |
-| 設定保存/復元失敗 | 一部値だけ更新され得る | 連結errorを確認し再取得 |
-| 非暗号化DB | local filesystem権限に依存 | SQLCipherなし、backup先も利用者管理 |
-| 署名/Updaterなし | Windows警告/手動更新 | [Current Distribution Constraints](tech-stack.md#current-distribution-constraints) |
-| 復元対象の差 | archiveだけではapps/設定/themeを戻せない | [Backup and Restore](database.md#backup-and-restore)の範囲を分けて保全 |
+| Limitation            | Impact                                   | Current handling                                                                   |
+| --------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------- |
+| VRChat形式依存        | 未対応/変更形式は解析情報が欠け得る      | 本文と解析を区別し、parser版更新後に再構築                                         |
+| 生instance_typeラベル | hidden等の内部名を保存/表示              | 人向けmappingはconsumer責務                                                        |
+| 非UTF-8置換           | 該当fieldを完全復元できない              | 元bytesはarchiveに保持                                                             |
+| Windowsのみ/日本語UI  | 他OS/多言語を提供しない                  | 対応範囲拡張の保証なし                                                             |
+| viewer途中失敗/大容量 | 部分行表示、全行メモリ保持               | doneを全文成功とせずlog確認/再取得                                                 |
+| 設定保存/復元失敗     | 一部値だけ更新され得る                   | 連結errorを確認し再取得                                                            |
+| 非暗号化DB            | local filesystem権限に依存               | SQLCipherなし、backup先も利用者管理                                                |
+| 署名/Updaterなし      | Windows警告/手動更新                     | [Current Distribution Constraints](tech-stack.md#current-distribution-constraints) |
+| 復元対象の差          | archiveだけではapps/設定/themeを戻せない | [Backup and Restore](database.md#backup-and-restore)の範囲を分けて保全             |
 
 ## References
 
-- [Architecture](architecture.md): entry/module/状態所有、24 IPC・4 event、worker/終了。
+- [Architecture](architecture.md): entry/module/状態所有、26 IPC・4 event、worker/終了。
 - [Database Schema](database.md): 全schema、保存先、identity、transaction、保持/削除/保全。
 - [Tech Stack](tech-stack.md): 依存、command、CI、導入/更新/削除。
 - [Operation Preview](manual.html): 非接続sample、全機能/全状態の再現ではない。

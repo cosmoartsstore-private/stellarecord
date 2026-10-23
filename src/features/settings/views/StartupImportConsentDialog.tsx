@@ -5,16 +5,18 @@ import { DataLocationList } from './DataLocationList';
 import styles from './StartupImportConsentDialog.module.css';
 
 interface StartupImportConsentDialogProps {
+  sourceLogPath: string;
   logArchivePath: string;
   databasePath: string;
   isSaving: boolean;
+  onChangeSourceLogDirectory?: () => void;
   onAllow: () => void;
   onDecline: () => void;
 }
 
 /** 初回起動時に、ログ取り込みの保存先と継続実行について確認する。 */
 export function StartupImportConsentDialog(props: StartupImportConsentDialogProps) {
-  const { logArchivePath, databasePath, isSaving, onAllow, onDecline } = props;
+  const { sourceLogPath, logArchivePath, databasePath, isSaving, onChangeSourceLogDirectory, onAllow, onDecline } = props;
   const dialogRef = useModalDialog();
 
   return (
@@ -23,7 +25,7 @@ export function StartupImportConsentDialog(props: StartupImportConsentDialogProp
         <h3 id="startup-import-title">{getMsg('StartupImportConsent.title')}</h3>
         <p id="startup-import-description" className={styles.description}>{getMsg('StartupImportConsent.description')}</p>
 
-        <div className={styles.locationPanel}><DataLocationList logArchivePath={logArchivePath} databasePath={databasePath} /></div>
+        <div className={styles.locationPanel}><DataLocationList sourceLogPath={sourceLogPath} logArchivePath={logArchivePath} databasePath={databasePath} isSourceLogChangeDisabled={isSaving} onChangeSourceLogDirectory={onChangeSourceLogDirectory} /></div>
 
         <p id="startup-import-note" className={styles.note}>{getMsg('StartupImportConsent.details')}</p>
 

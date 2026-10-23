@@ -90,7 +90,8 @@ pub fn launch_enhanced_import(app: AppHandle, file_names: Vec<String>, cancel_st
             Ok(()) => emit_analyze_progress(&app, format!(message!("Commands.Import.launchEnhancedImport.completed"), total = total), "100%".to_string(), false),
             Err(err) if err == analyze::ANALYZE_CANCELED_MESSAGE => emit_analyze_progress(&app, message!("Commands.Import.launchEnhancedImport.text").to_string(), "0%".to_string(), false),
             Err(err) => {
-                emit_analyze_progress(&app, format!(message!("Commands.Import.launchEnhancedImport.errorStatus"), err = err), "0%".to_string(), false);
+                utils::log_err(&format!("{}: {err}", message!("Commands.Import.launchEnhancedImport.errorStatus")));
+                emit_analyze_progress(&app, message!("Commands.Import.launchEnhancedImport.errorStatus").to_string(), "0%".to_string(), false);
             }
         }
         utils::emit_event_warn(&app, "analyze-finished", ());
@@ -132,7 +133,8 @@ pub fn launch_startup_archive_import(app: AppHandle, cancel_status: State<'_, An
         }
 
         if let Err(err) = sync_source_logs_into_archive_store(&source_dir, &archive_store_dir) {
-            emit_analyze_progress(&app, format!(message!("Commands.Import.launchStartupArchiveImport.synchronizeFailed"), err = err), "0%".to_string(), false);
+            utils::log_err(&format!("{}: {err}", message!("Commands.Import.launchStartupArchiveImport.synchronizeFailed")));
+            emit_analyze_progress(&app, message!("Commands.Import.launchStartupArchiveImport.synchronizeFailed").to_string(), "0%".to_string(), false);
             utils::emit_event_warn(&app, "analyze-finished", ());
             return;
         }
@@ -148,7 +150,8 @@ pub fn launch_startup_archive_import(app: AppHandle, cancel_status: State<'_, An
             }
             Err(err) if err == analyze::ANALYZE_CANCELED_MESSAGE => emit_analyze_progress(&app, message!("Commands.Import.launchStartupArchiveImport.text").to_string(), "0%".to_string(), false),
             Err(err) => {
-                emit_analyze_progress(&app, format!(message!("Commands.Import.launchStartupArchiveImport.errorStatus"), err = err), "0%".to_string(), false);
+                utils::log_err(&format!("{}: {err}", message!("Commands.Import.launchStartupArchiveImport.errorStatus")));
+                emit_analyze_progress(&app, message!("Commands.Import.launchStartupArchiveImport.errorStatus").to_string(), "0%".to_string(), false);
             }
         }
 

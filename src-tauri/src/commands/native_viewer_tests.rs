@@ -1,7 +1,18 @@
 // 実際のfile読込とTauriのRust listenerへのevent payloadを確認する。BrowserのIPC配信は別途検証する。
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 struct NativeViewerChunk {
-    session_id: String, timestamps: Vec<String>, levels: Vec<u8>, categories: Vec<u8>, raw_lines: Vec<String>, highlights: Vec<Option<String>>,
+    session_id: String, timestamps: Vec<String>, levels: Vec<u8>, categories: Vec<u8>, raw_lines: Vec<String>, highlights: Vec<Option<NativeViewerHighlight>>,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+struct NativeViewerHighlight { start: usize, end: usize }
+
+fn native_viewer_highlight_text(chunk: &NativeViewerChunk, index: usize) -> Option<String> {
+    let range = chunk.highlights.get(index)?.as_ref()?;
+    let line = chunk.raw_lines.get(index)?;
+    let header = analyze::RE_LOG_HEADER.captures(line);
+    let body = header.as_ref().and_then(|capture| capture.get(3)).map_or(line.as_str(), |value| value.as_str());
+    Some(String::from_utf16_lossy(&body.encode_utf16().skip(range.start).take(range.end - range.start).collect::<Vec<_>>()))
 }
 
 fn native_viewer_json(value: impl serde::Serialize) -> Result<String, Box<dyn std::error::Error>> {
@@ -107,7 +118,7 @@ fn command_viewer_partial_tar_read_failure_preserves_chunks_and_retries_same_fil
             assert_eq!(chunks.iter().flat_map(|chunk| chunk.raw_lines.iter()).collect::<Vec<_>>(), rows.iter().collect::<Vec<_>>());
             for chunk in &chunks {
                 assert_eq!(chunk.timestamps, vec!["2026-10-10 12:00:00"; chunk.raw_lines.len()]);
-                assert_eq!(chunk.levels, vec![0; chunk.raw_lines.len()]);
+                assert_eq!(chunk.levels, vec![1; chunk.raw_lines.len()]);
                 assert_eq!(chunk.categories, vec![0; chunk.raw_lines.len()]);
                 assert_eq!(chunk.highlights, vec![None; chunk.raw_lines.len()]);
             }
@@ -202,9 +213,9 @@ fn command_viewer_active_wal_reads_committed_hints_without_checkpoint_or_dirty_r
         let chunks = events.finish(&["active-wal"])?;
         assert_eq!(chunks.len(), 1);
         assert_eq!(chunks[0].raw_lines, contents.lines().collect::<Vec<_>>());
-        assert_eq!(chunks[0].categories, [0, 1, 1, 1]);
-        assert_eq!(chunks[0].highlights, [None, Some(committed_world.to_string()), None, None]);
-        assert!(!chunks[0].highlights.iter().flatten().any(|value| value == uncommitted_world));
+        assert_eq!(chunks[0].categories, [0, 1, 0, 1]);
+        assert_eq!(native_viewer_highlight_text(&chunks[0], 1).as_deref(), Some(committed_world));
+        assert!((0..chunks[0].raw_lines.len()).all(|index| native_viewer_highlight_text(&chunks[0], index).as_deref() != Some(uncommitted_world)));
         let database_after = fs::read(&database)?;
         let wal_after = fs::read(&wal)?;
         assert_eq!(database_after, database_checkpointed);
@@ -262,8 +273,8 @@ fn command_viewer_archive_uses_real_saved_categories_and_highlights() -> NativeC
         let meta = archive::read_archive_log_viewer(filename.clone(), "saved".to_string(), app.handle().clone())?;
         assert_eq!(meta.session_id, "saved"); assert_eq!(meta.archive_name, filename); assert_eq!(meta.source_name, name);
         let chunks = events.finish(&["saved"])?; assert_eq!(chunks.len(), 1); assert_eq!(chunks[0].raw_lines, import_log().lines().collect::<Vec<_>>());
-        assert_eq!(chunks[0].categories, [0, 1, 1, 1]); assert_eq!(chunks[0].timestamps[2], "2026-10-08 12:01:01");
-        assert_eq!(chunks[0].highlights[1].as_deref(), Some("Owned World")); assert_eq!(chunks[0].highlights[0], None); app.cleanup_before_exit(); Ok(())
+        assert_eq!(chunks[0].categories, [0, 1, 0, 1]); assert_eq!(chunks[0].timestamps[2], "2026-10-08 12:01:01");
+        assert_eq!(native_viewer_highlight_text(&chunks[0], 1).as_deref(), Some("Owned World")); assert_eq!(chunks[0].highlights[0], None); app.cleanup_before_exit(); Ok(())
     })
 }
 
@@ -277,35 +288,35 @@ fn command_viewer_plain_streams_multiple_chunks_and_decodes_invalid_utf8() -> Na
         assert_eq!(meta.archive_name, path.to_string_lossy()); assert_eq!(meta.source_name, "output_log_external.txt");
         let chunks = events.finish(&["plain"])?; assert_eq!(chunks.iter().map(|chunk| chunk.raw_lines.len()).collect::<Vec<_>>(), [500, 500, 1]);
         assert_eq!(chunks[0].raw_lines[0], "2026.10.08 12:00:00 Log - 行0"); assert_eq!(chunks[1].raw_lines[499], "2026.10.08 12:00:00 Log - 行999");
-        assert_eq!(chunks[2].raw_lines, ["last �"]); assert_eq!(chunks[2].timestamps, [""]); assert_eq!(chunks[2].levels, [0]);
+        assert_eq!(chunks[2].raw_lines, ["last �"]); assert_eq!(chunks[2].timestamps, [""]); assert_eq!(chunks[2].levels, [4]);
         assert!(chunks.iter().flat_map(|chunk| &chunk.highlights).all(Option::is_none)); assert_eq!(fs::read(path)?, bytes); app.cleanup_before_exit(); Ok(())
     })
 }
 
 #[test]
-fn command_viewer_range_blocks_end_at_indent_change_and_notification_closure() -> NativeCommandTestResult {
-    native_command_test("command_viewer_range_blocks_end_at_indent_change_and_notification_closure", |directory, _| {
+fn command_viewer_headerless_rows_do_not_inherit_event_categories() -> NativeCommandTestResult {
+    native_command_test("command_viewer_headerless_rows_do_not_inherit_event_categories", |directory, _| {
         let path = directory.path().join("output_log_ranges.txt");
         let contents = "2026.10.08 12:00:00 Log - [UserInfoLogger] Environment Info:\n    2026.10.08 12:00:01 Log - [Behaviour] OnPlayerJoined A (usr_1111-2222-3333-4444-555555555555)\n2026.10.08 12:00:02 Log - plain\n2026.10.08 12:00:03 Log - Received Notification: <Notification message=\"first\n    continued\n    final\">\n2026.10.08 12:00:04 Log - [Behaviour] OnPlayerJoined B (usr_2222-3333-4444-5555-666666666666)\n";
         fs::write(&path, contents)?; let (app, _) = native_import_app()?; let events = NativeViewerEvents::listen(&app);
         archive::read_external_log_viewer(path.to_string_lossy().into_owned(), "ranges".to_string(), app.handle().clone())?;
-        let chunks = events.finish(&["ranges"])?; assert_eq!(chunks.len(), 1); assert_eq!(chunks[0].categories, [6, 6, 0, 2, 2, 2, 3]);
-        assert_eq!(chunks[0].levels, [4, 4, 0, 0, 0, 0, 0]); assert!(chunks[0].highlights.iter().all(Option::is_none)); app.cleanup_before_exit(); Ok(())
+        let chunks = events.finish(&["ranges"])?; assert_eq!(chunks.len(), 1); assert_eq!(chunks[0].categories, [0, 0, 0, 2, 0, 0, 3]);
+        assert_eq!(chunks[0].levels, [1, 4, 1, 1, 4, 4, 1]); assert!(chunks[0].highlights.iter().all(Option::is_none)); app.cleanup_before_exit(); Ok(())
     })
 }
 
 #[test]
-fn command_viewer_unclosed_ranges_stop_at_each_current_line_limit() -> NativeCommandTestResult {
-    native_command_test("command_viewer_unclosed_ranges_stop_at_each_current_line_limit", |directory, _| {
+fn command_viewer_long_headerless_runs_keep_debug_classification() -> NativeCommandTestResult {
+    native_command_test("command_viewer_long_headerless_runs_keep_debug_classification", |directory, _| {
         let path = directory.path().join("output_log_limits.txt"); let (app, _) = native_import_app()?; let events = NativeViewerEvents::listen(&app);
         for (header, body, limit, category, session) in [
-            ("Received Notification: <Notification", "    plain", 200, 2, "notification-limit"),
-            ("[UserInfoLogger] User Settings Info:", "    plain", 2000, 6, "debug-limit"),
+            ("Received Notification: <Notification from username:a", "    plain", 200, 2, "notification-limit"),
+            ("[UserInfoLogger] User Settings Info:", "    plain", 2000, 0, "debug-limit"),
         ] {
             let mut contents = format!("2026.10.08 12:00:00 Log - {header}\n"); for _ in 0..limit { contents.push_str(body); contents.push('\n'); } fs::write(&path, contents)?;
             archive::read_external_log_viewer(path.to_string_lossy().into_owned(), session.to_string(), app.handle().clone())?; let chunks = events.finish(&[session])?;
             let categories = chunks.iter().flat_map(|chunk| chunk.categories.iter().copied()).collect::<Vec<_>>(); assert_eq!(categories.len(), limit + 1);
-            assert!(categories[..limit].iter().all(|value| *value == category)); assert_eq!(categories[limit], 0);
+            assert_eq!(categories[0], category); assert!(categories[1..].iter().all(|value| *value == 0));
         }
         app.cleanup_before_exit(); Ok(())
     })
@@ -359,7 +370,7 @@ fn command_viewer_corrupt_database_falls_back_without_modifying_database() -> Na
         let filename = create_native_import_archive("output_log_2026-10-08_12-00-00.txt", import_log())?; let database = get_db_path()?; fs::write(&database, b"not a database")?;
         let (app, _) = native_import_app()?; let events = NativeViewerEvents::listen(&app);
         archive::read_archive_log_viewer(filename, "fallback".to_string(), app.handle().clone())?; let chunks = events.finish(&["fallback"])?;
-        assert_eq!(chunks.len(), 1); assert_eq!(chunks[0].categories, [0, 1, 1, 1]); assert!(chunks[0].highlights.iter().all(Option::is_none));
+        assert_eq!(chunks.len(), 1); assert_eq!(chunks[0].categories, [0, 1, 0, 1]); assert!(chunks[0].highlights.iter().all(Option::is_none));
         assert_eq!(fs::read(database)?, b"not a database"); app.cleanup_before_exit(); Ok(())
     })
 }

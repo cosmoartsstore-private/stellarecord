@@ -119,24 +119,23 @@
   width: auto;
   display: block;
   transform: translateX(-12px);
+  filter: brightness(0) invert(1);
 }
 
-.navLogoMidnight {
-  height: 36px;
-  width: auto;
-  display: block;
-  transform: translateX(-12px);
-  filter: brightness(0) invert(1);
+.navActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .navSettingsButton {
   background: var(--bg-card);
   border: 1px solid var(--border);
   color: var(--text-dim);
-  width: auto;
+  width: 42px;
   min-width: 42px;
   height: 42px;
-  padding: 0 0.9rem;
+  padding: 0;
   border-radius: 14px;
   display: inline-flex;
   align-items: center;
@@ -175,6 +174,7 @@
   flex-direction: column;
   gap: 0.8rem;
   z-index: 1400;
+  pointer-events: none;
 }
 
 .toast {
@@ -232,7 +232,7 @@
     justify-self: center;
   }
 
-  .navSettingsButton {
+  .navActions {
     grid-column: 3;
   }
 
@@ -253,8 +253,7 @@
   }
 
   .navLogoLight,
-  .navLogoDark,
-  .navLogoMidnight {
+  .navLogoDark {
     height: 30px;
     transform: translateX(-8px);
   }
@@ -272,16 +271,15 @@
   }
 
   .navLogoLight,
-  .navLogoDark,
-  .navLogoMidnight {
+  .navLogoDark {
     height: 24px;
     transform: translateX(-4px);
   }
 
   .navSettingsButton {
+    width: 34px;
     min-width: 34px;
     height: 34px;
-    padding: 0 0.7rem;
     border-radius: 10px;
     font-size: 0.75rem;
   }

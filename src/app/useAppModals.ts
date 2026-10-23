@@ -1,7 +1,7 @@
 import { getMsg } from '../messages/getMsg';
 import { useState } from 'react';
 import { getDeletableSourceLogs, deleteSourceLogs } from '../features/analyze/services/analyzeService';
-import type { DeletableLogInfo } from '../features/analyze/models/types';
+import type { SourceLogCandidates } from '../features/analyze/models/types';
 import type { ArchiveFileItem } from '../features/archive/models/types';
 import { addErrorToast, type AddToast } from '../shared/lib/errors';
 
@@ -34,7 +34,7 @@ export function useAppModals(options: UseAppModalsOptions) {
   const [isArchiveSelectorVisible, setIsArchiveSelectorVisible] = useState(false);
   const [isLogViewerModalVisible, setIsLogViewerModalVisible] = useState(false);
   const [isCleanupModalOpen, setIsCleanupModalOpen] = useState(false);
-  const [deletableLogs, setDeletableLogs] = useState<DeletableLogInfo[]>([]);
+  const [cleanupCandidates, setCleanupCandidates] = useState<SourceLogCandidates | null>(null);
 
   /** インポート可能なアーカイブを取得してバッチインポート選択モーダルを開く */
   const handleOpenEnhancedSync = async () => {
@@ -68,15 +68,15 @@ export function useAppModals(options: UseAppModalsOptions) {
   const handleOpenLogViewer = async () => {
     try {
       const files = await openLogViewerSelection();
-      if (files.length === 0) {
-        addToast(getMsg('AppModals.archiveMissing'));
-        return;
-      }
       setIsLogViewerModalVisible(true);
-      openSelectedLogViewer(files[0].name).catch((error: unknown) => {
+      const firstFile = files.at(0);
+      if (!firstFile) return;
+      openSelectedLogViewer(firstFile.name).catch((error: unknown) => {
         addErrorToast(addToast, getMsg('Operations.openLatestArchive'), getMsg('AppModals.logReadStartFailed'), error);
       });
     } catch (error) {
+      // 管理ストアを読めなくても、外部ログを選択する操作は利用できるようにする。
+      setIsLogViewerModalVisible(true);
       addErrorToast(addToast, getMsg('Operations.loadLogViewerList'), getMsg('AppModals.logViewerOpenFailed'), error);
     }
   };
@@ -108,11 +108,9 @@ export function useAppModals(options: UseAppModalsOptions) {
   const handleClearExternalFiles = async () => {
     try {
       const files = await clearExternalLogFiles();
-      if (files.length === 0) {
-        addToast(getMsg('AppModals.archiveMissing'));
-        return;
-      }
-      openSelectedLogViewer(files[0].name).catch((error: unknown) => {
+      const firstFile = files.at(0);
+      if (!firstFile) return;
+      openSelectedLogViewer(firstFile.name).catch((error: unknown) => {
         addErrorToast(addToast, getMsg('Operations.openDefaultArchive'), getMsg('AppModals.logReadStartFailed'), error);
       });
     } catch (error) {
@@ -123,12 +121,12 @@ export function useAppModals(options: UseAppModalsOptions) {
   /** 削除対象のソースログを取得してクリーンアップ確認モーダルを開く */
   const handleOpenCleanup = async () => {
     try {
-      const logs = await getDeletableSourceLogs();
-      if (logs.length === 0) {
+      const candidates = await getDeletableSourceLogs();
+      if (candidates.logs.length === 0) {
         addToast(getMsg('AppModals.deletableSourceLogMissing'));
         return;
       }
-      setDeletableLogs(logs);
+      setCleanupCandidates(candidates);
       setIsCleanupModalOpen(true);
     } catch (error) {
       addErrorToast(addToast, getMsg('Operations.loadSourceLogCandidates'), getMsg('AppModals.sourceLogListLoadFailed'), error);
@@ -137,9 +135,10 @@ export function useAppModals(options: UseAppModalsOptions) {
 
   /** 選択されたソースログファイルを削除し、削除件数を通知する */
   const handleConfirmCleanup = async (fileNames: string[]) => {
+    if (!cleanupCandidates) return;
     setIsCleanupModalOpen(false);
     try {
-      const count = await deleteSourceLogs(fileNames);
+      const count = await deleteSourceLogs(cleanupCandidates.source_log_path, fileNames);
       addToast(getMsg('AppModals.sourceLogsDeleted', { count: String(count) }));
     } catch (error) {
       addErrorToast(addToast, getMsg('PolarisCleanup.title'), getMsg('AppModals.sourceLogsDeleteFailed'), error);
@@ -168,7 +167,8 @@ export function useAppModals(options: UseAppModalsOptions) {
     isArchiveSelectorVisible,
     isLogViewerModalVisible,
     isCleanupModalOpen,
-    deletableLogs,
+    deletableLogs: cleanupCandidates?.logs ?? [],
+    cleanupSourceLogPath: cleanupCandidates?.source_log_path ?? '',
     handleOpenEnhancedSync,
     handleConfirmImport,
     handleOpenLogViewer,

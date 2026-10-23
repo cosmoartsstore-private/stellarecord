@@ -17,3 +17,9 @@ export interface DeletableLogInfo {
   file_name: string;
   size_bytes: number;
 }
+
+/** 削除候補を取得した時点の読込元と対象ログ */
+export interface SourceLogCandidates {
+  source_log_path: string;
+  logs: DeletableLogInfo[];
+}

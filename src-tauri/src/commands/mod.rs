@@ -21,7 +21,7 @@ use crate::config;
 use crate::models::AnalyzePayload;
 use crate::utils;
 
-use crate::constants::{APP_NAME as STELLA_RECORD_RUN_VALUE, ARCHIVE_DIRECTORY, BYTES_PER_MEBIBYTE as ONE_MB_BYTES, DATA_DIRECTORY};
+use crate::constants::{APP_NAME as STELLA_RECORD_RUN_VALUE, BYTES_PER_MEBIBYTE as ONE_MB_BYTES};
 
 /// UI の設定ダイアログに公開する管理設定。
 ///
@@ -57,10 +57,9 @@ fn get_archive_store_dir() -> Result<PathBuf, String> {
     setting.get_effective_archive_dir().ok_or_else(|| message!("Commands.getArchiveStoreDir.directoryMissing").to_string())
 }
 
-/// コピー元として使用する Polaris 管理のログアーカイブdirectoryを解決する。
+/// 選択された読込元を解決する。未設定時は Polaris のログ保存先を使用する。
 fn get_source_log_dir() -> Result<PathBuf, String> {
-    let polaris_dir = utils::get_polaris_install_dir().ok_or_else(|| message!("Commands.getSourceLogDir.registryMissing").to_string())?;
-    Ok(polaris_dir.join(DATA_DIRECTORY).join(ARCHIVE_DIRECTORY))
+    config::load_source_log_dir().ok_or_else(|| message!("Commands.getSourceLogDir.registryMissing").to_string())
 }
 
 /// `StellaRecord` の実効メインデータベースパスを解決する。

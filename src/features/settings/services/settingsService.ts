@@ -10,5 +10,8 @@ export const saveManagementSettings = (startupEnabled: boolean, archiveLimitMb: 
 /** 起動時ログ取り込みの許可状態と保存先を読み込む */
 export const loadStartupImportSettings = () => invoke<StartupImportSettings>('get_startup_import_settings');
 
+/** 読込元を選択して保存する。キャンセル時はnullを返す */
+export const changeSourceLogDirectory = () => invoke<string | null>('change_source_log_directory');
+
 /** 起動時ログ取り込みについてユーザーが選択した許可状態を保存する */
 export const saveStartupImportPreference = (enabled: boolean) => invoke('save_startup_import_preference', { enabled });

@@ -45,7 +45,7 @@ describe('useSettingsState', () => {
     const { result } = renderHook(() => useSettingsState());
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     act(() => { result.current.setArchiveLimitDraft(draft); });
-    await act(async () => { await expect(result.current.saveArchiveLimit()).rejects.toThrow('警告ラインは 1MB～10,485,760MB (10TB) の整数で指定してください'); });
+    await act(async () => { await expect(result.current.saveArchiveLimit()).rejects.toThrow('警告ラインには 1～10,485,760 MB の整数を入力してください。'); });
     expect(saveManagementSettingsMock).not.toHaveBeenCalled();
     expect(result.current.archiveLimitDraft).toBe(draft);
   });
@@ -69,9 +69,13 @@ describe('useSettingsState', () => {
     expect(result.current.isStartupEnabledDraft).toBe(false);
     expect(result.current.archiveLimitDraft).toBe('1200');
     await act(async () => { await result.current.toggleStartup(); });
-    expect(saveManagementSettingsMock).toHaveBeenLastCalledWith(true, 1200);
+    expect(saveManagementSettingsMock).toHaveBeenLastCalledWith(true, 800);
     expect(result.current.isStartupEnabledDraft).toBe(true);
+    expect(result.current.archiveLimitDraft).toBe('1200');
     await act(async () => { await result.current.toggleStartup(); });
+    expect(saveManagementSettingsMock).toHaveBeenLastCalledWith(false, 800);
+    expect(result.current.archiveLimitDraft).toBe('1200');
+    await act(async () => { await result.current.saveArchiveLimit(); });
     expect(saveManagementSettingsMock).toHaveBeenLastCalledWith(false, 1200);
   });
 
@@ -123,7 +127,7 @@ describe('useSettingsState', () => {
     expect(result.current.isStartupEnabledDraft).toBe(true);
   });
 
-  it('容量下書きが不正でもstartup切替時は最後に読み込んだ容量を保存する', async () => {
+  it('容量下書きが不正でもstartup切替は保存済み容量を使い、下書きを保持する', async () => {
     const { result } = renderHook(() => useSettingsState());
 
     await act(async () => {
@@ -140,7 +144,7 @@ describe('useSettingsState', () => {
 
     expect(saveManagementSettingsMock).toHaveBeenCalledWith(true, 800);
     expect(result.current.isStartupEnabledDraft).toBe(true);
-    expect(result.current.archiveLimitDraft).toBe('800');
+    expect(result.current.archiveLimitDraft).toBe('');
   });
 
   it('初回読み込み前のstartup切替は永続設定の取得完了を待つ', async () => {

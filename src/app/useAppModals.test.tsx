@@ -18,7 +18,7 @@ function renderModals() {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(invoke).mockResolvedValue(undefined);
-  vi.mocked(getDeletableSourceLogs).mockResolvedValue([{ file_name: 'output_log_a.txt', size_bytes: 100 }]);
+  vi.mocked(getDeletableSourceLogs).mockResolvedValue({ source_log_path: 'D:/Logs', logs: [{ file_name: 'output_log_a.txt', size_bytes: 100 }] });
   vi.mocked(deleteSourceLogs).mockResolvedValue(1);
 });
 afterEach(cleanup);
@@ -36,14 +36,14 @@ describe('画面からモーダル操作への接続', () => {
     expect(options.setAnalyzeRunning).toHaveBeenCalledWith(true);
   });
 
-  it('対象がない取り込み・閲覧・削除はモーダルを開かず、それぞれの文言を表示する', async () => {
+  it('対象がない場合もビューアだけは開き、取り込みと削除は対象なしを通知する', async () => {
     const { result, options } = renderModals();
     options.openEnhancedSync.mockResolvedValueOnce([]);
     options.openLogViewerSelection.mockResolvedValueOnce([]);
-    vi.mocked(getDeletableSourceLogs).mockResolvedValueOnce([]);
+    vi.mocked(getDeletableSourceLogs).mockResolvedValueOnce({ source_log_path: 'D:/Logs', logs: [] });
     await act(async () => { await result.current.handleOpenEnhancedSync(); await result.current.handleOpenLogViewer(); await result.current.handleOpenCleanup(); });
-    expect([result.current.isArchiveSelectorVisible, result.current.isLogViewerModalVisible, result.current.isCleanupModalOpen]).toEqual([false, false, false]);
-    expect(options.addToast.mock.calls).toEqual([['取り込み可能なアーカイブファイルが見つかりませんでした'], ['アーカイブファイルが見つかりませんでした'], ['削除可能な元ログが見つかりませんでした']]);
+    expect([result.current.isArchiveSelectorVisible, result.current.isLogViewerModalVisible, result.current.isCleanupModalOpen]).toEqual([false, true, false]);
+    expect(options.addToast.mock.calls).toEqual([['取り込めるアーカイブがありません'], ['削除できる元ログがありません']]);
     expect(options.openSelectedLogViewer).not.toHaveBeenCalled();
   });
 
@@ -73,8 +73,10 @@ describe('画面からモーダル操作への接続', () => {
     await act(async () => { await result.current.handleClearExternalFiles(); });
     expect(options.openSelectedLogViewer).toHaveBeenLastCalledWith('latest.tar.zst');
     options.clearExternalLogFiles.mockResolvedValueOnce([]);
+    options.openSelectedLogViewer.mockClear();
     await act(async () => { await result.current.handleClearExternalFiles(); });
-    expect(options.addToast).toHaveBeenLastCalledWith('アーカイブファイルが見つかりませんでした');
+    expect(options.openSelectedLogViewer).not.toHaveBeenCalled();
+    expect(options.addToast).not.toHaveBeenCalled();
   });
 
   it('削除確認には候補を表示し、確認したファイルと削除件数だけを通知する', async () => {
@@ -84,7 +86,7 @@ describe('画面からモーダル操作への接続', () => {
     expect(result.current.deletableLogs).toEqual([{ file_name: 'output_log_a.txt', size_bytes: 100 }]);
     await act(async () => { await result.current.handleConfirmCleanup(['output_log_a.txt']); });
     expect(result.current.isCleanupModalOpen).toBe(false);
-    expect(deleteSourceLogs).toHaveBeenCalledWith(['output_log_a.txt']);
+    expect(deleteSourceLogs).toHaveBeenCalledWith('D:/Logs', ['output_log_a.txt']);
     expect(options.addToast).toHaveBeenCalledWith('元ログ 1 件を削除しました');
     await act(async () => { await result.current.handleOpenCleanup(); });
     act(() => { result.current.closeCleanupModal(); });
@@ -113,11 +115,15 @@ describe('画面からモーダル操作への接続', () => {
       await result.current.handleSelectExternalFiles();
       await result.current.handleClearExternalFiles();
       await result.current.handleOpenCleanup();
+    });
+    await act(async () => { await result.current.handleOpenCleanup(); });
+    await act(async () => {
       await result.current.handleConfirmCleanup(['output_log_a.txt']);
     });
-    expect(options.addToast.mock.calls).toEqual([['アーカイブ一覧を取得できませんでした'], ['取り込みを開始できませんでした'], ['ログビューアを開けませんでした'], ['外部ログファイルを開けませんでした'], ['既定フォルダへ切り替えられませんでした'], ['元ログ一覧を取得できませんでした'], ['元ログを削除できませんでした']]);
+    expect(options.addToast.mock.calls).toEqual([['アーカイブ一覧を取得できませんでした'], ['取り込みを開始できませんでした'], ['ログビューアを開けませんでした'], ['外部ログファイルを開けませんでした'], ['既定フォルダへ切り替えられませんでした'], ['元ログの一覧を取得できませんでした'], ['元ログを削除できませんでした']]);
     expect(options.setAnalyzeRunning.mock.calls).toEqual([[true], [false]]);
     expect(result.current.isCleanupModalOpen).toBe(false);
+    expect(result.current.isLogViewerModalVisible).toBe(true);
   });
 
   it('非同期の閲覧開始失敗を入口ごとの通知へ変換する', async () => {

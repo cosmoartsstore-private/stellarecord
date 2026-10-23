@@ -15,7 +15,7 @@ impl tauri::Assets<tauri::Wry> for NativeProbeAssets {
 
 #[derive(serde::Serialize)]
 struct NativeProbeInputs {
-    database_path: String, log_archive_path: String, owned_exe: String, archive_name: String, archive_bytes: u64,
+    database_path: String, source_log_path: String, log_archive_path: String, owned_exe: String, archive_name: String, archive_bytes: u64,
     source_name: String, raw_lines: Vec<String>, external_path: String, external_lines: Vec<String>, invalid_external_path: String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -32,7 +32,7 @@ struct NativeViewerStart { file_path: String, session_id: String, source_name: S
 
 #[derive(serde::Serialize)]
 #[allow(clippy::struct_excessive_bools, reason = "既存の独立した故障fixture条件を本体UIへの診断入力として保持するため")]
-struct NativeUiProbeInputs { database_path: String, log_archive_path: String, archive_name: String, source_name: String, raw_lines: Vec<String>, native_picker: bool, external_read_failure: bool, external_stream_lock: bool, external_stream_partial: bool, external_paths: Vec<String>, external_lines: Vec<String> }
+struct NativeUiProbeInputs { database_path: String, source_log_path: String, log_archive_path: String, archive_name: String, source_name: String, raw_lines: Vec<String>, native_picker: bool, external_read_failure: bool, external_stream_lock: bool, external_stream_partial: bool, external_paths: Vec<String>, external_lines: Vec<String> }
 
 /// 本体と検証用builderのcommand登録を照合し、検証側だけへ追加・改名した登録を通さない。
 fn native_ipc_registration_matches_production() -> Result<(), Box<dyn std::error::Error>> {
@@ -42,7 +42,7 @@ fn native_ipc_registration_matches_production() -> Result<(), Box<dyn std::error
         Ok(list.split(',').map(str::trim).filter(|item| !item.is_empty()).map(|item| item.trim_start_matches("crate::").to_string()).collect())
     }
     let production = handlers(include_str!("../lib.rs"))?; let test = handlers(include_str!("native_ipc_tests.rs"))?;
-    assert_eq!(production.len(), 24); assert_eq!(production, test); Ok(())
+    assert_eq!(production.len(), 26); assert_eq!(production, test); Ok(())
 }
 
 fn native_browser_probe<T: serde::Serialize>(directory: &std::path::Path, inputs: T, mode: &str) -> Result<NativeProbeReport, Box<dyn std::error::Error>> {
@@ -89,6 +89,7 @@ fn native_browser_probe<T: serde::Serialize>(directory: &std::path::Path, inputs
             crate::commands::import::launch_startup_archive_import,
             crate::commands::import::cancel_analyze,
             crate::commands::registry::launch_external_app,
+            crate::commands::registry::show_app_in_folder,
             crate::commands::registry::pick_exe_file,
             crate::commands::registry::extract_exe_display_name,
             crate::commands::registry::register_app,
@@ -96,6 +97,7 @@ fn native_browser_probe<T: serde::Serialize>(directory: &std::path::Path, inputs
             crate::commands::settings::get_management_settings,
             crate::commands::settings::save_management_settings,
             crate::commands::settings::get_startup_import_settings,
+            crate::commands::settings::change_source_log_directory,
             crate::commands::settings::save_startup_import_preference,
             crate::commands::settings::read_registry_catalog,
             crate::commands::log_client_error,
@@ -154,7 +156,7 @@ fn command_browser_ipc_connects_actual_frontend_services() -> NativeCommandTestR
         let external_lines = (0..501).map(|index| format!("2026.10.08 13:00:00 Log - 専用の外部ログ{index}")).collect::<Vec<_>>();
         fs::write(&external_path, external_lines.join("\n"))?; fs::write(&invalid_external_path, b"invalid fixture")?;
         let report = native_browser_probe(directory.path(), NativeProbeInputs {
-            database_path: database_path.display().to_string(), log_archive_path: log_archive_path.display().to_string(), owned_exe: owned_exe.display().to_string(),
+            database_path: database_path.display().to_string(), source_log_path: get_source_log_dir()?.display().to_string(), log_archive_path: log_archive_path.display().to_string(), owned_exe: owned_exe.display().to_string(),
             archive_name, archive_bytes, source_name: name.to_string(), raw_lines: import_log().lines().map(str::to_string).collect(),
             external_path: external_path.display().to_string(), external_lines: external_lines.clone(), invalid_external_path: invalid_external_path.display().to_string(),
         }, "service")?;
@@ -183,7 +185,7 @@ fn verify_native_ui_probe(directory: &std::path::Path, mode: &str, native_picker
     registry::register_app(owned_exe.display().to_string(), "検証用アプリ".to_string(), "保存した説明".to_string())?;
     let original_archive = fs::read(get_archive_store_dir()?.join(&archive_name))?;
     let report = native_browser_probe(directory, NativeUiProbeInputs {
-        database_path: get_db_path()?.display().to_string(), log_archive_path: get_archive_store_dir()?.display().to_string(),
+        database_path: get_db_path()?.display().to_string(), source_log_path: get_source_log_dir()?.display().to_string(), log_archive_path: get_archive_store_dir()?.display().to_string(),
         archive_name: archive_name.clone(), source_name: source_name.to_string(), raw_lines: import_log().lines().map(str::to_string).collect(),
         native_picker, external_read_failure, external_stream_lock, external_stream_partial, external_paths: if native_picker { vec![directory.join("output_log_選択 ★ 直接.txt").display().to_string(), directory.join("output_log_選択 ★ 圧縮.tar.zst").display().to_string()] } else { vec![] },
         external_lines: if native_picker { (0..501).map(|index| format!("2026.10.08 13:00:00 Log - 外部ログ{index} 日本語と\"引用符\"")).collect() } else { vec![] },

@@ -30,7 +30,7 @@ mod tests {
         }
         let cancel = AtomicBool::new(false);
         let progress = |status: String, _: String| {
-            if status == "処理中: output_log_cancel.txt" {
+            if status == "取り込み中: output_log_cancel.txt" {
                 cancel.store(true, Ordering::SeqCst);
             }
         };
@@ -153,7 +153,7 @@ mod tests {
         let participant: (String, String, String, i64, i64, String, String) = conn.query_row("SELECT s.log_name, u.vrchat_id, u.account_name, w.is_self, w.friend_status, w.join_time, w.leave_time FROM with_users w JOIN find_users u ON u.vrchat_id = w.vrchat_id JOIN visits v ON v.id = w.visit_id JOIN sessions s ON s.id = v.session_id", [],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?))).unwrap();
         assert_eq!(participant, ("test_log.txt".into(), "usr_1111-2222-3333-4444-555555555555".into(), "FriendUser".into(), 0, 2, "2025-04-30 20:03:00".into(), "2025-04-30 20:10:00".into()));
-        assert_eq!(progress_calls, [("パース開始".into(), String::new()), ("コミット中".into(), String::new())]);
+        assert_eq!(progress_calls, [("ログを解析しています…".into(), String::new()), ("解析結果を保存しています…".into(), String::new())]);
     }
 
     #[test]
@@ -437,7 +437,7 @@ mod tests {
         assert_eq!(unchanged_session_id, first_session_id);
         assert!(unchanged_progress
             .iter()
-            .any(|status| status.contains("スキップ（内容変更なし）")));
+            .any(|status| status.contains("取り込み済み（変更なし）")));
 
         let extended_log = format!(
             "{first_log}\
@@ -921,7 +921,7 @@ mod tests {
             |row| Ok([row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?]),
         ).unwrap();
         assert_eq!(target, [None, None, None, None, None]);
-        assert_eq!(progress, [("パース開始".into(), String::new()), ("コミット中".into(), String::new())]);
+        assert_eq!(progress, [("ログを解析しています…".into(), String::new()), ("解析結果を保存しています…".into(), String::new())]);
     }
 
     #[test]
@@ -950,6 +950,163 @@ mod tests {
         assert_multiline_notification_context(
             &conn, "unclosed_notification.txt", "2025-04-30 20:04:00", "2025-04-30 20:04:00", 0,
         );
-        assert_eq!(progress, [("パース開始".into(), String::new()), ("コミット中".into(), String::new())]);
+        assert_eq!(progress, [("ログを解析しています…".into(), String::new()), ("解析結果を保存しています…".into(), String::new())]);
+    }
+
+    #[test]
+    fn account_switches_keep_self_and_pending_events_scoped_to_each_visit() {
+        let conn = setup_test_db();
+        let log = r#"2026.10.22 12:00:00 Log - User Authenticated: Alpha (usr_aaaa)
+2026.10.22 12:01:00 Log - [Behaviour] Entering Room: First
+2026.10.22 12:01:01 Log - [Behaviour] Joining wrld_abc:1~region(jp)
+2026.10.22 12:01:02 Log - [Behaviour] OnPlayerJoined Alpha (usr_aaaa)
+2026.10.22 12:01:03 Log - [Behaviour] OnPlayerJoined Beta (usr_bbbb)
+2026.10.22 12:01:04 Log - [Behaviour] Initialized PlayerAPI "Alpha" is local
+2026.10.22 12:02:00 Log - User Authenticated: Beta (usr_bbbb)
+2026.10.22 12:02:01 Log - [VRC Camera] Took screenshot to: C:/Photo/switch_1920x1080.png
+2026.10.22 12:03:00 Log - [Behaviour] Entering Room: Second
+2026.10.22 12:03:01 Log - [Behaviour] Joining wrld_abc:2~region(eu)
+2026.10.22 12:03:02 Log - [Behaviour] OnPlayerJoined Alpha (usr_aaaa)
+2026.10.22 12:03:03 Log - [Behaviour] OnPlayerJoined Beta (usr_bbbb)
+2026.10.22 12:03:04 Log - [Behaviour] Initialized PlayerAPI "Beta" is local
+2026.10.22 12:04:00 Log - [Behaviour] OnLeftRoom
+2026.10.22 12:05:00 Log - User Authenticated: Alpha (usr_aaaa)
+2026.10.22 12:06:00 Log - [Behaviour] Entering Room: Third
+2026.10.22 12:06:01 Log - [Behaviour] Joining wrld_abc:3~region(us)
+2026.10.22 12:06:02 Log - [Behaviour] OnPlayerJoined Beta (usr_bbbb)
+2026.10.22 12:06:03 Log - [Behaviour] OnPlayerJoined Alpha (usr_aaaa)
+2026.10.22 12:06:04 Log - [Behaviour] Initialized PlayerAPI "Alpha" is local
+"#;
+        parse_and_import_reader(&conn, make_reader(log), "switched.txt", &AtomicBool::new(false), &mut |_, _| {}).unwrap();
+        let actual: Vec<(String, String, i64)> = conn.prepare(
+            "SELECT v.world_name, w.vrchat_id, w.is_self FROM with_users w
+             JOIN visits v ON v.id=w.visit_id ORDER BY v.id,w.vrchat_id",
+        ).unwrap().query_map([], |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?))).unwrap().collect::<Result<_>>().unwrap();
+        assert_eq!(actual, [
+            ("First".into(),"usr_aaaa".into(),1),("First".into(),"usr_bbbb".into(),0),
+            ("Second".into(),"usr_aaaa".into(),0),("Second".into(),"usr_bbbb".into(),1),
+            ("Third".into(),"usr_aaaa".into(),1),("Third".into(),"usr_bbbb".into(),0),
+        ]);
+        let owner: (Option<String>,Option<String>) = conn.query_row("SELECT account_id,account_name FROM sessions",[],|row|Ok((row.get(0)?,row.get(1)?))).unwrap();
+        assert_eq!(owner,(None,None));
+        assert_eq!(conn.query_row("SELECT leave_time FROM visits WHERE world_name='First'",[],|row|row.get::<_,String>(0)).unwrap(),"2026-10-22 12:02:00");
+        assert!(conn.query_row("SELECT visit_id FROM screenshots",[],|row|row.get::<_,Option<i64>>(0)).unwrap().is_none());
+        let regions: Vec<String> = conn.prepare("SELECT region FROM visits ORDER BY id").unwrap().query_map([],|row|row.get(0)).unwrap().collect::<Result<_>>().unwrap();
+        assert_eq!(regions,["jp","eu","us"]);
+    }
+
+    #[test]
+    fn local_initialization_before_join_and_ambiguous_names_never_choose_first_user() {
+        for authenticated in [false,true] {
+            let conn = setup_test_db();
+            let auth = if authenticated { "2026.10.22 12:00:00 Log - User Authenticated: Same (usr_bbbb)\n" } else { "" };
+            let log = format!(r#"{auth}2026.10.22 12:01:00 Log - [Behaviour] Entering Room: Same names
+2026.10.22 12:01:01 Log - [Behaviour] Joining wrld_abc:1~region(jp)
+2026.10.22 12:01:02 Log - [Behaviour] Initialized PlayerAPI "Same" is local
+2026.10.22 12:01:03 Log - [Behaviour] OnPlayerJoined Same (usr_aaaa)
+2026.10.22 12:01:04 Log - [Behaviour] OnPlayerJoined Same (usr_bbbb)
+"#);
+            parse_and_import_reader(&conn,make_reader(&log),"same.txt",&AtomicBool::new(false),&mut |_,_|{}).unwrap();
+            let ids: Vec<String> = conn.prepare("SELECT vrchat_id FROM with_users WHERE is_self=1").unwrap().query_map([],|row|row.get(0)).unwrap().collect::<Result<_>>().unwrap();
+            assert_eq!(ids, if authenticated { vec!["usr_bbbb"] } else { vec![] });
+        }
+    }
+
+    #[test]
+    fn explicit_local_player_replaces_stale_authentication_without_marking_old_account() {
+        let conn = setup_test_db();
+        let log = r#"2026.10.22 12:00:00 Log - User Authenticated: Previous (usr_aaaa)
+2026.10.22 12:01:00 Log - [Behaviour] Entering Room: Observed local
+2026.10.22 12:01:01 Log - [Behaviour] Joining wrld_abc:1~region(jp)
+2026.10.22 12:01:02 Log - [Behaviour] OnPlayerJoined Previous (usr_aaaa)
+2026.10.22 12:01:03 Log - [Behaviour] OnPlayerJoined Current (usr_bbbb)
+2026.10.22 12:01:04 Log - [Behaviour] Initialized PlayerAPI "Current" is local
+"#;
+        parse_and_import_reader(&conn,make_reader(log),"local.txt",&AtomicBool::new(false),&mut |_,_|{}).unwrap();
+        let ids: Vec<String> = conn.prepare("SELECT vrchat_id FROM with_users WHERE is_self=1").unwrap().query_map([],|row|row.get(0)).unwrap().collect::<Result<_>>().unwrap();
+        assert_eq!(ids,["usr_bbbb"]);
+        assert!(conn.query_row("SELECT account_id FROM sessions",[],|row|row.get::<_,Option<String>>(0)).unwrap().is_none());
+    }
+
+    #[test]
+    fn changed_parser_reimports_saved_log_and_preserves_launcher_then_skips_same_content() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("db.sqlite");
+        let file = dir.path().join("output_log_region.txt");
+        fs::write(&file,"2026.10.22 12:00:00 Log - [Behaviour] Entering Room: Region\n2026.10.22 12:00:01 Log - [Behaviour] Joining wrld_abc:1~region(jp)\n").unwrap();
+        run_enhanced_import_batch(&db,std::slice::from_ref(&file),&AtomicBool::new(false),|_,_|{}).unwrap();
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute("INSERT INTO apps(name,path) VALUES('Keep','C:/keep.exe')",[]).unwrap();
+            conn.execute("UPDATE visits SET region=NULL",[]).unwrap();
+            conn.execute("UPDATE imported_logs SET parser_version=?1",[CURRENT_PARSER_VERSION-1]).unwrap();
+        }
+        let content = fs::read(&file).unwrap();
+        let mut builder = tar::Builder::new(Vec::new());
+        let mut header = tar::Header::new_gnu();
+        header.set_size(content.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder.append_data(&mut header, "output_log_region.txt", content.as_slice()).unwrap();
+        fs::write(file.with_extension("txt.tar.zst"), zstd::stream::encode_all(builder.into_inner().unwrap().as_slice(), 3).unwrap()).unwrap();
+        let first=run_diff_import(&db,dir.path(),&AtomicBool::new(false),|_,_|{}).unwrap();
+        assert_eq!(first.total_count,1);
+        assert!(first.failed_filenames.is_empty());
+        let conn=Connection::open(&db).unwrap();
+        assert_eq!(conn.query_row("SELECT region FROM visits",[],|row|row.get::<_,String>(0)).unwrap(),"jp");
+        assert_eq!(conn.query_row("SELECT COUNT(*) FROM apps",[],|row|row.get::<_,i64>(0)).unwrap(),1);
+        assert_eq!(conn.query_row("SELECT parser_version FROM imported_logs",[],|row|row.get::<_,i64>(0)).unwrap(),CURRENT_PARSER_VERSION);
+        let visit_id: i64 = conn.query_row("SELECT id FROM visits",[],|row|row.get(0)).unwrap();
+        drop(conn);
+        let second=run_diff_import(&db,dir.path(),&AtomicBool::new(false),|_,_|{}).unwrap();
+        assert_eq!(second.total_count,1);
+        assert!(second.failed_filenames.is_empty());
+        let conn=Connection::open(&db).unwrap();
+        assert_eq!(conn.query_row("SELECT id FROM visits",[],|row|row.get::<_,i64>(0)).unwrap(),visit_id);
+    }
+
+    #[test]
+    fn invalid_tar_payload_preserves_saved_history_and_same_file_can_be_repaired() {
+        let dir = tempfile::tempdir().unwrap();
+        let database = dir.path().join("current.sqlite");
+        let source = dir.path().join("output_log_integrity.txt");
+        let archived = source.with_extension("txt.tar.zst");
+        let original = "2026.10.22 12:00:00 Log - [Behaviour] Entering Room: Kept\n2026.10.22 12:00:01 Log - [Behaviour] Joining wrld_abc:1~region(jp)\n";
+        fs::write(&source, original).unwrap();
+        run_enhanced_import_batch(&database,std::slice::from_ref(&source),&AtomicBool::new(false),|_,_|{}).unwrap();
+        let conn = Connection::open(&database).unwrap();
+        conn.execute("INSERT INTO apps(name,path) VALUES('Kept app','C:/kept.exe')",[]).unwrap();
+        let saved: (i64,Vec<u8>) = conn.query_row("SELECT s.id,i.content_sha256 FROM sessions s JOIN imported_logs i ON i.log_name=s.log_name",[],|row|Ok((row.get(0)?,row.get(1)?))).unwrap();
+        drop(conn);
+        for directory_entry in [false,true] {
+            let mut header = tar::Header::new_gnu();
+            header.set_path("output_log_integrity.txt").unwrap();
+            header.set_mode(0o644);
+            header.set_size(if directory_entry {0} else {original.len() as u64});
+            if directory_entry { header.set_entry_type(tar::EntryType::Directory); }
+            header.set_cksum();
+            let mut body = header.as_bytes().to_vec();
+            if !directory_entry { body.extend_from_slice(original.lines().next().unwrap().as_bytes()); }
+            fs::write(&archived,zstd::stream::encode_all(body.as_slice(),3).unwrap()).unwrap();
+            assert!(run_enhanced_import_batch(&database,std::slice::from_ref(&archived),&AtomicBool::new(false),|_,_|{}).is_err());
+            let summary=run_diff_import(&database,dir.path(),&AtomicBool::new(false),|_,_|{}).unwrap();
+            assert_eq!(summary.failed_filenames,["output_log_integrity.txt"]);
+            let conn = Connection::open(&database).unwrap();
+            assert_eq!(conn.query_row("SELECT s.id,i.content_sha256 FROM sessions s JOIN imported_logs i ON i.log_name=s.log_name",[],|row|Ok((row.get::<_,i64>(0)?,row.get::<_,Vec<u8>>(1)?))).unwrap(),saved);
+            assert_eq!(conn.query_row("SELECT world_name FROM visits",[],|row|row.get::<_,String>(0)).unwrap(),"Kept");
+            assert_eq!(conn.query_row("SELECT COUNT(*) FROM apps",[],|row|row.get::<_,i64>(0)).unwrap(),1);
+        }
+        let repaired = format!("{original}2026.10.22 12:02:00 Log - [Behaviour] Entering Room: Repaired\n2026.10.22 12:02:01 Log - [Behaviour] Joining wrld_abc:2~region(us)\n");
+        let mut builder=tar::Builder::new(Vec::new());
+        let mut header=tar::Header::new_gnu();
+        header.set_size(repaired.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder.append_data(&mut header,"output_log_integrity.txt",repaired.as_bytes()).unwrap();
+        fs::write(&archived,zstd::stream::encode_all(builder.into_inner().unwrap().as_slice(),3).unwrap()).unwrap();
+        run_enhanced_import_batch(&database,&[archived],&AtomicBool::new(false),|_,_|{}).unwrap();
+        let conn = Connection::open(&database).unwrap();
+        assert_eq!(conn.query_row("SELECT COUNT(*) FROM visits",[],|row|row.get::<_,i64>(0)).unwrap(),2);
+        assert_eq!(conn.query_row("SELECT COUNT(*) FROM apps",[],|row|row.get::<_,i64>(0)).unwrap(),1);
     }
 }

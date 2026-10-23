@@ -60,6 +60,16 @@
   margin-bottom: 1.1rem;
 }
 
+.sourcePath {
+  margin: 0 0 1rem;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 .listHeader {
   display: flex;
   align-items: center;

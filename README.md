@@ -1,25 +1,25 @@
 # StellaRecord
 
-StellaRecord は、Polaris が保存した VRChat ログを `.tar.zst` と SQLite に保存し、ログ本文と解析済みデータを閲覧する Windows 向けデスクトップアプリケーションです。
+StellaRecord は、指定したフォルダの VRChat ログを `.tar.zst` と SQLite に保存し、ログ本文と解析済みデータを閲覧する Windows 向けデスクトップアプリケーションです。読込元の既定は Polaris の保存先です。
 
 通常の処理で外部 API、認証、テレメトリ送信は行いません。利用者が登録した実行ファイル、フォルダ、クレジットのリンクを明示操作で開きます。
 
 ## Features
 
-- **Archive import** — Polaris の `Data/archive` にあるログを、1ログ1ファイルの `.tar.zst` へ zstd レベル3で圧縮します。起動時取込は初回確認で許可した場合だけ実行し、設定から変更できます。
+- **Archive import** — 設定した読込元のログを、1ログ1ファイルの `.tar.zst` へ zstd レベル3で圧縮します。読込元と起動時取込の許可は設定から変更できます。
 - **Log analysis** — 認証、ワールド訪問、同席ユーザー、通知、撮影、OSC、VRChat+ を10テーブルと3ビューへ保存します。本文の SHA-256・長さと解析版で取込済み判定を行います。
 - **Friend status** — 旧形式のアバター取得ログを同一訪問のユーザーへ一意に対応できた場合だけ、フレンド状態を保存します。判定不能・矛盾・対応する情報がない場合は不明として扱います。
-- **Log viewer** — 管理アーカイブと利用者が選んだログをストリームで読み、仮想スクロール、カテゴリ、ログレベル、DB由来のキーワード強調で閲覧します。
-- **Storage and cleanup** — 容量警告ラインを設定し、圧縮保存した本文と一致する Polaris の元ログだけを、選択・確認後に削除できます。
-- **Launcher** — 登録した EXE の表示名・アイコンを取得し、起動、フォルダ表示、登録解除を行います。
+- **Log viewer** — 管理アーカイブと利用者が選んだログを、仮想スクロール、複数分類フィルター、ファイル内検索で閲覧します。動画URL・タイトルと写真撮影も分類し、動画情報はDBへ追加保存しません。アーカイブ0件や読み込み開始失敗時も別のログを選択できます。
+- **Storage and cleanup** — 容量警告ラインを設定し、圧縮保存した本文と一致する読込元のログだけを、選択・確認後に削除できます。
+- **Launcher** — 登録した EXE の起動、Explorerでのファイル選択、確認後の登録解除を行います。
 - **Database preview** — テーブル・ビューを読取り専用で500行ずつ表示し、列で並べ替えます。
-- **Settings** — Light / Dark / Midnight、Windowsログイン時の自動起動、起動時取込の許可、容量警告ラインを保存します。
+- **Settings** — ライト / ダーク、Windowsログイン時の自動起動、起動時取込の許可、読込元、容量警告ラインを保存します。ダークは黒基調で、テーマは設定ボタン横からも切り替えられます。
 - **Cancellation** — 取込へ停止を要求できます。要求受理と停止完了は別で、解析の取消しは今回の DB 更新をロールバックします。
 
 ## Architecture
 
 ```text
-Polaris/Data/archive/output_log_*.txt
+指定した読込元/output_log_*.txt（既定: Polaris/Data/archive）
 └─ StellaRecord.exe                  Tauri v2
    ├─ WebView2                       React / TypeScript
    │  └─ features                    views / viewmodels / services / models
@@ -53,12 +53,12 @@ Polaris/Data/archive/output_log_*.txt
 
 - Windows 10 / 11、x64
 - Microsoft Edge WebView2 Runtime。未導入の場合はインストーラーが導入処理を行います。
-- Polaris のインストール情報とログコピー。起動時の同期と元ログの削除に使用します。
+- VRChatの生ログがある読込元フォルダ。Polarisが導入済みならその保存先を既定とし、設定から別フォルダを選択できます。
 - アーカイブと DB を保存できる空き容量と書込み権限
 
 ### Development
 
-- Node.js と npm。Viteの要求は `^20.19.0 || >=22.12.0` ですが、jsdomとRust native probeを含む検証には別の版・実行条件があります。[開発前提](docs/tech-stack.md#toolchain-and-runtime-requirements)を参照してください。
+- Node.js 24 と npm。Rust native probeはTypeScriptを直接実行します。詳細は[開発前提](docs/tech-stack.md#toolchain-and-runtime-requirements)を参照してください。
 - `rust-toolchain.toml` に記載する Rust `1.93.0`、rustfmt、clippy
 - `x86_64-pc-windows-msvc` target をビルドできる MSVC 開発環境
 
@@ -95,21 +95,21 @@ npm run verify
 
 既定のインストーラー出力先は `target/release/bundle/nsis/` です。`npm run verify` は Prettier、Stylelint、ESLint、Frontend coverage、Frontend build、clippy、Rust test を順に実行します。rustfmt の確認は `npm run fmt:check` で別途実行します。
 
-CIはRustをWindows、FrontendをUbuntuで検証する定義です。Rust formatは参考check、配布buildは対象外で、Rust native probeに必要なnpm依存準備は現jobに含まれません。実gateと前提の差は [Verification Commands and CI](docs/tech-stack.md#verification-commands-and-ci)を参照してください。成功件数やcoverage値、静的文書の照合日を全機能の確認完了とは扱いません。
+CIはRustをWindows、FrontendをUbuntuで検証し、両jobでNode.js 24とnpm依存を準備します。Rust formatは参考check、配布buildは対象外です。実gateと前提は [Verification Commands and CI](docs/tech-stack.md#verification-commands-and-ci)を参照してください。成功件数やcoverage値、静的文書の照合日を全機能の確認完了とは扱いません。
 
 ## Data and Privacy
 
 | Data             | Location                                                                | Purpose                                      |
 | ---------------- | ----------------------------------------------------------------------- | -------------------------------------------- |
-| Source logs      | Polaris の `<install>\Data\archive`                                     | 圧縮・解析元。自動同期では削除しない         |
+| Source logs      | 設定した読込元（既定はPolarisの `<install>\Data\archive`）              | 圧縮・解析元。自動同期では削除しない         |
 | Archives         | StellaRecord の `<install>\Data\archive\*.tar.zst`                      | ログ本文の保管                               |
 | SQLite           | `<install>\Data\db\stellarecord.db`                                     | 解析情報と `apps`                            |
 | Application logs | `<install>\Data\logs\info-YYYY-MM.log`                                  | 障害調査用の WARN / ERROR                    |
 | Registry         | `HKCU\Software\CosmoArtsStore\StellaRecord`、`Polaris`、Windows Run key | 保存先、自動起動、起動時取込、容量警告ライン |
-| Theme            | localStorage `stella-record-theme`                                      | Light / Dark / Midnight                      |
+| Theme            | localStorage `stella-record-theme`                                      | ライト / ダーク                              |
 | WebView data     | `<install>\Data\EBWebView`                                              | WebView2のローカルデータ                     |
 
-archive と DB の明示保存先は registry の `ArchivePath` / `DbPath` を優先し、未指定時は `InstallLocation` 配下を使います。現在の exe の位置から保存先を推測しません。元ログはPolarisが保存した入力、archiveは本文の保存物、解析行は再生成できるデータ、`apps`は利用者が付与した情報です。元ログ削除は明示確認したPolaris側fileだけを変更し、登録解除はEXE本体を削除しません。[Storage and Ownership](docs/database.md#storage-and-ownership)に詳細があります。
+archive と DB の明示保存先は registry の `ArchivePath` / `DbPath` を優先し、未指定時は `InstallLocation` 配下を使います。読込元は `SourceLogPath` を優先します。現在の exe の位置から保存先を推測しません。archiveは本文の保存物、解析行は再生成できるデータ、`apps`は利用者が付与した情報です。元ログ削除は明示確認した読込元のfileだけを変更し、登録解除はEXE本体を削除しません。[Storage and Ownership](docs/database.md#storage-and-ownership)に詳細があります。
 
 専用の全データバックアップ・復元 UI はありません。手動移行ではアプリを終了し、実効保存先の archive と DB directory をコピーします。registry と localStorage はこのコピーに含まれません。通常アンインストール後に残るアーカイブから解析 DB を再構築できますが、ランチャー登録はログから再生成できません。
 
@@ -136,13 +136,13 @@ archive と DB の明示保存先は registry の `ArchivePath` / `DbPath` を�
 
 ## Documentation
 
-| Document | Audience and scope |
-| --- | --- |
-| [Specification](docs/spec.md) | 利用者・仕様担当。操作条件、判断、成功/取消し/失敗後の結果 |
-| [Architecture](docs/architecture.md) | 保守担当。entry、module責務、状態所有、IPC/event、workerと終了 |
-| [Database Schema](docs/database.md) | データ担当・保全する人。全schema、archive/設定の保存先・transaction・保持/削除 |
-| [Tech Stack](docs/tech-stack.md) | 開発・配布担当。依存、採用理由、command、CI、導入/更新/削除 |
-| [Operation Preview](docs/manual.html) | 利用検討者。固定データによる限定体験。実ファイル・registry・DBへ接続しない |
+| Document                              | Audience and scope                                                             |
+| ------------------------------------- | ------------------------------------------------------------------------------ |
+| [Specification](docs/spec.md)         | 利用者・仕様担当。操作条件、判断、成功/取消し/失敗後の結果                     |
+| [Architecture](docs/architecture.md)  | 保守担当。entry、module責務、状態所有、IPC/event、workerと終了                 |
+| [Database Schema](docs/database.md)   | データ担当・保全する人。全schema、archive/設定の保存先・transaction・保持/削除 |
+| [Tech Stack](docs/tech-stack.md)      | 開発・配布担当。依存、採用理由、command、CI、導入/更新/削除                    |
+| [Operation Preview](docs/manual.html) | 利用検討者。固定データによる限定体験。実ファイル・registry・DBへ接続しない     |
 
 利用開始はREADME→必要なspec→操作補助資料、保守参加はREADME→architecture→対象spec→database→tech-stackの順に読みます。backup/削除は[保存寿命](docs/database.md#deletion-and-retention)へ直接進めます。
 

@@ -6,10 +6,11 @@ export interface ManagementSettings {
   archive_limit_mb: number;
 }
 
-/** 起動時ログ取り込みの許可状態と、利用者へ表示する保存先 */
+/** 起動時ログ取り込みの許可状態と、利用者へ表示する読込元・保存先 */
 export interface StartupImportSettings {
   enabled: boolean;
   preference_set: boolean;
+  source_log_path: string;
   log_archive_path: string;
   database_path: string;
 }

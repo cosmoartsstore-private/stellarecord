@@ -58,12 +58,12 @@ export function useSettingsState() {
 
   /** 自動起動とアーカイブ上限を一括保存し、成功時にローカル状態を更新する */
   const saveManagementSettings = useCallback(
-    async (startupEnabled: boolean, archiveLimitMb: number, draftGeneration: number) => {
+    async (startupEnabled: boolean, archiveLimitMb: number, draftGeneration: number | null) => {
       await saveManagementSettingsCommand(startupEnabled, archiveLimitMb);
       const settings: ManagementSettings = { startup_enabled: startupEnabled, startup_preference_set: true, archive_limit_mb: archiveLimitMb };
       persistedSettingsRef.current = settings;
       isDraftSynchronizedRef.current = false;
-      archiveDraftSyncGenerationRef.current = draftGeneration;
+      if (draftGeneration !== null) archiveDraftSyncGenerationRef.current = draftGeneration;
       setManagementSettings(settings);
     },
     [],
@@ -95,20 +95,16 @@ export function useSettingsState() {
   /** 自動起動のON/OFFを切り替えて即座に保存する（失敗時はロールバック） */
   const toggleStartup = useCallback(async () => {
     const shouldEnable = !isStartupEnabledDraft;
-    const canUseArchiveLimitDraft = isDraftSynchronizedRef.current;
-    const draftGeneration = archiveDraftEditGenerationRef.current;
     setIsStartupEnabledDraft(shouldEnable);
     try {
       const persistedSettings = persistedSettingsRef.current ?? (await requestSettings());
-      const limitMb =
-        (canUseArchiveLimitDraft ? parseArchiveLimit(archiveLimitDraft) : null) ??
-        persistedSettings.archive_limit_mb;
-      await saveManagementSettings(shouldEnable, limitMb, draftGeneration);
+      // 警告ラインは専用の保存操作でだけ確定し、編集中の下書きも保持する。
+      await saveManagementSettings(shouldEnable, persistedSettings.archive_limit_mb, null);
     } catch (error) {
       setIsStartupEnabledDraft(!shouldEnable);
       throw error;
     }
-  }, [archiveLimitDraft, isStartupEnabledDraft, requestSettings, saveManagementSettings]);
+  }, [isStartupEnabledDraft, requestSettings, saveManagementSettings]);
 
   /** 警告ラインの入力値をバリデーションして保存する */
   const saveArchiveLimit = useCallback(async () => {

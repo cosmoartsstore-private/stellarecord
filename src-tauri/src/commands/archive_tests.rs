@@ -27,7 +27,7 @@ mod tests {
         );
         assert_eq!(
             classify_text_category("2025.05.15 20:00:00 Log        -  [Behaviour] Joining wrld_abc12345-0000-4000-8000-000000000000:1~public~region(jp)"),
-            Some("world")
+            None
         );
         assert_eq!(
             classify_text_category("2025.05.15 20:00:00 Log        -  [Behaviour] OnLeftRoom"),
@@ -45,7 +45,7 @@ mod tests {
             classify_text_category(
                 "2025.05.15 20:00:00 Log        -  [Behaviour] OnPlayerJoinComplete Comet"
             ),
-            Some("player_ready")
+            None
         );
         assert_eq!(
             classify_text_category("2025.05.15 20:00:00 Log        -  [Behaviour] OnPlayerLeft Comet (usr_11111111-2222-4333-8444-555555555555)"),
@@ -69,7 +69,7 @@ mod tests {
             classify_text_category(
                 "2025.05.15 20:00:00 Log        -  [Behaviour] Successfully joined room"
             ),
-            None
+            Some("world")
         );
         assert_eq!(
             classify_text_category(
@@ -85,7 +85,7 @@ mod tests {
     fn classify_plain_line() {
         assert_eq!(
             classify_log_level("2025.04.30 20:00:00 Log        -  some message"),
-            "plain"
+            "info"
         );
     }
 
@@ -95,7 +95,7 @@ mod tests {
             classify_log_level("2025.04.30 20:00:00 Error      -  something broke"),
             "error"
         );
-        assert_eq!(classify_log_level("some Error in the line"), "error");
+        assert_eq!(classify_log_level("some Error in the line"), "debug");
     }
 
     #[test]
@@ -104,7 +104,7 @@ mod tests {
             classify_log_level("2025.04.30 20:00:00 Warning    -  degraded"),
             "warning"
         );
-        assert_eq!(classify_log_level("some Warning about X"), "warning");
+        assert_eq!(classify_log_level("some Warning about X"), "debug");
     }
 
     #[test]
@@ -295,8 +295,8 @@ mod tests {
     #[test]
     fn safe_replace_native_file_locks_preserve_archive_and_same_paths_retry() {
         use std::os::windows::fs::OpenOptionsExt;
-        // 元log、置換先、既存backupの3段階を実OSの排他lockで独立して失敗させる。
-        for locked_kind in ["source", "target", "backup"] {
+        // 元ログと置換先の排他ロックを解除した後、同じパスで再実行できることを確認する。
+        for locked_kind in ["source", "target"] {
             let dir = tempfile::tempdir().unwrap(); let source_name = "output_log_2026-10-08.txt";
             let source = dir.path().join(source_name); let target = dir.path().join(format!("{source_name}.tar.zst")); let backup = target.with_extension("bak");
             fs::write(&source, "保存済みの日本語ログ\n").unwrap(); compress_single_file(&source, &target).unwrap();
@@ -307,7 +307,7 @@ mod tests {
             let error = write_archive_safely(&source, &target, ArchiveSyncMode::Replace).unwrap_err();
             let prefix = match locked_kind {
                 "source" => format!("開けませんでした [{}]: ", source.display()),
-                "target" => format!("バックアップへ退避できませんでした [{}]: ", target.display()),
+                "target" => format!("開けませんでした [{}]: ", target.display()),
                 "backup" => format!("削除できませんでした [{}]: ", backup.display()),
                 _ => unreachable!(),
             };
@@ -390,7 +390,7 @@ mod tests {
         fs::write(&src, "same content in both").unwrap();
         compress_single_file(&src, &archive).unwrap();
 
-        assert!(is_source_log_exactly_archived(&src, &archive).unwrap());
+        assert!(open_archived_source_for_cleanup(&src, &archive).unwrap().is_some());
     }
 
     #[test]
@@ -403,7 +403,7 @@ mod tests {
         compress_single_file(&src, &archive).unwrap();
         fs::write(&src, "first line\nsecond line\n").unwrap();
 
-        assert!(!is_source_log_exactly_archived(&src, &archive).unwrap());
+        assert!(open_archived_source_for_cleanup(&src, &archive).unwrap().is_none());
     }
 
     #[test]
@@ -462,135 +462,115 @@ mod tests {
         assert_eq!(encode_log_category_u8("world"), 1);
         assert_eq!(encode_log_category_u8("notification"), 2);
         assert_eq!(encode_log_category_u8("player_join"), 3);
-        assert_eq!(encode_log_category_u8("player_ready"), 4);
-        assert_eq!(encode_log_category_u8("player_left"), 5);
-        assert_eq!(encode_log_category_u8("debug-system"), 6);
+        assert_eq!(encode_log_category_u8("player_ready"), 0);
+        assert_eq!(encode_log_category_u8("player_left"), 4);
+        assert_eq!(encode_log_category_u8("debug-system"), 0);
+        assert_eq!(encode_log_category_u8("video"), 5);
+        assert_eq!(encode_log_category_u8("photo"), 6);
         assert_eq!(encode_log_category_u8("plain"), 0);
     }
 
-    // ── detect_range_block_start (純粋: 複数行ブロック検出) ──
-
     #[test]
-    fn detect_range_block_debug_system() {
-        let block =
-            detect_range_block_start("2025.04.30 [UserInfoLogger] Environment Info:").unwrap();
-        assert!(matches!(block.kind, RangeBlockKind::DebugSystem));
-        assert_eq!(block.category, "debug-system");
+    fn event_categories_require_header_and_canonical_body() {
+        for body in [
+            "[Behaviour] OnPlayerJoinComplete StarGazer",
+            "[Behaviour] Initialized PlayerAPI \"StarGazer\" is remote",
+            "Fetched wallet balance from internal ledger. Balance=0",
+            "[Behaviour] uSpeak [1][0]: ProcessEncodeAsync task cancelled (read).",
+            "[Behaviour] Joining wrld_abc:1~region(jp)",
+        ] {
+            assert_eq!(classify_text_category(&format!("2026.10.22 12:00:00 Debug - {body}")), None);
+            assert_eq!(classify_text_category(body), None);
+        }
+        assert_eq!(classify_text_category("2026.10.22 12:00:00 Log - [Behaviour] Successfully joined room"), Some("world"));
+    }
+
+    fn highlighted_text(body: &str, range: &LogViewerHighlight) -> String {
+        String::from_utf16_lossy(&body.encode_utf16().skip(range.start).take(range.end - range.start).collect::<Vec<_>>())
     }
 
     #[test]
-    fn detect_range_block_multiline_notification() {
-        // 終端 '>' を含まない通知行は複数行ブロック開始
-        let block =
-            detect_range_block_start("Received Notification: <Notification from x").unwrap();
-        assert!(matches!(block.kind, RangeBlockKind::Notification));
+    fn db_highlight_matches_exact_field_and_prefers_notification_message() {
+        let markers = vec![DbKeywordMarker { text: "Same Name".into() }, DbKeywordMarker { text: "Cozy Lounge".into() }];
+        let body = "Received Notification: <Notification from username:Same Name, sender user id:usr_a to usr_b of type: invite, id: not_1234, created at: now, message: \"Same Name\">";
+        let range = resolve_db_highlight(body, "notification", &markers).unwrap();
+        assert_eq!(highlighted_text(body, &range), "Same Name");
+        assert_eq!(range.start, body.rfind("Same Name").unwrap());
+        assert!(resolve_db_highlight("[Behaviour] Entering Room: Cozy Lounge Annex", "world", &markers).is_none());
+        let body = "[Behaviour] Entering Room: Cozy Lounge";
+        assert_eq!(highlighted_text(body, &resolve_db_highlight(body, "world", &markers).unwrap()), "Cozy Lounge");
     }
 
     #[test]
-    fn detect_range_block_single_line_notification_is_none() {
-        // '>' を含む（単一行で閉じる）通知はブロック開始ではない
-        assert!(detect_range_block_start("Received Notification: <Notification ...>").is_none());
+    fn db_highlight_uses_utf16_offsets_and_never_matches_id_or_internal_name() {
+        let markers = vec![DbKeywordMarker { text: "😀名前".into() }, DbKeywordMarker { text: "wrld_abcdef".into() }];
+        let body = "[Behaviour] OnPlayerJoined 😀名前 (usr_1111-2222)";
+        assert_eq!(highlighted_text(body, &resolve_db_highlight(body, "player_join", &markers).unwrap()), "😀名前");
+        assert!(resolve_db_highlight("[Behaviour] Joining wrld_abcdef:1", "world", &markers).is_none());
+        assert!(resolve_db_highlight("Fetched wallet balance 😀名前", "plain", &markers).is_none());
     }
 
     #[test]
-    fn detect_range_block_plain_is_none() {
-        assert!(detect_range_block_start("2025.04.30 20:00:00 Log - normal").is_none());
-    }
-
-    // ── resolve_db_keyword_marker (純粋: 行内マーカー検索) ──
-
-    #[test]
-    fn keyword_marker_finds_substring() {
-        let markers = vec![
-            DbKeywordMarker {
-                text: "Cozy Lounge".to_string(),
-            },
-            DbKeywordMarker {
-                text: "StarGazer".to_string(),
-            },
-        ];
-        let found = resolve_db_keyword_marker("Entering Room: Cozy Lounge", &markers).unwrap();
-        assert_eq!(found.text, "Cozy Lounge");
-        assert!(resolve_db_keyword_marker("no match here", &markers).is_none());
-    }
-
-    // ── resolve_db_category (純粋: タイムスタンプ + 行内容でカテゴリ決定) ──
-
-    #[test]
-    fn resolve_category_prefers_matching_kind() {
-        let mut db = std::collections::HashMap::new();
-        db.insert(
-            "2025.04.30 20:15:35".to_string(),
-            vec!["player_join".to_string()],
-        );
-
-        let line = "[Behaviour] OnPlayerJoined StarGazer (usr_def456)";
-        let category = resolve_db_category(line, "2025.04.30 20:15:35", &db);
-        assert_eq!(category.as_deref(), Some("player_join"));
+    fn video_and_photo_highlights_do_not_need_database_markers() {
+        let body = "[USharpVideo] Started video load for URL: https://example.com/watch?v=123 requested by Other";
+        assert_eq!(classify_text_category(&format!("2026.10.22 12:00:00 Debug - {body}")), Some("video"));
+        assert_eq!(highlighted_text(body, &resolve_video_highlight(body, false).unwrap()), "https://example.com/watch?v=123");
+        let title = "[YTTL] title: 日本語の動画";
+        assert_eq!(highlighted_text(title, &resolve_video_highlight(title, false).unwrap()), "日本語の動画");
+        assert_eq!(classify_text_category("2026.10.22 12:00:00 Debug - [USharpVideo] Failed to load https://example.com/watch"), None);
+        assert_eq!(classify_text_category("2026.10.22 12:00:00 Debug - [VRC Camera] Took screenshot to: C:/Photo/VRChat_2026_3840x2160.png"), Some("photo"));
     }
 
     #[test]
-    fn resolve_category_none_when_timestamp_absent() {
-        let db = std::collections::HashMap::new();
-        assert!(resolve_db_category("anything", "2025.01.01 00:00:00", &db).is_none());
+    fn truncated_archive_body_never_authorizes_source_deletion() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("output_log_truncated.txt");
+        let archived = dir.path().join("output_log_truncated.txt.tar.zst");
+        fs::write(&source, b"abcdefghijk").unwrap();
+        let mut header = tar::Header::new_gnu();
+        header.set_path("output_log_truncated.txt").unwrap();
+        header.set_size(11);
+        header.set_mode(0o644);
+        header.set_cksum();
+        let mut incomplete = header.as_bytes().to_vec();
+        incomplete.extend_from_slice(b"abc");
+        fs::write(&archived, zstd::stream::encode_all(incomplete.as_slice(), 3).unwrap()).unwrap();
+        assert!(open_archived_source_for_cleanup(&source, &archived).unwrap().is_none());
+        assert_eq!(fs::read(&source).unwrap(), b"abcdefghijk");
     }
 
     #[test]
-    fn resolve_category_falls_back_to_first() {
-        let mut db = std::collections::HashMap::new();
-        db.insert("2025.04.30 20:15:30".to_string(), vec!["world".to_string()]);
-        // 行が特定カテゴリにマッチしなくても、タイムスタンプ登録があれば先頭を返す
-        let category = resolve_db_category("unrelated line", "2025.04.30 20:15:30", &db);
-        assert_eq!(category.as_deref(), Some("world"));
+    fn replacement_rechecks_actual_staged_content_after_plan() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("output_log_changed.txt");
+        let archived = dir.path().join("output_log_changed.txt.tar.zst");
+        fs::write(&source, b"original log").unwrap();
+        write_archive_safely(&source, &archived, ArchiveSyncMode::Create).unwrap();
+        let original = fs::read(&archived).unwrap();
+        fs::write(&source, b"original log extended").unwrap();
+        let plan = build_archive_sync_plan(&source, dir.path()).unwrap().unwrap();
+        fs::write(&source, b"different").unwrap();
+        assert!(write_archive_safely(&source, &archived, plan.mode).is_err());
+        assert_eq!(fs::read(&archived).unwrap(), original);
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 2);
+        fs::write(&source, b"original log extended").unwrap();
+        write_archive_safely(&source, &archived, plan.mode).unwrap();
+        assert_single_archived_log(&archived, "output_log_changed.txt", b"original log extended");
     }
 
     #[test]
-    fn viewer_category_uses_line_structure_independently_of_highlight_marker() {
-        let timestamp = "2025-04-30 20:15:35";
-        let mut db = std::collections::HashMap::new();
-        db.insert(
-            timestamp.to_string(),
-            vec!["player_join".to_string(), "player_left".to_string()],
-        );
-        let markers = vec![DbKeywordMarker {
-            text: "StarGazer".to_string(),
-        }];
-
-        let joined = "[Behaviour] OnPlayerJoined StarGazer (usr_def456)".to_string();
-        let left = "[Behaviour] OnPlayerLeft StarGazer (usr_def456)".to_string();
-        let ready = "[Behaviour] OnPlayerJoinComplete StarGazer".to_string();
-        assert!(resolve_db_keyword_marker(&joined, &markers).is_some());
-        assert!(resolve_db_keyword_marker(&left, &markers).is_some());
-        assert!(resolve_db_keyword_marker(&ready, &markers).is_some());
-        assert_eq!(
-            resolve_viewer_category(&joined, timestamp, None, Some(&db)),
-            "player_join"
-        );
-        assert_eq!(
-            resolve_viewer_category(&left, timestamp, None, Some(&db)),
-            "player_left"
-        );
-        assert_eq!(
-            resolve_viewer_category(&ready, timestamp, None, Some(&db)),
-            "player_ready"
-        );
-    }
-
-    #[test]
-    fn viewer_category_falls_back_to_text_when_db_kind_conflicts() {
-        let timestamp = "2025-04-30 20:15:35";
-        let mut db = std::collections::HashMap::new();
-        db.insert(timestamp.to_string(), vec!["player_join".to_string()]);
-        let left = "[Behaviour] OnPlayerLeft StarGazer (usr_def456)";
-
-        assert_eq!(
-            resolve_viewer_category(left, timestamp, None, Some(&db)),
-            "player_left"
-        );
-        assert_eq!(
-            resolve_viewer_category(left, timestamp, Some("notification"), Some(&db)),
-            "notification"
-        );
+    fn cleanup_holds_verified_file_against_writes_and_rename_until_handle_deletion() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("output_log_held.txt");
+        let archived = dir.path().join("output_log_held.txt.tar.zst");
+        fs::write(&source, b"retained in archive").unwrap();
+        write_archive_safely(&source, &archived, ArchiveSyncMode::Create).unwrap();
+        let verified = open_archived_source_for_cleanup(&source, &archived).unwrap().unwrap();
+        assert!(fs::OpenOptions::new().write(true).open(&source).is_err());
+        assert!(fs::rename(&source, dir.path().join("renamed.txt")).is_err());
+        delete_open_source_log(verified, &source).unwrap();
+        assert!(!source.exists());
+        assert_single_archived_log(&archived, "output_log_held.txt", b"retained in archive");
     }
 
     // ── collect_directory_size (一時ディレクトリ: 再帰サイズ集計) ──
@@ -700,40 +680,16 @@ mod tests {
     }
 
     #[test]
-    fn db_log_categories_collects_timestamps() {
-        let conn = seed_viewer_db();
-        let cats = collect_db_log_categories(&conn, "log.txt").unwrap();
-
-        // visit join/leave → world、player join/leave → player_*
-        assert!(cats
-            .get("2025.04.30 20:15:30")
-            .unwrap()
-            .contains(&"world".to_string()));
-        assert!(cats
-            .get("2025.04.30 20:20:10")
-            .unwrap()
-            .contains(&"world".to_string()));
-        assert!(cats
-            .get("2025.04.30 20:15:35")
-            .unwrap()
-            .contains(&"player_join".to_string()));
-        assert!(cats
-            .get("2025.04.30 20:18:45")
-            .unwrap()
-            .contains(&"player_left".to_string()));
-    }
-
-    #[test]
-    fn db_keyword_markers_sorted_longest_first() {
+    fn db_keyword_markers_are_sorted_and_unique() {
         let conn = seed_viewer_db();
         let markers = collect_db_keyword_markers(&conn, "log.txt").unwrap();
 
         // ワールド名とユーザー名が収集される
         assert!(markers.iter().any(|m| m.text == "Cozy Lounge"));
         assert!(markers.iter().any(|m| m.text == "StarGazer"));
-        // 最長優先ソート: 先頭は後続以上の長さ
+        // 項目ごとの完全一致照合に使うため、文字列順で重複を除く。
         for pair in markers.windows(2) {
-            assert!(pair[0].text.len() >= pair[1].text.len());
+            assert!(pair[0].text < pair[1].text);
         }
     }
 

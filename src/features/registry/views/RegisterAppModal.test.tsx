@@ -16,26 +16,26 @@ describe('アプリ登録入力', () => {
     const confirm = vi.fn();
     render(<RegisterAppModal onClose={vi.fn()} onConfirm={confirm} />);
     expect(screen.getByRole<HTMLButtonElement>('button', { name: '登録' }).disabled).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: '参照' }));
+    fireEvent.click(screen.getByRole('button', { name: '選択' }));
     await waitFor(() => { expect(screen.getByLabelText<HTMLInputElement>('アプリ名').value).toBe('Sample'); });
     fireEvent.change(screen.getByLabelText('アプリ名'), { target: { value: '  独自名  ' } });
     fireEvent.change(screen.getByLabelText('説明（任意）'), { target: { value: '  説明  ' } });
     fireEvent.click(screen.getByRole('button', { name: '登録' }));
     expect(confirm).toHaveBeenCalledWith('C:/Apps/Sample.exe', '独自名', '  説明  ');
     vi.mocked(pickExeFile).mockResolvedValueOnce('C:/Apps/Other.exe');
-    fireEvent.click(screen.getByRole('button', { name: '参照' }));
-    await waitFor(() => { expect(screen.getByPlaceholderText<HTMLInputElement>('ファイルを選択してください').value).toBe('C:/Apps/Other.exe'); });
+    fireEvent.click(screen.getByRole('button', { name: '選択' }));
+    await waitFor(() => { expect(screen.getByPlaceholderText<HTMLInputElement>('アプリの実行ファイルを選択').value).toBe('C:/Apps/Other.exe'); });
     expect(screen.getByLabelText<HTMLInputElement>('アプリ名').value).toBe('  独自名  ');
     expect(extractExeDisplayName).toHaveBeenCalledOnce();
   });
 
   it('自動補完のままなら再選択で更新し、表示名取得失敗時はexe名を使用する', async () => {
     render(<RegisterAppModal onClose={vi.fn()} onConfirm={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: '参照' }));
+    fireEvent.click(screen.getByRole('button', { name: '選択' }));
     await waitFor(() => { expect(screen.getByLabelText<HTMLInputElement>('アプリ名').value).toBe('Sample'); });
     vi.mocked(pickExeFile).mockResolvedValueOnce('C:\\Apps\\Other.EXE');
     vi.mocked(extractExeDisplayName).mockRejectedValueOnce(new Error('VersionInfoなし'));
-    fireEvent.click(screen.getByRole('button', { name: '参照' }));
+    fireEvent.click(screen.getByRole('button', { name: '選択' }));
     await waitFor(() => { expect(screen.getByLabelText<HTMLInputElement>('アプリ名').value).toBe('Other'); });
   });
 
@@ -45,8 +45,8 @@ describe('アプリ登録入力', () => {
     vi.mocked(extractExeDisplayName).mockReturnValueOnce(new Promise((resolve, reject) => { resolveName = resolve; rejectName = reject; }));
     const confirm = vi.fn();
     render(<RegisterAppModal onClose={vi.fn()} onConfirm={confirm} />);
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '参照' })); await Promise.resolve(); });
-    expect(screen.getByPlaceholderText<HTMLInputElement>('ファイルを選択してください').value).toBe('C:/Apps/Sample.exe');
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '選択' })); await Promise.resolve(); });
+    expect(screen.getByPlaceholderText<HTMLInputElement>('アプリの実行ファイルを選択').value).toBe('C:/Apps/Sample.exe');
     fireEvent.change(screen.getByLabelText('アプリ名'), { target: { value: '手入力した表示名' } });
     await act(async () => { if (outcome === 'resolve') resolveName('取得した表示名'); else rejectName(new Error('表示名取得拒否')); await Promise.resolve(); });
     expect(screen.getByLabelText<HTMLInputElement>('アプリ名').value).toBe('手入力した表示名');
@@ -60,14 +60,14 @@ describe('アプリ登録入力', () => {
     vi.mocked(extractExeDisplayName).mockReturnValueOnce(new Promise((resolve, reject) => { resolveOldName = resolve; rejectOldName = reject; }));
     const confirm = vi.fn();
     render(<RegisterAppModal onClose={vi.fn()} onConfirm={confirm} />);
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '参照' })); await Promise.resolve(); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '選択' })); await Promise.resolve(); });
     vi.mocked(pickExeFile).mockResolvedValueOnce('C:/Apps/Current.exe');
     vi.mocked(extractExeDisplayName).mockResolvedValueOnce('現在のアプリ');
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '参照' })); await Promise.resolve(); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '選択' })); await Promise.resolve(); });
     expect(screen.getByLabelText<HTMLInputElement>('アプリ名').value).toBe('現在のアプリ');
     await act(async () => { if (outcome === 'resolve') resolveOldName('以前のアプリ'); else rejectOldName(new Error('以前の表示名取得拒否')); await Promise.resolve(); });
     expect(screen.getByLabelText<HTMLInputElement>('アプリ名').value).toBe('現在のアプリ');
-    expect(screen.getByPlaceholderText<HTMLInputElement>('ファイルを選択してください').value).toBe('C:/Apps/Current.exe');
+    expect(screen.getByPlaceholderText<HTMLInputElement>('アプリの実行ファイルを選択').value).toBe('C:/Apps/Current.exe');
     fireEvent.click(screen.getByRole('button', { name: '登録' }));
     expect(confirm).toHaveBeenCalledExactlyOnceWith('C:/Apps/Current.exe', '現在のアプリ', '');
   });
@@ -77,7 +77,7 @@ describe('アプリ登録入力', () => {
     else vi.mocked(pickExeFile).mockResolvedValueOnce(outcome);
     const close = vi.fn();
     render(<RegisterAppModal onClose={close} onConfirm={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: '参照' }));
+    fireEvent.click(screen.getByRole('button', { name: '選択' }));
     await waitFor(() => { expect(pickExeFile).toHaveBeenCalledOnce(); });
     expect(extractExeDisplayName).not.toHaveBeenCalled();
     expect(screen.getByRole<HTMLButtonElement>('button', { name: '登録' }).disabled).toBe(true);

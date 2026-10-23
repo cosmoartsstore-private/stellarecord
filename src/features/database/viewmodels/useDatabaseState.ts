@@ -15,9 +15,9 @@ export interface SortState {
 }
 
 /**
- * 読み取り専用DBプレビューと破壊的DB操作を管理するフック
+ * 読み取り専用DBプレビューを管理するフック
  *
- * テーブルカタログ・ページネーション・ソート・破壊的アクションの
+ * テーブルカタログ・ページネーション・ソートの
  * 確認と実行手順を一元管理する
  */
 export function useDatabaseState(addToast: AddToast) {

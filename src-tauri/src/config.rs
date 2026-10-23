@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use winreg::enums::HKEY_CURRENT_USER;
 use winreg::RegKey;
 
-use crate::constants::{ARCHIVE_DIRECTORY, DATABASE_DIRECTORY, DATABASE_FILE, DEFAULT_ARCHIVE_CAPACITY_BYTES as DEFAULT_CAPACITY, POLARIS_KEY, STELLA_RECORD_KEY};
+use crate::constants::{ARCHIVE_DIRECTORY, DATABASE_DIRECTORY, DATABASE_FILE, DATA_DIRECTORY, DEFAULT_ARCHIVE_CAPACITY_BYTES as DEFAULT_CAPACITY, POLARIS_KEY, STELLA_RECORD_KEY};
 use crate::utils;
 
 /// 起動時ログ取り込みについて、ユーザーが選択した許可状態。
@@ -131,6 +131,24 @@ fn load_stellarecord_setting_from(key_path: &str) -> StellaRecordSetting {
 /// registryキーへの書き込みに失敗した場合にエラーを返す。
 pub fn save_stellarecord_setting(setting: &StellaRecordSetting) -> Result<(), String> {
     save_stellarecord_setting_to(STELLA_RECORD_KEY, setting)
+}
+
+/// 読込元の明示設定を優先し、未設定時は Polaris のログ保存先を使用する。
+pub fn load_source_log_dir() -> Option<PathBuf> {
+    let configured = open_key(STELLA_RECORD_KEY).map(|key| read_str(&key, "SourceLogPath")).unwrap_or_default();
+    if !configured.is_empty() {
+        return Some(PathBuf::from(configured));
+    }
+    Some(utils::get_polaris_install_dir()?.join(DATA_DIRECTORY).join(ARCHIVE_DIRECTORY))
+}
+
+/// 読込元だけを保存し、管理設定や起動時取り込みの許可状態は変更しない。
+///
+/// # Errors
+/// registryキーの作成または書き込みに失敗した場合にエラーを返す。
+pub fn save_source_log_path(path: &str) -> Result<(), String> {
+    let key = create_key(STELLA_RECORD_KEY)?;
+    key.set_value("SourceLogPath", &path).map_err(|err| utils::command_err(message!("Config.saveSourceLogPath.failed"), err))
 }
 
 /// 起動時ログ取り込みの許可状態をregistryから読み込む。

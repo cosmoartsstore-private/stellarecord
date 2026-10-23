@@ -186,9 +186,12 @@ export function useArchiveState() {
 
   /** 閲覧モードでアーカイブ選択画面を開く（既定アーカイブストア） */
   const openLogViewerSelection = useCallback(async () => {
+    stopStream();
+    setLogViewerData(null);
+    setIsLogViewerLoaded(false);
     updateExternalFiles([]);
     return loadArchiveSelection();
-  }, [loadArchiveSelection, updateExternalFiles]);
+  }, [loadArchiveSelection, stopStream, updateExternalFiles]);
 
   /**
    * ネイティブダイアログで外部ログファイルを選択し、一覧に追加する。
@@ -208,9 +211,12 @@ export function useArchiveState() {
 
   /** 外部ファイル選択を解除して既定アーカイブストアに戻す */
   const clearExternalLogFiles = useCallback(async () => {
+    stopStream();
+    setLogViewerData(null);
+    setIsLogViewerLoaded(false);
     updateExternalFiles([]);
     return loadArchiveSelection();
-  }, [loadArchiveSelection, updateExternalFiles]);
+  }, [loadArchiveSelection, stopStream, updateExternalFiles]);
 
   /** 選択されたアーカイブファイルのバッチインポートを実行する */
   const executeEnhancedSync = useCallback(async (selectedFiles: string[]) => {
