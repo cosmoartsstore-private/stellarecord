@@ -1,8 +1,7 @@
 //! メインデータベースの `SQLite` schema定義と初期化。
 //!
 //! メインデータベースは WAL ジャーナルモードと外部キーによる参照整合性を使用する。
-//! ここにある DDL を正とし、追加テーブルと追加列は既存データを保持したまま
-//! 初期化時に適用する。
+//! ここにある DDL を初版の構成とし、旧構成の DB は自動変換せず拒否する。
 
 use rusqlite::{Connection, Result};
 
@@ -93,6 +92,7 @@ CREATE TABLE IF NOT EXISTS screenshots (
 );
 CREATE INDEX IF NOT EXISTS idx_screenshots_visit_id  ON screenshots(visit_id);
 CREATE INDEX IF NOT EXISTS idx_screenshots_timestamp ON screenshots(timestamp);
+CREATE INDEX IF NOT EXISTS idx_screenshots_session_id ON screenshots(session_id);
 
 CREATE TABLE IF NOT EXISTS osc (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -153,7 +153,8 @@ FROM visits v
 ORDER BY v.join_time DESC;
 
 
-CREATE VIEW IF NOT EXISTS with_users_detail AS
+DROP VIEW IF EXISTS with_users_detail;
+CREATE VIEW with_users_detail AS
 SELECT
     wu.id,
     wu.visit_id,
@@ -169,7 +170,8 @@ JOIN find_users fu ON fu.vrchat_id = wu.vrchat_id
 JOIN visits v ON v.id = wu.visit_id;
 
 
-CREATE VIEW IF NOT EXISTS screenshots_detail AS
+DROP VIEW IF EXISTS screenshots_detail;
+CREATE VIEW screenshots_detail AS
 SELECT
     s.id,
     s.visit_id,
@@ -182,75 +184,38 @@ FROM screenshots s
 LEFT JOIN visits v ON v.id = s.visit_id;
 ";
 
-/// 指定テーブルにcolumnが存在するか確認する。
-fn table_has_column(conn: &Connection, table: &str, column: &str) -> Result<bool> {
-    let mut statement = conn.prepare(&format!("PRAGMA table_info({table})"))?;
-    let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
-    for existing in columns {
-        if existing? == column {
-            return Ok(true);
+/// 内部管理テーブルを除いた、保存済みのテーブル名を読む。
+fn table_names(conn: &Connection) -> Result<Vec<String>> {
+    let mut statement = conn.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")?;
+    let rows = statement.query_map([], |row| row.get(0))?;
+    rows.collect()
+}
+
+/// 列名・型・必須指定・主キーを、物理的な列順に依存せず照合する。
+fn table_layout(conn: &Connection, table: &str) -> Result<Vec<(String, String, bool, i64)>> {
+    let mut statement = conn.prepare("SELECT name, type, \"notnull\", pk FROM pragma_table_info(?1) ORDER BY name")?;
+    let rows = statement.query_map([table], |row| Ok((row.get(0)?, row.get::<_, String>(1)?.to_ascii_uppercase(), row.get(2)?, row.get(3)?)))?;
+    rows.collect()
+}
+
+/// 初版DDLを比較元に使い、旧構成への列追加やデータ補完を行わない。
+/// 空DBと姉妹アプリが先に作る現行appsだけのDBは、新規初期化として受け入れる。
+fn validate_current_schema(conn: &Connection) -> Result<()> {
+    let existing = table_names(conn)?;
+    if existing.is_empty() {
+        return Ok(());
+    }
+
+    let reference = Connection::open_in_memory()?;
+    reference.execute_batch(MAIN_SCHEMA)?;
+    let catalog_only = existing.len() == 1 && existing[0] == "apps";
+    for table in table_names(&reference)? {
+        if catalog_only && table != "apps" {
+            continue;
         }
-    }
-    Ok(false)
-}
-
-/// 旧 `screenshots` schemaへセッション所有列を追加し、確定できる行だけ補完する。
-///
-/// `visit_id` がある行は親訪問からセッションを一意に特定できる。ワールド外撮影として
-/// `visit_id` が `NULL` の旧行は所有元を推定せず、そのまま保持する。
-fn migrate_screenshot_session_ownership(conn: &Connection) -> Result<()> {
-    if !table_has_column(conn, "screenshots", "session_id")? {
-        conn.execute(
-            "ALTER TABLE screenshots
-             ADD COLUMN session_id INTEGER REFERENCES sessions(id)",
-            [],
-        )?;
-    }
-
-    conn.execute(
-        "UPDATE screenshots
-         SET session_id = (
-             SELECT visit.session_id
-             FROM visits AS visit
-             WHERE visit.id = screenshots.visit_id
-         )
-         WHERE session_id IS NULL
-           AND visit_id IS NOT NULL",
-        [],
-    )?;
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_screenshots_session_id
-         ON screenshots(session_id)",
-        [],
-    )?;
-    Ok(())
-}
-
-/// 既存 DB に訪問時点のフレンド状態列を追加する。
-fn migrate_friend_status(conn: &Connection) -> Result<()> {
-    if !table_has_column(conn, "with_users", "friend_status")? {
-        conn.execute(
-            "ALTER TABLE with_users
-             ADD COLUMN friend_status INTEGER NOT NULL DEFAULT 2
-             CHECK(friend_status IN (0,1,2))",
-            [],
-        )?;
-    }
-    Ok(())
-}
-
-/// 既存 DB に解析バージョン列を追加する。
-///
-/// 旧取り込み行をバージョン1として保持し、現在のパーサーが必要なログだけを
-/// ファイル単位 savepoint 内で再構築できるようにする。
-fn migrate_import_parser_version(conn: &Connection) -> Result<()> {
-    if !table_has_column(conn, "imported_logs", "parser_version")? {
-        conn.execute(
-            "ALTER TABLE imported_logs
-             ADD COLUMN parser_version INTEGER NOT NULL DEFAULT 1
-             CHECK(parser_version >= 1)",
-            [],
-        )?;
+        if table_layout(conn, &table)? != table_layout(&reference, &table)? {
+            return Err(rusqlite::Error::SqliteFailure(rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_SCHEMA), Some(format!(message!("Analyze.Db.validateCurrentSchema.incompatible"), table = table))));
+        }
     }
     Ok(())
 }
@@ -258,27 +223,21 @@ fn migrate_import_parser_version(conn: &Connection) -> Result<()> {
 /// メイン `StellaRecord` schemaと必要なビューを初期化する。
 ///
 /// # Errors
-/// `SQLite` プラグマ、schema、加算的移行、またはビューの適用に失敗した場合に
+/// DBが初版の構成と一致しない、またはプラグマ・schema・ビューの適用に失敗した場合に
 /// エラーを返す。
 pub fn init_main_db(conn: &Connection) -> Result<()> {
+    validate_current_schema(conn)?;
     conn.execute_batch("PRAGMA journal_mode = WAL;")?;
     conn.execute_batch("PRAGMA foreign_keys = ON;")?;
-    conn.execute_batch(MAIN_SCHEMA)?;
-    migrate_screenshot_session_ownership(conn)?;
-    migrate_friend_status(conn)?;
-    migrate_import_parser_version(conn)?;
-    if !table_has_column(conn, "with_users_detail", "friend_status")? {
-        conn.execute_batch("DROP VIEW IF EXISTS with_users_detail;")?;
-    }
-    // viewの削除と再作成の途中を別接続へ公開せず、既存transaction内でも初期化できる。
-    conn.execute_batch("SAVEPOINT refresh_main_views;")?;
-    if let Err(error) = conn.execute_batch(MAIN_VIEWS) {
-        if let Err(rollback_error) = conn.execute_batch("ROLLBACK TO refresh_main_views; RELEASE refresh_main_views;") {
+    // schemaと派生viewを同じ確定範囲へ置き、初期化失敗で途中の構成を残さない。
+    conn.execute_batch("SAVEPOINT initialize_main_db;")?;
+    if let Err(error) = conn.execute_batch(MAIN_SCHEMA).and_then(|()| conn.execute_batch(MAIN_VIEWS)) {
+        if let Err(rollback_error) = conn.execute_batch("ROLLBACK TO initialize_main_db; RELEASE initialize_main_db;") {
             return Err(rusqlite::Error::InvalidParameterName(format!(message!("Analyze.Db.initMainDb.restoreFailed"), error = error, rollback_error = rollback_error)));
         }
         return Err(error);
     }
-    conn.execute_batch("RELEASE refresh_main_views;")?;
+    conn.execute_batch("RELEASE initialize_main_db;")?;
     Ok(())
 }
 

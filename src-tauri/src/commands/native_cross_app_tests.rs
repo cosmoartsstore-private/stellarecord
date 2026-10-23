@@ -7,7 +7,7 @@ fn command_cross_app_consumes_polaris_output_and_reopens_saved_results() -> Nati
     native_command_test("command_cross_app_consumes_polaris_output_and_reopens_saved_results", |directory, registry| {
         use sha2::Digest;
         let name = "output_log_2026-10-08_09-59-50.txt";
-        let expected = include_bytes!("../../tests/fixtures/cross_app_producer.log");
+        let expected = include_bytes!("../../tests/fixtures/cross_app_producer.txt");
         let external = std::env::var_os("POLARIS_HEADLESS_CONSUMER_FIXTURE_ROOT").map(std::path::PathBuf::from);
         let producer = if let Some(root) = &external {
             assert_eq!(fs::read_to_string(root.join("owner.marker"))?.trim(), "polaris-headless-consumer-fixture-v1");

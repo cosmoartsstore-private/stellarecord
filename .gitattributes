@@ -1,0 +1,2 @@
+# 原文のSHA-256を照合する連携fixtureは改行を変換しない。
+src-tauri/tests/fixtures/cross_app_producer.txt -text

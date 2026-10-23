@@ -85,7 +85,7 @@ Frontendのapp/features/sharedはsrc配下、Rustのcommands/analyze等はsrc-ta
 | `analyze/mod.rs`                                           | 指紋/差分/batch/行parser・DB import                          | `src-tauri/src/analyze/mod.rs`                             | 接続/transaction/savepointと1ログparser state                                | db/parser/friendship、tar/zstd/hash    |
 | `analyze/parser.rs`                                        | 固定regex・location/notification純粋処理                     | `src-tauri/src/analyze/parser.rs`                          | 共通immutable pattern                                                        | LazyLock/regex                         |
 | `analyze/friendship.rs`                                    | 訪問内の証拠対応・友人状態推定                               | `src-tauri/src/analyze/friendship.rs`                      | FriendshipTracker局所state                                                   | parserイベントをanalyzeから受ける      |
-| `analyze/db.rs`                                            | schema/view/index・現行互換初期化                            | `src-tauri/src/analyze/db.rs`                              | durable schema、接続設定                                                     | SQLite                                 |
+| `analyze/db.rs`                                            | 初版schemaの照合・schema/view/indexの初期化                  | `src-tauri/src/analyze/db.rs`                              | durable schema、接続設定                                                     | SQLite                                 |
 | `config.rs`                                                | Stella/Polaris registry設定・SourceLogPath解決・apps catalog | `src-tauri/src/config.rs`                                  | durable registry/DB、プロセスglobal cacheなし                                | winreg/utils/SQLite                    |
 | `platform.rs`                                              | mutex/process/Run/icon/version/picker                        | `src-tauri/src/platform.rs`                                | process寿命mutex handle                                                      | Win32/window shell、registry           |
 | `utils.rs`, `models.rs`                                    | install解決/log/error/event・IPC payload                     | `src-tauri/src/utils.rs`                                   | 月次log、Serialize payload                                                   | registry/filesystem/Tauri              |
@@ -152,7 +152,7 @@ App: 設定/catalog取得 + progress購読 + 容量poll
  → commit/rollback → progress/finished送信 → guard Dropでrunning解除
 ```
 
-見積り失敗は未処理件数0として扱う。未処理原本も既存archiveもなければfinishedを送って終了する。既存archiveがあっても原本同期失敗時は差分解析へ進まない。DB確定条件は[Import Commit Boundaries](database.md#import-commit-boundaries)へ分ける。
+見積り失敗は詳細ログと失敗状態を記録し、finishedを送って終了する。正常に列挙でき、未処理原本も既存archiveもない場合は失敗通知なしで終了する。原本同期失敗時は差分解析へ進まない。DB確定条件は[Import Commit Boundaries](database.md#import-commit-boundaries)へ分ける。
 
 ### Manual Import (Restore)
 

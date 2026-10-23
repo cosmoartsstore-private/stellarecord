@@ -554,7 +554,7 @@ mod tests {
     }
 
     #[test]
-    fn legacy_session_without_fingerprint_is_rebuilt_once() {
+    fn current_schema_session_without_fingerprint_is_rebuilt_once() {
         let dir = tempfile::tempdir().unwrap();
         let source_dir = dir.path().join("source");
         let archive_dir = dir.path().join("archive");

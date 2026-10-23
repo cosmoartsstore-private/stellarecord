@@ -453,9 +453,41 @@ fn command_import_startup_unset_and_disabled_skip_paths_but_enabled_validates() 
 fn command_import_startup_without_logs_only_emits_finished() -> NativeCommandTestResult {
     native_command_test("command_import_startup_without_logs_only_emits_finished", |_, _| {
         use tauri::Manager;
+        fs::create_dir_all(get_source_log_dir()?)?;
         settings::save_startup_import_preference(true)?; let (app, events) = native_import_app()?;
         import::launch_startup_archive_import(app.handle().clone(), app.state())?; assert!(events.finish(&app)?.is_empty());
         assert!(!get_db_path()?.exists()); assert!(!get_archive_store_dir()?.exists()); app.cleanup_before_exit(); Ok(())
+    })
+}
+
+#[test]
+fn command_import_startup_missing_source_reports_failure_and_retries_same_path() -> NativeCommandTestResult {
+    native_command_test("command_import_startup_missing_source_reports_failure_and_retries_same_path", |_, _| {
+        use tauri::Manager;
+        let source = get_source_log_dir()?;
+        assert!(!source.exists());
+        settings::save_startup_import_preference(true)?;
+        let (app, events) = native_import_app()?;
+        import::launch_startup_archive_import(app.handle().clone(), app.state())?;
+        let progress = events.finish(&app)?;
+        let failed = progress.last().ok_or("読込元がない場合の失敗進捗がありません")?;
+        assert_eq!(failed.status, "ログを圧縮保存できませんでした。");
+        assert_eq!(failed.progress, "0%");
+        assert!(!failed.is_running);
+        assert!(native_error_log_text()?.contains(source.to_string_lossy().as_ref()));
+        assert!(!get_db_path()?.exists());
+        assert!(!get_archive_store_dir()?.exists());
+        fs::create_dir_all(&source)?;
+        let name = "output_log_2026-10-08_12-00-00.txt";
+        fs::write(source.join(name), import_log())?;
+        import::launch_startup_archive_import(app.handle().clone(), app.state())?;
+        let progress = events.finish(&app)?;
+        assert_eq!(progress.last().ok_or("再試行の完了進捗がありません")?.status, "ログの取り込みが完了しました。");
+        let conn = Connection::open(get_db_path()?)?;
+        assert_eq!(conn.query_row("SELECT count(*) FROM sessions", [], |row| row.get::<_, i64>(0))?, 1);
+        assert_eq!(fs::read_to_string(source.join(name))?, import_log());
+        app.cleanup_before_exit();
+        Ok(())
     })
 }
 

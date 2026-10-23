@@ -154,8 +154,10 @@ mod tests {
     }
 
     #[test]
-    fn init_main_db_adds_import_tracking_to_existing_database() {
-        let conn = Connection::open_in_memory().unwrap();
+    fn init_main_db_rejects_incomplete_schema_without_changing_saved_rows() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("incomplete.db");
+        let conn = Connection::open(&path).unwrap();
         conn.execute_batch(
             "CREATE TABLE sessions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -169,7 +171,8 @@ mod tests {
         )
         .unwrap();
 
-        init_main_db(&conn).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        assert!(init_main_db(&conn).unwrap_err().to_string().contains("対応していないDB形式"));
 
         let session_count: i64 = conn
             .query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get(0))
@@ -185,99 +188,49 @@ mod tests {
             )
             .unwrap();
         assert_eq!(session_count, 1);
-        assert!(tracking_exists);
+        assert!(!tracking_exists);
+        assert_eq!(std::fs::read(&path).unwrap(), before);
     }
 
     #[test]
-    fn init_main_db_migrates_screenshot_session_ownership_idempotently() {
+    fn init_main_db_rejects_old_columns_without_changing_database_bytes() {
+        for (table, column) in [("screenshots", "session_id"), ("with_users", "friend_status"), ("imported_logs", "parser_version")] {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("old-layout.db");
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(MAIN_SCHEMA).unwrap();
+            if table == "screenshots" {
+                conn.execute_batch("DROP INDEX idx_screenshots_session_id;").unwrap();
+            }
+            conn.execute_batch(&format!("ALTER TABLE {table} DROP COLUMN {column}")).unwrap();
+            conn.execute("INSERT INTO apps(name,path) VALUES('保持する登録','owned.exe')", []).unwrap();
+            conn.execute("INSERT INTO sessions(log_name) VALUES('保持するログ.txt')", []).unwrap();
+            let before = std::fs::read(&path).unwrap();
+
+            let error = init_main_db(&conn).unwrap_err().to_string();
+            assert!(error.contains("対応していないDB形式") && error.contains(table), "{error}");
+            assert_eq!(std::fs::read(&path).unwrap(), before);
+            assert_eq!(conn.query_row("SELECT name FROM apps", [], |row| row.get::<_, String>(0)).unwrap(), "保持する登録");
+            assert_eq!(conn.query_row("SELECT log_name FROM sessions", [], |row| row.get::<_, String>(0)).unwrap(), "保持するログ.txt");
+            assert!(!table_layout(&conn, table).unwrap().iter().any(|entry| entry.0 == column));
+        }
+    }
+
+    #[test]
+    fn init_main_db_accepts_current_catalog_only_database_and_preserves_registration() {
         let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "PRAGMA foreign_keys = ON;
-             CREATE TABLE sessions (
-                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                 log_name TEXT UNIQUE NOT NULL,
-                 account_id TEXT,
-                 account_name TEXT,
-                 start_time DATETIME,
-                 end_time DATETIME
-             );
-             CREATE TABLE visits (
-                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                 session_id INTEGER NOT NULL REFERENCES sessions(id),
-                 world_name TEXT NOT NULL,
-                 instance_id TEXT NOT NULL,
-                 instance_type TEXT,
-                 region TEXT,
-                 join_time DATETIME NOT NULL,
-                 leave_time DATETIME
-             );
-             CREATE TABLE screenshots (
-                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                 visit_id INTEGER REFERENCES visits(id),
-                 file_path TEXT NOT NULL,
-                 resolution_width INTEGER,
-                 resolution_height INTEGER,
-                 timestamp DATETIME NOT NULL
-             );
-             INSERT INTO sessions (log_name, start_time)
-             VALUES ('legacy.txt', '2025-01-01');
-             INSERT INTO visits
-                 (session_id, world_name, instance_id, instance_type, join_time)
-             VALUES (1, 'Legacy World', 'legacy', 'public', '2025-01-01');
-             INSERT INTO screenshots
-                 (visit_id, file_path, resolution_width, resolution_height, timestamp)
-             VALUES
-                 (1, 'C:\\with-visit.png', 1920, 1080, '2025-01-01 00:01:00'),
-                 (NULL, 'C:\\without-visit.png', 1920, 1080, '2025-01-01 00:02:00');",
-        )
-        .unwrap();
-
+        conn.execute_batch("CREATE TABLE apps (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            path TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            icon BLOB,
+            registered_at DATETIME DEFAULT (datetime('now', 'localtime'))
+        ); INSERT INTO apps(name,path,description) VALUES('登録済みアプリ','owned.exe','保持する説明');").unwrap();
         init_main_db(&conn).unwrap();
         init_main_db(&conn).unwrap();
-
-        let session_id_column_count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*)
-                 FROM pragma_table_info('screenshots')
-                 WHERE name = 'session_id'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        let with_visit_owner: Option<i64> = conn
-            .query_row(
-                "SELECT session_id FROM screenshots WHERE visit_id = 1",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        let without_visit_owner: Option<i64> = conn
-            .query_row(
-                "SELECT session_id FROM screenshots WHERE visit_id IS NULL",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        let screenshot_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM screenshots", [], |row| row.get(0))
-            .unwrap();
-        let session_index_exists: bool = conn
-            .query_row(
-                "SELECT EXISTS(
-                    SELECT 1 FROM sqlite_master
-                    WHERE type = 'index'
-                      AND name = 'idx_screenshots_session_id'
-                 )",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-
-        assert_eq!(session_id_column_count, 1);
-        assert_eq!(with_visit_owner, Some(1));
-        assert_eq!(without_visit_owner, None);
-        assert_eq!(screenshot_count, 2);
-        assert!(session_index_exists);
+        assert_eq!(table_names(&conn).unwrap().len(), 10);
+        assert_eq!(conn.query_row("SELECT name,path,description FROM apps", [], |row| Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?,row.get::<_,String>(2)?))).unwrap(), ("登録済みアプリ".to_string(),"owned.exe".to_string(),"保持する説明".to_string()));
     }
 
     #[test]

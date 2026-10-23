@@ -447,7 +447,7 @@ VRChat Camera による撮影イベント。
 - `idx_screenshots_timestamp (timestamp)`
 - `idx_screenshots_session_id (session_id)`
 
-新規取り込みでは、ワールド外撮影を含む全行に `session_id` を保存する。旧スキーマからの移行時は、`visit_id` がある行だけ `visits.session_id` から補完する。`visit_id` が `NULL` の旧行は取り込み元を一意に特定できないため、`session_id` も `NULL` のまま保持する。
+取り込みでは、ワールド外撮影を含む全行に `session_id` を保存する。旧スキーマへの列追加や所有元の自動補完は行わない。
 
 ---
 
@@ -690,14 +690,9 @@ Windows自動起動を切り替える場合は保存済みの警告ラインを�
 
 ### Initialization and PRAGMA
 
-`src-tauri/src/analyze/db.rs::init_main_db` は `open_initialized_main_db` を使うcommandと両取込方式の開始時に current DDL と加算的互換処理を適用する。WALと外部キーを有効にし、`MAIN_SCHEMA` の適用後に次を実行する。
+`src-tauri/src/analyze/db.rs::init_main_db` は現行DDLを初版の構成として使用する。空DBと、姉妹アプリが先に作成した現行の `apps` テーブルだけを持つDBを初期化できる。既存DBは物理的な列順に依存せず列名・型・必須指定・主キーを照合し、旧構成や不足した構成は既存DBを変更せずエラーにする。列追加・所有元補完による自動移行は行わない。
 
-1. 旧 `screenshots` に `session_id` を追加し、`visit_id` のある行だけ親訪問から補完する。`idx_screenshots_session_id` も作成する。
-2. 旧 `with_users` に `friend_status` を既定値2で追加する。
-3. 旧 `imported_logs` に `parser_version` を既定値1で追加する。
-4. `friend_status` がない旧 `with_users_detail` を作り直し、`MAIN_VIEWS` を適用する。
-
-これらは現行実装が保持する互換処理であり、任意の旧schemaを受け入れる保証ではない。
+受入可能なDBではWALと外部キーを有効にし、`MAIN_SCHEMA` と派生ビュー3件を同じsavepoint内で初期化する。既存のログ解析行とアプリ登録行は保持する。本文・解析版による再解析判定は、DB構成の移行とは別の契約である。
 
 #### Active PRAGMAs
 
@@ -706,7 +701,7 @@ Windows自動起動を切り替える場合は保存済みの警告ラインを�
 | `journal_mode` | `WAL` | 取り込み中（書き込み）と読み取り（ビューア・DB プレビュー）の並行動作 |
 | `foreign_keys` | `ON`  | REFERENCES 制約の実行時チェック (デフォルト OFF)                      |
 
-初期化全体は単一transactionではなく、view refreshはsavepointを使う。旧world外撮影の所有元は推定せずsession_id=NULLを保持する。ここに記すのは現sourceに存在する互換処理であり、任意の旧schema対応やmigration追加の方針ではない。
+DB構成の照合は書込み前に行う。WALと外部キーの設定はsavepoint開始前で、schemaと派生ビューの初期化は同じsavepointを使う。旧構成への列追加・所有元補完・データ削除は行わない。
 
 ## Deletion and Retention
 

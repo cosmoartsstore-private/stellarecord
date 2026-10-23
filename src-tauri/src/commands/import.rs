@@ -122,7 +122,12 @@ pub fn launch_startup_archive_import(app: AppHandle, cancel_status: State<'_, An
         let _run_guard = run_guard;
         let pending_count = match collect_pending_archive_sync_plans(&source_dir, &archive_store_dir) {
             Ok(plans) => plans.len(),
-            Err(_) => 0,
+            Err(err) => {
+                utils::log_err(&format!("{}: {err}", message!("Commands.Import.launchStartupArchiveImport.synchronizeFailed")));
+                emit_analyze_progress(&app, message!("Commands.Import.launchStartupArchiveImport.synchronizeFailed").to_string(), "0%".to_string(), false);
+                utils::emit_event_warn(&app, "analyze-finished", ());
+                return;
+            }
         };
 
         let has_archives = archive_store_dir.is_dir() && fs::read_dir(&archive_store_dir).map(|d| d.filter_map(std::result::Result::ok).any(|e| e.file_name().to_string_lossy().ends_with(".tar.zst"))).unwrap_or(false);

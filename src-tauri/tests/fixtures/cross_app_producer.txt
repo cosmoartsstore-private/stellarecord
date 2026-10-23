@@ -1,0 +1,11 @@
+2026.10.08 09:59:50 Log        -  VRChat starting
+2026.10.08 09:59:51 Log        -  User Authenticated: Fixture Owner (usr_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa)
+2026.10.08 10:00:00 Log        -  [Behaviour] Entering Room: 連携・朝のワールド
+2026.10.08 10:00:01 Log        -  [Behaviour] Joining wrld_cccccccc-cccc-cccc-cccc-cccccccccccc:10001~private(usr_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa)~region(jp)
+2026.10.08 10:05:00 Log        -  [Behaviour] OnPlayerJoined 連携ゲスト (usr_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb)
+2026.10.08 10:10:00 Log        -  [Behaviour] OnPlayerLeft 連携ゲスト (usr_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb)
+2026.10.08 10:15:00 Log        -  [VRC Camera] Took screenshot to: C:\Fixture\VRChat_2026-10-08_10-15-00.000_1920x1080.png
+2026.10.08 10:30:00 Log        -  [Behaviour] OnLeftRoom
+2026.10.08 11:00:00 Log        -  [Behaviour] Entering Room: 連携 "夜" ワールド
+2026.10.08 11:00:01 Log        -  [Behaviour] Joining wrld_dddddddd-dddd-dddd-dddd-dddddddddddd:20002~region(us)
+2026.10.08 11:30:00 Log        -  [Behaviour] OnLeftRoom

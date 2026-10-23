@@ -357,9 +357,9 @@ VRChat改造、リアルタイム通信傍受、マルチユーザー/サーバ�
 | 同期失敗                 | DB解析を開始しない                   | 先行成功archiveは残る。原本/保存先を確認して再試行 |
 | outer DB/commit失敗      | 成功として扱わない                   | errorを確認し再実行。別資源までrollbackしない      |
 
-schema初期化/互換処理はouter transaction開始前で、cancelのrollback対象外。手動経路は既存管理archiveを使いPolaris同期を行わない。同期済み本文・解析DB・apps/設定の「復元」を区別する。[Write Transactions and Invariants](database.md#write-transactions-and-invariants)に物理確定手順を記す。
+初版schemaの照合・初期化はouter transaction開始前で、cancelのrollback対象外。旧構成のDBは自動移行せず拒否する。手動経路は既存管理archiveを使いPolaris同期を行わない。同期済み本文・解析DB・apps/設定の「復元」を区別する。[Write Transactions and Invariants](database.md#write-transactions-and-invariants)に物理確定手順を記す。
 
-起動時同期の見積り失敗は0件扱い。既存archiveがあれば同期を試みるが、原本directory不在等で同期失敗すると既存archiveの差分解析にも進まない。
+起動時同期の見積りに失敗した場合は、失敗状態と詳細ログを記録して終了する。原本directory不在等を0件とは扱わず、DB解析へ進まない。正常に列挙でき、未処理原本も既存archiveもない場合だけ、失敗通知なしで終了する。
 
 ### Cancellation
 
