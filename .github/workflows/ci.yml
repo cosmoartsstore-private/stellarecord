@@ -57,6 +57,8 @@ jobs:
         # Shell・WebView2の終了処理と、他のOS連携fixtureの起動・削除を重ねない。
         env:
           RUST_TEST_THREADS: 1
+          # runner全体が使い捨てのため、WebViewは通常desktopで実行する。
+          STELLA_NATIVE_USE_CURRENT_DESKTOP: 1
         run: cargo test --locked --all-targets
 
   # Frontend の Vitest と ESLint 検証には ubuntu-latest を使用する。

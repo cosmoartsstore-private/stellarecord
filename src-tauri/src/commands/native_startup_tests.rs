@@ -1,6 +1,6 @@
 mod startup {
     use std::ffi::{ c_void, OsString };
-    use std::os::windows::ffi::OsStrExt;
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
     use std::os::windows::io::AsRawHandle;
     use std::fs::{self, File, OpenOptions};
     use std::io::{Read, Write};
@@ -45,12 +45,14 @@ mod startup {
         fn QueryInformationJobObject(job: StartupHandle, class: i32, information: *mut c_void, bytes: u32, returned: *mut u32) -> i32;
         fn ResumeThread(thread: StartupHandle) -> u32;
         fn CreateMutexW(attributes: *const c_void, owner: i32, name: *const u16) -> StartupHandle;
+        fn GetLongPathNameW(short: *const u16, long: *mut u16, maximum: u32) -> u32;
     }
     #[link(name = "user32")]
     extern "system" {
         fn CreateDesktopW(name: *const u16, device: *const u16, mode: *const c_void, flags: u32, access: u32, attributes: *const c_void) -> StartupHandle;
         fn CloseDesktop(desktop: StartupHandle) -> i32;
         fn OpenInputDesktop(flags: u32, inherit: i32, access: u32) -> StartupHandle;
+        fn OpenDesktopW(name: *const u16, flags: u32, inherit: i32, access: u32) -> StartupHandle;
         fn GetThreadDesktop(thread: u32) -> StartupHandle;
         fn GetUserObjectInformationW(object: StartupHandle, index: i32, information: *mut c_void, bytes: u32, required: *mut u32) -> i32;
         fn EnumDesktopWindows(desktop: StartupHandle, callback: Option<unsafe extern "system" fn(StartupHandle, isize) -> i32>, parameter: isize) -> i32;
@@ -68,6 +70,17 @@ mod startup {
     impl NativeStartupHandle { fn new(handle: StartupHandle) -> Self { assert!(!handle.is_null(), "専用handleを作成できません: {}", std::io::Error::last_os_error()); Self(handle) } }
     impl Drop for NativeStartupHandle { fn drop(&mut self) { let _ = unsafe { CloseHandle(self.0) }; } }
     fn startup_wide(text: &str) -> Vec<u16> { text.encode_utf16().chain([0]).collect() }
+    // CIのTEMPは8.3形式の場合がある。Shellが返す通常形式と同じ表記でfixtureを作る。
+    fn native_startup_temp_directory() -> StartupTestResult<PathBuf> {
+        let temporary = std::env::temp_dir().as_os_str().encode_wide().chain([0]).collect::<Vec<_>>();
+        let required = unsafe { GetLongPathNameW(temporary.as_ptr(), std::ptr::null_mut(), 0) };
+        if required == 0 { return Err(std::io::Error::last_os_error().into()); }
+        let mut expanded = vec![0_u16; usize::try_from(required)?];
+        let length = unsafe { GetLongPathNameW(temporary.as_ptr(), expanded.as_mut_ptr(), required) };
+        if length == 0 { return Err(std::io::Error::last_os_error().into()); }
+        assert!(length < required, "TEMPの通常形式を取得できません");
+        Ok(PathBuf::from(OsString::from_wide(&expanded[..usize::try_from(length)?])))
+    }
     fn native_startup_desktop_name(handle: StartupHandle) -> String {
         assert!(!handle.is_null()); let mut buffer = [0_u16; 512]; let mut required = 0;
         assert_ne!(unsafe { GetUserObjectInformationW(handle, 2, buffer.as_mut_ptr().cast(), u32::try_from(std::mem::size_of_val(&buffer)).unwrap(), &raw mut required) }, 0);
@@ -81,20 +94,30 @@ mod startup {
     struct StartupWindowSnapshot { handle: String, pid: u32, title: String, class: String }
     #[derive(Debug, serde::Serialize)]
     struct StartupWindowCleanup { initial_windows: Vec<StartupWindowSnapshot>, remaining_windows: Vec<StartupWindowSnapshot>, waited_ms: u128 }
-    struct NativeStartupDesktop { handle: StartupHandle, name: String }
+    struct NativeStartupDesktop { handle: StartupHandle, name: String, initial_windows: Vec<StartupHandle> }
     impl NativeStartupDesktop {
         fn new(root: &Path) -> Self {
             let name = root.file_name().unwrap().to_str().unwrap().to_owned();
             let current = native_startup_desktop_name(unsafe { GetThreadDesktop(GetCurrentThreadId()) });
+            // 使い捨てのGitHub runnerでは通常desktopで実WebViewを検証する。
+            // ローカルの入力desktopは使わず、CIでも既存windowを操作・終了しない。
+            if std::env::var("STELLA_NATIVE_USE_CURRENT_DESKTOP").ok().as_deref() == Some("1") {
+                assert_eq!(std::env::var("GITHUB_ACTIONS").ok().as_deref(), Some("true"));
+                let handle = unsafe { OpenDesktopW(startup_wide(&current).as_ptr(), 0, 0, 0xc3) };
+                assert!(!handle.is_null(), "CIのdesktopを開けません: {}", std::io::Error::last_os_error());
+                let mut desktop = Self { handle, name: current, initial_windows: Vec::new() };
+                desktop.initial_windows = desktop.windows(); return desktop;
+            }
             let handle = unsafe { CreateDesktopW(startup_wide(&name).as_ptr(), std::ptr::null(), std::ptr::null(), 0, 0xc3, std::ptr::null()) };
             assert_eq!(native_startup_desktop_name(handle), name); assert_ne!(name, native_startup_input_desktop());
-            assert_eq!(native_startup_desktop_name(unsafe { GetThreadDesktop(GetCurrentThreadId()) }), current); Self { handle, name }
+            assert_eq!(native_startup_desktop_name(unsafe { GetThreadDesktop(GetCurrentThreadId()) }), current); Self { handle, name, initial_windows: Vec::new() }
         }
         fn windows(&self) -> Vec<StartupHandle> {
             unsafe extern "system" fn collect(window: StartupHandle, parameter: isize) -> i32 { unsafe { &mut *(parameter as *mut Vec<StartupHandle>) }.push(window); 1 }
             let mut windows = Vec::new(); unsafe { SetLastError(0) };
             let result = unsafe { EnumDesktopWindows(self.handle, Some(collect), std::ptr::from_mut(&mut windows) as isize) }; let error = unsafe { GetLastError() };
-            assert!(result != 0 || (error == 0 && windows.is_empty()), "専用desktopの列挙に失敗しました: {error}"); windows
+            assert!(result != 0 || (error == 0 && windows.is_empty()), "専用desktopの列挙に失敗しました: {error}");
+            windows.retain(|window| !self.initial_windows.contains(window)); windows
         }
         fn window_snapshot(&self) -> Vec<StartupWindowSnapshot> {
             self.windows().into_iter().map(|window| {
@@ -427,13 +450,13 @@ mod startup {
     #[test]
     fn native_startup_main_runs_owned_data_and_duplicate_exits_before_setup() -> StartupTestResult {
         let _lock = super::NATIVE_OS_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner); native_startup_single_instance_available();
-        let input = native_startup_input_desktop(); let directory = tempfile::Builder::new().prefix("stellarecord-native-startup-normal-").tempdir()?;
+        let input = native_startup_input_desktop(); let directory = tempfile::Builder::new().prefix("stellarecord-native-startup-normal-").tempdir_in(native_startup_temp_directory()?)?;
         let (executable, library) = native_startup_compile(&directory)?; startup_archive_inputs("normal", directory.path(), &executable, &library)?;
         let desktop = NativeStartupDesktop::new(directory.path()); let registry = NativeStartupRegistry::new(directory.path())?;
         startup_fixture(directory.path(), &registry)?; let database = fs::read(directory.path().join("Data/db/stellarecord.db"))?;
         let server = NativeStartupServer::new(&directory)?; let child = NativeStartupProcess::start(&executable, directory.path(), &desktop, &registry);
         let report = server.report(&child, directory.path(), "normal")?; startup_profile(directory.path())?; startup_preserved(directory.path(), &database)?;
-        let duplicate = tempfile::Builder::new().prefix("stellarecord-native-startup-duplicate-").tempdir()?; let duplicate_registry = NativeStartupRegistry::new(duplicate.path())?;
+        let duplicate = tempfile::Builder::new().prefix("stellarecord-native-startup-duplicate-").tempdir_in(native_startup_temp_directory()?)?; let duplicate_registry = NativeStartupRegistry::new(duplicate.path())?;
         let second = NativeStartupProcess::start(&executable, duplicate.path(), &desktop, &duplicate_registry); let duplicate_pid = second.pid; assert_eq!(second.finish(), 0); drop(second);
         assert!(child.running()); assert!(!duplicate.path().join("Data").exists()); assert!(!duplicate.path().join("startup.returned.txt").exists());
         assert!(desktop.windows().iter().all(|window| { let mut pid = 0; unsafe { GetWindowThreadProcessId(*window, &raw mut pid) }; pid != duplicate_pid }));
@@ -494,7 +517,7 @@ mod startup {
             assert_eq!(unsafe { super::RegOverridePredefKey(winreg::enums::HKEY_CURRENT_USER, 0) }, 0); return Ok(());
         }
         let _lock = super::NATIVE_OS_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let input = native_startup_input_desktop(); let directory = tempfile::Builder::new().prefix("stellarecord-native-startup-dialog-").tempdir()?;
+        let input = native_startup_input_desktop(); let directory = tempfile::Builder::new().prefix("stellarecord-native-startup-dialog-").tempdir_in(native_startup_temp_directory()?)?;
         let executable = std::env::current_exe()?; let desktop = NativeStartupDesktop::new(directory.path()); let registry = NativeStartupRegistry::new(directory.path())?;
         startup_fixture(directory.path(), &registry)?; let database = fs::read(directory.path().join("Data/db/stellarecord.db"))?;
         let child = NativeStartupProcess::start_with_args(&executable, directory.path(), &desktop, &registry,
@@ -517,7 +540,7 @@ mod startup {
         let _lock = super::NATIVE_OS_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner); native_startup_single_instance_available();
         let collision = unsafe { CreateEventW(None, true, false, &HSTRING::from("Local\\StellaRecord_SingleInstance")) }?;
         let collision = NativeStartupHandle::new(collision.0);
-        let input = native_startup_input_desktop(); let directory = tempfile::Builder::new().prefix("stellarecord-native-startup-mutex-").tempdir()?;
+        let input = native_startup_input_desktop(); let directory = tempfile::Builder::new().prefix("stellarecord-native-startup-mutex-").tempdir_in(native_startup_temp_directory()?)?;
         let (executable, library) = native_startup_compile(&directory)?; startup_archive_inputs("mutex", directory.path(), &executable, &library)?;
         let desktop = NativeStartupDesktop::new(directory.path()); let registry = NativeStartupRegistry::new(directory.path())?;
         startup_fixture(directory.path(), &registry)?; let database = fs::read(directory.path().join("Data/db/stellarecord.db"))?;
@@ -633,7 +656,7 @@ mod startup {
         if let Some(root) = std::env::var_os("STELLA_STARTUP_TEST_ROOT") { return native_ui_picker_child(&PathBuf::from(root), case); }
         let external_read_failure = case == NativeUiPickerCase::ReadFailure; let external_stream_lock = case == NativeUiPickerCase::StreamLocked; let external_stream_partial = case == NativeUiPickerCase::StreamPartial;
         let _lock = super::NATIVE_OS_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner); let input = native_startup_input_desktop();
-        let directory = tempfile::Builder::new().prefix("stellarecord-native-startup-ui-picker-").tempdir()?;
+        let directory = tempfile::Builder::new().prefix("stellarecord-native-startup-ui-picker-").tempdir_in(native_startup_temp_directory()?)?;
         let archive_guard = NativeUiPickerArchive(directory.path(), case.prefix());
         let mut external = native_ui_picker_fixture(directory.path(), case)?; let expected = external.iter().map(|(path, _)| path.clone()).collect::<Vec<_>>();
         let initial_external_file_hashes = external.iter().map(|(path, bytes)| (path.clone(), format!("{:x}", sha2::Sha256::digest(bytes)))).collect::<Vec<_>>();
@@ -766,7 +789,7 @@ mod startup {
     fn native_picker_test(kind: &str, test_name: &str) -> StartupTestResult {
         if let Some(root) = std::env::var_os("STELLA_STARTUP_TEST_ROOT") { return native_picker_child(&PathBuf::from(root), kind); }
         let _lock = super::NATIVE_OS_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner); let input = native_startup_input_desktop();
-        let directory = tempfile::Builder::new().prefix(&format!("stellarecord-native-startup-picker-{kind}-")).tempdir()?;
+        let directory = tempfile::Builder::new().prefix(&format!("stellarecord-native-startup-picker-{kind}-")).tempdir_in(native_startup_temp_directory()?)?;
         let desktop = NativeStartupDesktop::new(directory.path()); let registry = NativeStartupRegistry::new(directory.path())?; startup_fixture(directory.path(), &registry)?;
         let database = fs::read(directory.path().join("Data/db/stellarecord.db"))?;
         let names = match kind { "exe" => vec!["選択専用★ アプリ.exe"], "source" => vec!["選択専用★ ログフォルダ"], _ => vec!["output_log_日本語 1.txt", "output_log_日本語 2.tar.zst"] };
